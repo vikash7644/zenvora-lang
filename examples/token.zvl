@@ -1,0 +1,14 @@
+contract Token {
+  state balances: Map;
+  event Transfer(from,to,amt);
+  fn init(owner: Address, supply: U64) {
+    balances[owner] = supply;
+    emit(Transfer, owner, "init", supply);
+  }
+  fn transfer(from: Address, to: Address, amt: U64) {
+    assert(balances[from] >= amt, "insufficient");
+    balances[from] -= amt;
+    balances[to] += amt;
+    emit(Transfer, from, to, amt);
+  }
+}
