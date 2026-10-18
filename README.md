@@ -13,6 +13,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 - `examples/booleans.zv` — native booleans and logical operators.
 - `examples/strings.zv` — string literals, escapes, concatenation, equality, and string function arguments.
 - `examples/collections.zv` — arrays, maps, collection access, and immutable update helpers.
+- `examples/indexing.zv` — direct array/map indexing, computed indexes, and nested collections.
 - `examples/modules.zv` — relative module imports and reusable functions.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
@@ -33,6 +34,7 @@ cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
+cargo run -- examples/indexing.zv
 cargo run -- examples/modules.zv
 cargo run -- --emit-bytecode examples/functions.zv functions.zvb
 cargo run -- --run-bytecode functions.zvb
@@ -92,7 +94,7 @@ The current prototype supports integer, boolean, string, array, and map values, 
 
 ## Status and safety
 
-This is an early work in progress. Indexing syntax such as `items[0]`, direct collection mutation, explicit global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Direct collection mutation, explicit global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
