@@ -44,6 +44,9 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
                 }
             }
             if !closed { return Err("unterminated string literal".into()); }
+            if value.len() > MAX_BYTECODE_STRING_BYTES {
+                return Err(format!("string literal exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+            }
             out.push(Token::String(value));
             continue;
         }
@@ -869,9 +872,6 @@ where
         return Err(format!("program instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
     }
     while pc < code.len() {
-        if stack.len() > MAX_STACK_VALUES {
-            return Err(format!("operand stack exceeds safety limit ({MAX_STACK_VALUES} values)"));
-        }
         steps += 1;
         if steps > MAX_STEPS {
             return Err("execution exceeded safety limit (1,000,000 instructions)".into());
@@ -971,12 +971,21 @@ where
             Op::Jump(target) => { pc = *target; continue; }
             Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
             Op::Builtin(name, arg_count) => {
+                if *arg_count > MAX_CALL_ARGUMENTS {
+                    return Err(format!("builtin argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
+                }
                 let mut values = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count { values.push(stack.pop().ok_or("VM stack underflow while reading builtin arguments")?); }
                 values.reverse();
                 stack.push(builtin(name, values)?);
             }
             Op::CallTarget { target, params, arg_count } => {
+                if *arg_count > MAX_CALL_ARGUMENTS || params.len() > MAX_CALL_ARGUMENTS {
+                    return Err(format!("function argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
+                }
+                if *arg_count != params.len() {
+                    return Err("invalid function call argument count".into());
+                }
                 if call_stack.len() >= MAX_CALL_DEPTH {
                     return Err(format!("maximum function call depth exceeded ({MAX_CALL_DEPTH})"));
                 }
@@ -1009,7 +1018,13 @@ where
                 let a = stack.pop().ok_or("VM stack underflow")?;
                 let value = match (&code[pc], a, b) {
                     (Op::Add, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_add(b).ok_or("integer overflow")?),
-                    (Op::Add, Value::Str(a), Value::Str(b)) => Value::Str(format!("{a}{b}")),
+                    (Op::Add, Value::Str(a), Value::Str(b)) => {
+                        let combined_len = a.len().checked_add(b.len()).ok_or("string length overflow")?;
+                        if combined_len > MAX_BYTECODE_STRING_BYTES {
+                            return Err(format!("string exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+                        }
+                        Value::Str(format!("{a}{b}"))
+                    },
                     (Op::Add, Value::Str(_), Value::Int(_)) | (Op::Add, Value::Int(_), Value::Str(_)) => return Err("type error: '+' requires two integers or two strings".into()),
                     (Op::Sub, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_sub(b).ok_or("integer overflow")?),
                     (Op::Mul, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_mul(b).ok_or("integer overflow")?),
@@ -1034,6 +1049,9 @@ where
                 };
                 stack.push(value);
             }
+        }
+        if stack.len() > MAX_STACK_VALUES {
+            return Err(format!("operand stack exceeds safety limit ({MAX_STACK_VALUES} values)"));
         }
         pc += 1;
     }
@@ -1302,9 +1320,45 @@ mod tests {
     }
 
     #[test]
-    fn malformed_string_literals_are_reported() {
+    fn malformed_and_oversized_string_literals_are_reported() {
         assert!(compile_core("show \"unterminated\n").unwrap_err().contains("unterminated string literal"));
         assert!(compile_core("show \"bad\\q\"\n").unwrap_err().contains("unsupported string escape"));
+        let oversized = format!("show \"{}\"\n", "a".repeat(super::MAX_BYTECODE_STRING_BYTES + 1));
+        assert!(compile_core(&oversized).unwrap_err().contains("string literal exceeds safety limit"));
+    }
+
+    #[test]
+    fn string_concatenation_cannot_exceed_the_string_limit() {
+        let half = "a".repeat(super::MAX_BYTECODE_STRING_BYTES / 2 + 1);
+        let source = format!("show \"{half}\" + \"{half}\"\n");
+        assert!(execute(&source).unwrap_err().contains("string exceeds safety limit"));
+    }
+
+    #[test]
+    fn runtime_rejects_excessive_call_arguments_before_allocating() {
+        let mut output = Vec::new();
+        let builtin_error = run_with_output(
+            &[Op::Builtin("array".into(), super::MAX_CALL_ARGUMENTS + 1)],
+            &mut |line| output.push(line),
+        ).unwrap_err();
+        assert!(builtin_error.contains("builtin argument count exceeds safety limit"));
+        let function_error = run_with_output(
+            &[Op::CallTarget {
+                target: 0,
+                params: vec!["x".into(); super::MAX_CALL_ARGUMENTS + 1],
+                arg_count: super::MAX_CALL_ARGUMENTS + 1,
+            }],
+            &mut |line| output.push(line),
+        ).unwrap_err();
+        assert!(function_error.contains("function argument count exceeds safety limit"));
+    }
+
+    #[test]
+    fn runtime_rejects_operand_stack_growth_past_the_limit() {
+        let code = vec![Op::Push(1); super::MAX_STACK_VALUES + 1];
+        let mut output = Vec::new();
+        let error = run_with_output(&code, &mut |line| output.push(line)).unwrap_err();
+        assert!(error.contains("operand stack exceeds safety limit"));
     }
 
     #[test]
