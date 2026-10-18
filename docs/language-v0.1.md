@@ -49,6 +49,17 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - Each function call has an isolated local variable environment; caller variables are restored on return. Function calls can appear inside expressions, and `return expression` returns an integer value to the caller. Access to caller/global variables from functions is not implemented yet.
 - Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched block braces are reported as errors.
 
+## Bytecode files
+
+Compile a `.zv` program into a versioned bytecode file and run it later:
+
+```sh
+cargo run -- --emit-bytecode examples/functions.zv functions.zvb
+cargo run -- --run-bytecode functions.zvb
+```
+
+Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The loader rejects unknown instructions, unsupported versions, malformed operands, invalid jump targets, and invalid function-entry targets. The format is an early public-facing prototype; compatibility guarantees and a formal verifier are future work.
+
 ## How execution works
 
 1. Source text is parsed into stack-machine instructions.
@@ -57,7 +68,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 
 ## Not implemented yet
 
-Strings, short-circuit logical evaluation, explicit global/module scope rules, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Strings, short-circuit logical evaluation, explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
