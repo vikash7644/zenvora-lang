@@ -38,7 +38,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `show expression` prints an integer, boolean, or string; `print(expression)` is also accepted.
 - Integer arithmetic: unary minus, `+`, `-`, `*`, `/`, and parentheses.
 - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons produce native boolean values `true` or `false`.
-- Logical operators: `not`, `and`, and `or`; they require boolean operands and currently evaluate both sides eagerly.
+- Logical operators: `not`, `and`, and `or`; `and` and `or` short-circuit, and logical operands must be booleans when evaluated.
 - Conditional blocks use `if condition {`, followed by statements and a closing `}`; an optional else branch uses the exact line ` } otherwise {` without the leading space (normally written as `} otherwise {`).
 - Double-quoted string literals support `\\`, `\"`, `\n`, `\r`, and `\t` escapes. `+` concatenates two strings; concatenating a string with an integer is a type error.
 - `#` starts a comment.
@@ -70,7 +70,7 @@ Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The lo
 
 ## Not implemented yet
 
-Short-circuit logical evaluation, explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
