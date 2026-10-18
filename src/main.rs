@@ -6,6 +6,7 @@ mod module_loader;
 mod chain_runtime;
 mod chain_protocol;
 mod chain_block;
+mod block_store;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
