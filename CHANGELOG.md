@@ -9,7 +9,7 @@ Notable changes to Zenvora Lang are recorded here.
 - Added stable map display order, collection display output, and bytecode serialization support for built-in instructions.
 - Added regression tests for collection operations, bytecode round-trips, invalid indexes/keys, and type errors.
 - Collection updates are immutable-style: `push` and `put` return a new collection; index syntax and direct mutation are not implemented yet.
-- CI verification is pending for this commit; do not treat the milestone as verified until the workflow passes.
+- Initial CI caught an incorrect test expectation about deterministic map ordering; the assertion was corrected and the CI suite is being rerun.
 
 ## v0.6.0 — 2026-10-18
 
