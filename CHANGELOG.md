@@ -2,6 +2,13 @@
 
 Notable changes to Zenvora Lang are recorded here.
 
+## Unreleased
+
+- Added relative use-path module imports for source files and bytecode builds.
+- Module files resolve relative to their importer and are loaded once per program.
+- Added cycle detection, a 64-file import-depth limit, and source-location context for import errors.
+- Added module-loader regression tests and a runnable examples/modules.zv program.
+
 ## v0.6.1 — 2026-10-18
 
 - Added first-class runtime array and map values.
