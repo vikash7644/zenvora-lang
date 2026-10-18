@@ -574,7 +574,7 @@ fn mutating_functions(source: &str, state_names: &HashSet<String>, action_names:
         let declaration = line.strip_prefix("fn ").map(|rest| ("fn", rest))
             .or_else(|| line.strip_prefix("action ").map(|rest| ("action", rest)))
             .or_else(|| line.strip_prefix("view ").map(|rest| ("view", rest)));
-        if let Some((kind, header)) = declaration.and_then(|(kind, rest)| rest.strip_suffix('{').map(|h| (kind, h.trim()))) {
+        if let Some((_kind, header)) = declaration.and_then(|(kind, rest)| rest.strip_suffix('{').map(|h| (kind, h.trim()))) {
             let Some((name, _)) = header.split_once('(') else {
                 index += 1;
                 continue;
@@ -599,9 +599,6 @@ fn mutating_functions(source: &str, state_names: &HashSet<String>, action_names:
             }
             if depth == 0 {
                 bodies.push((name.to_string(), body));
-                if kind == "action" {
-                    // Actions are conservatively considered state-mutating.
-                }
             }
             continue;
         }
