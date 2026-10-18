@@ -841,6 +841,10 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             *op = Op::CallTarget { target, params, arg_count: *arg_count };
         }
     }
+    // Apply the same control-flow and stack checks to compiler output that the
+    // bytecode loader applies to serialized input, so source builds cannot emit a
+    // bytecode artifact that the VM's loader will later reject.
+    verify_bytecode(&code)?;
     Ok(code)
 }
 
@@ -2868,6 +2872,13 @@ mod tests {
             let error = super::deserialize_bytecode(bytecode).unwrap_err();
             assert!(error.contains("verifier") || error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
         }
+    }
+
+    #[test]
+    fn source_compilation_rejects_mixed_return_paths_before_execution() {
+        let source = "fn maybe(flag) {\nif flag {\nreturn 1\n}\n}\nshow maybe(false)\n";
+        let error = super::compile(source).unwrap_err();
+        assert!(error.contains("inconsistent reachable return kinds"), "unexpected error: {error}");
     }
 
     #[test]
