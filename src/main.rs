@@ -565,6 +565,78 @@ fn calls_named_function(statement: &str, name: &str) -> bool {
     false
 }
 
+fn mutating_functions(source: &str, state_names: &HashSet<String>, action_names: &HashSet<String>) -> HashSet<String> {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut bodies: Vec<(String, String)> = Vec::new();
+    let mut index = 0usize;
+    while index < lines.len() {
+        let line = lines[index].trim();
+        let declaration = line.strip_prefix("fn ").map(|rest| ("fn", rest))
+            .or_else(|| line.strip_prefix("action ").map(|rest| ("action", rest)))
+            .or_else(|| line.strip_prefix("view ").map(|rest| ("view", rest)));
+        if let Some((kind, header)) = declaration.and_then(|(kind, rest)| rest.strip_suffix('{').map(|h| (kind, h.trim()))) {
+            let Some((name, _)) = header.split_once('(') else {
+                index += 1;
+                continue;
+            };
+            let name = name.trim();
+            if !valid_identifier(name) {
+                index += 1;
+                continue;
+            }
+            index += 1;
+            let mut depth = 1i32;
+            let mut body = String::new();
+            while index < lines.len() && depth > 0 {
+                let current = lines[index];
+                let (opens, closes) = count_block_braces(current);
+                depth += opens - closes;
+                if depth > 0 {
+                    body.push_str(current);
+                    body.push('\n');
+                }
+                index += 1;
+            }
+            if depth == 0 {
+                bodies.push((name.to_string(), body));
+                if kind == "action" {
+                    // Actions are conservatively considered state-mutating.
+                }
+            }
+            continue;
+        }
+        index += 1;
+    }
+
+    let mut mutating = action_names.clone();
+    for (name, body) in &bodies {
+        for line in body.lines() {
+            let statement = line.trim();
+            if statement.starts_with('#') { continue; }
+            if let Some((left, _)) = statement.split_once(":=") {
+                let base = left.trim().split('[').next().unwrap_or(left.trim()).trim();
+                if state_names.contains(base) {
+                    mutating.insert(name.clone());
+                }
+            }
+        }
+    }
+
+    loop {
+        let newly_mutating: Vec<String> = bodies.iter().filter_map(|(name, body)| {
+            if mutating.contains(name) { return None; }
+            if mutating.iter().any(|target| calls_named_function(body, target)) {
+                Some(name.clone())
+            } else {
+                None
+            }
+        }).collect();
+        if newly_mutating.is_empty() { break; }
+        mutating.extend(newly_mutating);
+    }
+    mutating
+}
+
 fn lower_contracts(source: &str) -> Result<String, String> {
     let lines: Vec<&str> = source.lines().collect();
     let state_names: HashSet<String> = lines.iter().filter_map(|raw| {
@@ -577,6 +649,7 @@ fn lower_contracts(source: &str) -> Result<String, String> {
         let name = rest.split_once('(')?.0.trim();
         if valid_identifier(name) { Some(name.to_string()) } else { None }
     }).collect();
+    let mutating_functions = mutating_functions(source, &state_names, &action_names);
     let mut output = String::new();
     let mut index = 0usize;
     let mut contract: Option<(String, usize)> = None;
@@ -654,9 +727,12 @@ fn lower_contracts(source: &str) -> Result<String, String> {
                                 return Err(format!("line {}: view '{header}' cannot directly assign to contract state '{base}'", index + 1));
                             }
                         }
-                        for action in &action_names {
-                            if calls_named_function(statement, action) {
-                                return Err(format!("line {}: view cannot call action '{action}'", index + 1));
+                        for function in &mutating_functions {
+                            if calls_named_function(statement, function) {
+                                if action_names.contains(function) {
+                                    return Err(format!("line {}: view cannot call action '{function}'", index + 1));
+                                }
+                                return Err(format!("line {}: view cannot call state-mutating function '{function}'", index + 1));
                             }
                         }
                     }
@@ -3034,6 +3110,12 @@ mod tests {
         assert!(compile(expression).unwrap_err().contains("view cannot call action 'increment'"));
         let string_literal = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview label() {\nreturn \"increment()\"\n}\n}\nshow label()\n";
         assert_eq!(execute(string_literal).unwrap(), vec!["increment()"]);
+    }
+
+    #[test]
+    fn contract_views_reject_indirect_state_mutation_through_helpers() {
+        let source = "define count := 0\nfn mutate() {\ncount := count + 1\nreturn count\n}\nfn helper() {\ncall mutate()\nreturn count\n}\ncontract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\nreturn helper()\n}\n}\n";
+        assert!(compile(source).unwrap_err().contains("view cannot call state-mutating function 'helper'"));
     }
 
     #[test]
