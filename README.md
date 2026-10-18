@@ -52,19 +52,19 @@ This prints `1`. Change the age to `16` and it prints `0`.
 
 See [`examples/loops.zv`](examples/loops.zv) for a runnable `repeat`/`break`/`continue` example and [`examples/functions.zv`](examples/functions.zv) for functions.
 
-The current prototype supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Comparison results are represented as integer `1` (true) and `0` (false). `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Basic no-argument, no-return functions are supported with `fn name() { ... }`, `call name()`, and `return`; calls can be made before the function definition, functions can call other functions, and a call stack handles returns. Variables currently share one global runtime environment, and functions do not yet accept parameters or return values. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
+The current prototype supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Comparison results are represented as integer `1` (true) and `0` (false). `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Functions support integer parameters with `fn add(left, right) { ... }`, calls such as `call add(2 + 3, 4)`, and `return` to exit the current function. Calls can be made before a function definition and functions can call other functions. Each call gets a separate local variable environment, restored when the function returns. Function return values and access to caller/global variables from inside a function are not implemented yet. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
 
 ## Roadmap
 
 1. Continue stabilizing syntax, diagnostics and automated regression tests.
-2. Add function parameters/return values, local scopes, types and better diagnostics.
+2. Add function return values, global/module scope rules, types and better diagnostics.
 3. Define a stable bytecode format and bytecode-file support.
 4. Strengthen runtime safety checks and add resource-aware execution limits.
 5. Explore WebAssembly output and smart-contract integration after the core language is reliable.
 
 ## Status and safety
 
-This is an early work in progress. Strings, function parameters/return values, local scopes, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Strings, function return values, global/module scope rules, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
