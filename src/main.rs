@@ -819,6 +819,53 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 _ => Err(format!("type error: {name} expects two integers")),
             }
         }
+        "dna_complement" => {
+            arity(1)?;
+            let Value::Str(sequence) = &args[0] else {
+                return Err("type error: dna_complement expects a DNA string".into());
+            };
+            let mut result = String::with_capacity(sequence.len());
+            for base in sequence.chars() {
+                result.push(match base.to_ascii_uppercase() {
+                    'A' => 'T', 'T' => 'A', 'C' => 'G', 'G' => 'C',
+                    _ => return Err(format!("dna_complement found invalid DNA base '{base}'")),
+                });
+            }
+            Ok(Value::Str(result))
+        }
+        "gc_content_percent" => {
+            arity(1)?;
+            let Value::Str(sequence) = &args[0] else {
+                return Err("type error: gc_content_percent expects a DNA string".into());
+            };
+            if sequence.is_empty() { return Err("gc_content_percent cannot use an empty DNA string".into()); }
+            let mut gc = 0i64;
+            for base in sequence.chars() {
+                match base.to_ascii_uppercase() {
+                    'G' | 'C' => gc += 1,
+                    'A' | 'T' => {},
+                    _ => return Err(format!("gc_content_percent found invalid DNA base '{base}'")),
+                }
+            }
+            let length = i64::try_from(sequence.chars().count()).map_err(|_| "DNA sequence is too long")?;
+            Ok(Value::Int(gc.checked_mul(100).ok_or("GC percentage overflow")? / length))
+        }
+        "molar_mass" => {
+            arity(1)?;
+            let Value::Array(atomic_masses) = &args[0] else {
+                return Err("type error: molar_mass expects an array of integer atomic masses".into());
+            };
+            if atomic_masses.is_empty() { return Err("molar_mass expects at least one atomic mass".into()); }
+            let mut total = 0i64;
+            for mass in atomic_masses {
+                let Value::Int(mass) = mass else {
+                    return Err("type error: molar_mass expects an array containing only integers".into());
+                };
+                if *mass < 0 { return Err("molar_mass atomic masses cannot be negative".into()); }
+                total = total.checked_add(*mass).ok_or("integer overflow in molar_mass")?;
+            }
+            Ok(Value::Int(total))
+        }
         "gcd" => {
             arity(2)?;
             let (Value::Int(mut a), Value::Int(mut b)) = (&args[0], &args[1]) else {
@@ -1810,6 +1857,14 @@ mod tests {
     fn advanced_math_and_science_builtins_are_checked() {
         let output = execute("show gcd(48, 18)\nshow lcm(12, 18)\nshow factorial(5)\nshow is_prime(97)\nshow fibonacci(10)\nshow pow_int(3, 4)\nshow mean([2, 4, 9])\nshow speed(100, 5)\nshow force(10, 9)\nshow kinetic_energy(2, 5)\nshow density(12, 3)\nshow molarity(6, 2)\nshow bmi_x10(70, 175)\n").unwrap();
         assert_eq!(output, vec!["6", "36", "120", "true", "55", "81", "5", "20", "90", "25", "4", "3", "22"]);
+    }
+
+    #[test]
+    fn chemistry_and_biology_helpers_validate_scientific_inputs() {
+        let output = execute("show molar_mass([12, 16, 1, 1, 1, 1])\\nshow dna_complement(\\"ACGT\\")\\nshow gc_content_percent(\\"GCGC\\")\\nshow gc_content_percent(\\"ATGC\\")\\n").unwrap();
+        assert_eq!(output, vec!["32", "TGCA", "100", "50"]);
+        assert!(execute("show dna_complement(\\"ACNX\\")\\n").unwrap_err().contains("invalid DNA base"));
+        assert!(execute("show gc_content_percent(\\"\\")\\n").unwrap_err().contains("empty DNA string"));
     }
 
     #[test]
