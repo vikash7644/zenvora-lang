@@ -61,6 +61,9 @@ jobs:
       - name: Run collections example
         run: cargo run -- examples/collections.zv
 
+      - name: Run direct indexing example
+        run: cargo run -- examples/indexing.zv
+
       - name: Run module import example
         run: cargo run -- examples/modules.zv
 
