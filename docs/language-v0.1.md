@@ -57,7 +57,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `break` and `continue` outside a loop are rejected during compilation.
 - `fn name(a, b) { ... }` defines a function with parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
 - `return` exits the current function. Calls may occur before definitions and functions may call other functions.
-- Each function call has an isolated local variable environment; caller variables are restored on return. Function calls can appear inside expressions, and `return expression` returns an integer, boolean, or string value to the caller. Access to caller/global variables from functions is not implemented yet.
+- Each function call has an isolated local variable environment; caller locals are restored on return. Top-level declarations are global and readable inside functions. Assignment updates an existing local if present or an existing global otherwise; `define` inside a function creates a local that can shadow a global. Function calls can appear inside expressions, and `return expression` returns a value to the caller.
 - Collection built-ins: `array(...)`, `map("key", value, ...)`, `get(collection, key)`, `len(collection)`, `contains(collection, item_or_key)`, `push(array, value)`, `put(map, key, value)`, `keys(map)`, and `values(map)`. Map keys must be strings. Array indexes are zero-based. `push` and `put` return new collections and leave the original unchanged.
 - Division by zero, undefined variables, invalid syntax, integer overflow, invalid collection keys/indexes, and unmatched block braces are reported as errors.
 
@@ -78,14 +78,18 @@ Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The lo
 2. The compiler emits operations such as PUSH, LOAD, STORE, ADD, comparison operations and conditional jumps.
 3. The VM executes the bytecode and stores values in the active runtime environment.
 
+## Experimental contract DSL
+
+A single contract block can declare `state`, `action`, and `view` members. The compiler lowers these to global declarations and ordinary functions for a local VM run. See `examples/contracts.zv`. This is syntax scaffolding, not a secure smart-contract runtime: state is not persisted between runs, `view` purity and action authorization are not enforced, multiple contract blocks per file are rejected, and no blockchain execution is provided.
+
 ## Not implemented yet
 
-Direct indexing syntax (`items[0]`), in-place collection mutation, explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions and limits nested function calls to 1,024 frames. These are basic safeguards; broader resource accounting and stronger runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+A package/namespace model for modules, direct collection mutation (`items[0] := value`), a static type system, a formal bytecode verifier, frozen bytecode compatibility guarantees, native machine-code generation, persistent contract storage, enforced contract security rules, and production blockchain integration remain future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions and limits nested function calls to 1,024 frames. These are basic safeguards; broader resource accounting and stronger runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
-1. Expand regression coverage and stabilize syntax and diagnostics.
-2. Add explicit global/module scope rules and useful types.
-3. Stabilize bytecode v1 and implement a formal verifier.
-4. Define VM compatibility guarantees and stronger resource limits.
-5. Explore WebAssembly output and a contract ABI only after the core language is reliable.
+1. Add module namespaces/package resolution and static type checking.
+2. Stabilize bytecode v1, verify control flow/stack behavior, and define compatibility rules.
+3. Add resource-aware execution limits and collection mutation semantics.
+4. Evolve the contract DSL into a typed ABI with persistent state, authorization, and enforced view purity.
+5. Explore WebAssembly/native output after the core language is reliable.
