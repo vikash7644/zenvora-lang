@@ -16,13 +16,14 @@ cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
 cargo run -- examples/indexing.zv
 cargo run -- examples/stdlib.zv
+cargo run -- examples/stdlib-strings.zv
 cargo run -- examples/contracts.zv
 cargo run -- examples/modules.zv
 ```
 
 ## Automated tests
 
-The Rust unit and integration suites run 78 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+The Rust unit and integration suites run 83 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
 
 ## Modules
 
@@ -58,7 +59,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `fn name(a, b) { ... }` defines a function with parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
 - `return` exits the current function. Calls may occur before definitions and functions may call other functions.
 - Each function call has an isolated local variable environment; caller locals are restored on return. Top-level declarations are global and readable inside functions. Assignment updates an existing local if present or an existing global otherwise; `define` inside a function creates a local that can shadow a global. Function calls can appear inside expressions, and `return expression` returns a value to the caller.
-- Collection built-ins: `array(...)`, `map("key", value, ...)`, `get(collection, key)`, `len(collection)`, `contains(collection, item_or_key)`, `push(array, value)`, `put(map, key, value)`, `keys(map)`, and `values(map)`. Map keys must be strings. Array indexes are zero-based. `push` and `put` return new collections and leave the original unchanged.
+- Collection built-ins: `array(...)`, `map("key", value, ...)`, `get(collection, key)`, `len(collection)`, `contains(collection, item_or_key)`, `push(array, value)`, `put(map, key, value)`, `keys(map)`, and `values(map)`. String/aggregate helpers: `starts_with(text, prefix)`, `ends_with(text, suffix)`, `replace(text, search, replacement)`, `split(text, separator)`, `join(string_array, separator)`, and checked `sum(integer_array)`. Empty split separators and empty replace search strings are rejected; split is capped at 100,000 parts and replacement/join results at 1 MiB. Map keys must be strings. Array indexes are zero-based. `push` and `put` return new collections and leave the original unchanged.
 - Division by zero, undefined variables, invalid syntax, integer overflow, invalid collection keys/indexes, and unmatched block braces are reported as errors.
 
 ## Bytecode files
