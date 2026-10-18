@@ -14,6 +14,10 @@ cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 ```
 
+## Automated tests
+
+The in-source Rust test suite uses output capture to verify actual VM results, not just successful compilation. It covers arithmetic and assignment, booleans and nested conditions, loop control (including nested loops), function parameters and return values, recursion, invalid loop control, undefined functions, argument-count errors, division by zero, integer overflow, undefined variables, and unmatched braces. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+
 ## Supported syntax
 
 ```zv
@@ -57,7 +61,7 @@ Strings, short-circuit logical evaluation, explicit global/module scope rules, c
 
 ## Roadmap
 
-1. Stabilize syntax, diagnostics and automated tests.
+1. Expand regression coverage and stabilize syntax and diagnostics.
 2. Add explicit global/module scope rules and useful types.
 3. Define a stable bytecode format.
 4. Add serializable bytecode and a stable VM specification.
