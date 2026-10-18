@@ -26,6 +26,8 @@ cargo run -- examples/hello.zv
 cargo run -- examples/loops.zv
 cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
+cargo run -- --emit-bytecode examples/functions.zv functions.zvb
+cargo run -- --run-bytecode functions.zvb
 cargo run -- --help
 ```
 
@@ -41,6 +43,17 @@ Expected example output:
 ## Automated regression tests
 
 `cargo test` checks expression evaluation, booleans, nested conditions, `break`/`continue`, nested-loop break behavior, function calls and recursion, invalid function calls, runtime errors, and malformed braces. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
+
+## Bytecode files
+
+The compiler can write and run versioned stack-machine bytecode files:
+
+```sh
+cargo run -- --emit-bytecode examples/functions.zv functions.zvb
+cargo run -- --run-bytecode functions.zvb
+```
+
+The current text format starts with `ZENVORA_BYTECODE 1`. The loader checks the format version, instruction syntax, jump targets, and function-entry targets. Version 1 is an early format and is not yet promised to remain compatible forever.
 
 ## Current language syntax
 
