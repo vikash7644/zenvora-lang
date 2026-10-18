@@ -1,0 +1,16 @@
+# A local contract-DSL prototype: state lives only for this program run.
+contract Counter {
+    state count := 0
+
+    action increment(amount) {
+        count := count + amount
+    }
+
+    view current() {
+        return count
+    }
+}
+
+call increment(5)
+call increment(2)
+show current()
