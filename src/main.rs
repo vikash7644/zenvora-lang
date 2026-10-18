@@ -1194,7 +1194,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                 Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_) => (1, 0),
                 Op::Jump(_) | Op::Return => (0, 0),
                 Op::Builtin(_, count) => (*count, 1 - *count as isize),
-                Op::CallTarget { target, arg_count, .. } => (*arg_count, 1 - *arg_count as isize * 1 + if returns_value.contains(target) { 1 } else { 0 }),
+                Op::CallTarget { target, arg_count, .. } => (*arg_count, -(*arg_count as isize) + if returns_value.contains(target) { 1 } else { 0 }),
                 Op::Call(name, _) => return Err(format!("bytecode verifier: unresolved call '{name}' at instruction {pc}")),
             };
             if incoming_depth < required {
@@ -1219,7 +1219,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
             };
             match op {
                 Op::Jump(target) => {
-                    if is_main && pc == main_exit && *target == code.len() { continue; }
+                    if is_main && pc == main_exit && *target == code.len() {\n                        if outgoing_depth != 0 { return Err(format!("bytecode verifier: main program exits with {outgoing_depth} value(s) left on the operand stack")); }\n                        continue;\n                    }
                     enqueue(*target, outgoing_depth)?;
                 }
                 Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
