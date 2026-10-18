@@ -17,6 +17,7 @@ const MERKLE_LEAF_DOMAIN: &[u8] = b"ZENVORA_MERKLE_LEAF_V1\\0";
 const MERKLE_NODE_DOMAIN: &[u8] = b"ZENVORA_MERKLE_NODE_V1\\0";
 const MERKLE_EMPTY_DOMAIN: &[u8] = b"ZENVORA_MERKLE_EMPTY_V1\\0";
 
+use ed25519_dalek::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +126,33 @@ impl TransactionV1 {
             return Err("transaction bytes are not canonical".into());
         }
         Ok(transaction)
+    }
+
+    /// Verify the Ed25519 signature and bind the supplied public key to the sender address.
+    /// Public keys are 32 bytes; signatures must be exactly 64 bytes.
+    pub fn verify_signature(&self, public_key_bytes: &[u8]) -> Result<(), String> {
+        self.validate_fields()?;
+        if public_key_bytes.len() != 32 {
+            return Err("Ed25519 public key must be exactly 32 bytes".into());
+        }
+        let public_key_array: [u8; 32] = public_key_bytes
+            .try_into()
+            .map_err(|_| "Ed25519 public key must be exactly 32 bytes")?;
+        let verifying_key = VerifyingKey::from_bytes(&public_key_array)
+            .map_err(|_| "invalid Ed25519 public key")?;
+        let derived_address = address_from_public_key(public_key_bytes)?;
+        if self.sender != derived_address {
+            return Err("transaction sender does not match public key".into());
+        }
+        if self.signature.len() != 64 {
+            return Err("Ed25519 signature must be exactly 64 bytes".into());
+        }
+        let signature = Signature::from_slice(&self.signature)
+            .map_err(|_| "invalid Ed25519 signature encoding")?;
+        let message = self.signing_bytes()?;
+        verifying_key
+            .verify_strict(&message, &signature)
+            .map_err(|_| "transaction signature verification failed".into())
     }
 
     /// Checks structural fields for a specific network and block height.
@@ -258,6 +286,22 @@ impl BlockHeaderV1 {
 
 }
 
+/// Derive a deterministic Zenvora address from a 32-byte Ed25519 public key.
+/// The displayed address is the prefix zv followed by 40 lowercase hex characters.
+pub fn address_from_public_key(public_key: &[u8]) -> Result<String, String> {
+    if public_key.len() != 32 {
+        return Err("Ed25519 public key must be exactly 32 bytes".into());
+    }
+    let digest = hash_parts(&[ADDRESS_DOMAIN, public_key]);
+    let mut address = String::with_capacity(42);
+    address.push_str("zv");
+    for byte in &digest[..20] {
+        use std::fmt::Write as _;
+        write!(&mut address, "{byte:02x}").map_err(|_| "address formatting failed")?;
+    }
+    Ok(address)
+}
+
 /// Compute the transaction Merkle root. Leaves and internal nodes use distinct domain tags;
 /// an odd final node is paired with itself. This function does not execute or validate signatures.
 pub fn transaction_merkle_root(transactions: &[TransactionV1]) -> Result<[u8; 32], String> {
@@ -374,7 +418,8 @@ fn put_bytes(out: &mut Vec<u8>, value: &[u8]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{transaction_merkle_root, BlockHeaderV1, TransactionV1, BLOCK_DOMAIN};
+    use super::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1, BLOCK_DOMAIN};
+    use ed25519_dalek::{Signer, SigningKey};
 
     fn tx() -> TransactionV1 {
         TransactionV1 {
@@ -425,6 +470,40 @@ mod tests {
         assert_eq!(transaction_merkle_root(&[a.clone(), b.clone()]).unwrap(), transaction_merkle_root(&[a.clone(), b.clone()]).unwrap());
         assert_ne!(transaction_merkle_root(&[a.clone(), b.clone()]).unwrap(), transaction_merkle_root(&[b, a.clone()]).unwrap());
         assert_ne!(transaction_merkle_root(&[a.clone()]).unwrap(), transaction_merkle_root(&[a.clone(), a]).unwrap());
+    }
+
+    #[test]
+    fn ed25519_signature_verification_binds_sender_and_rejects_tampering() {
+        let signing_key = SigningKey::from_bytes(&[42; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let mut transaction = tx();
+        transaction.sender = address_from_public_key(&public_key).unwrap();
+        transaction.signature = signing_key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+
+        assert!(transaction.verify_signature(&public_key).is_ok());
+
+        let mut tampered = transaction.clone();
+        tampered.amount += 1;
+        assert!(tampered.verify_signature(&public_key).is_err());
+
+        let other_key = SigningKey::from_bytes(&[43; 32]);
+        assert!(transaction.verify_signature(&other_key.verifying_key().to_bytes()).is_err());
+        assert!(transaction.verify_signature(&[0; 31]).is_err());
+
+        let mut bad_signature = transaction;
+        bad_signature.signature[0] ^= 1;
+        assert!(bad_signature.verify_signature(&public_key).is_err());
+    }
+
+    #[test]
+    fn address_derivation_requires_a_full_ed25519_public_key() {
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let public_key = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public_key).unwrap();
+        assert!(address.starts_with("zv"));
+        assert_eq!(address.len(), 42);
+        assert!(address.bytes().all(|byte| byte.is_ascii_alphanumeric()));
+        assert!(address_from_public_key(&[1; 31]).is_err());
     }
 
     #[test]
