@@ -1861,10 +1861,10 @@ mod tests {
 
     #[test]
     fn chemistry_and_biology_helpers_validate_scientific_inputs() {
-        let output = execute("show molar_mass([12, 16, 1, 1, 1, 1])\\nshow dna_complement(\\"ACGT\\")\\nshow gc_content_percent(\\"GCGC\\")\\nshow gc_content_percent(\\"ATGC\\")\\n").unwrap();
+        let output = execute("show molar_mass([12, 16, 1, 1, 1, 1])\nshow dna_complement(\\"ACGT\\")\nshow gc_content_percent(\\"GCGC\\")\nshow gc_content_percent(\\"ATGC\\")\n").unwrap();
         assert_eq!(output, vec!["32", "TGCA", "100", "50"]);
-        assert!(execute("show dna_complement(\\"ACNX\\")\\n").unwrap_err().contains("invalid DNA base"));
-        assert!(execute("show gc_content_percent(\\"\\")\\n").unwrap_err().contains("empty DNA string"));
+        assert!(execute("show dna_complement(\\"ACNX\\")\n").unwrap_err().contains("invalid DNA base"));
+        assert!(execute("show gc_content_percent(\\"\\")\n").unwrap_err().contains("empty DNA string"));
     }
 
     #[test]
