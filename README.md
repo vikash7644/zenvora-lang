@@ -46,14 +46,14 @@ if age >= 18 {
 
 This prints `1`. Change the age to `16` and it prints `0`.
 
-The current prototype supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`) and nested `if/otherwise` blocks. Comparison results are represented as integer `1` (true) and `0` (false). It reports undefined variables, invalid syntax, division by zero and integer overflow.
+The current prototype supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Comparison results are represented as integer `1` (true) and `0` (false). `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. It reports undefined variables, invalid syntax, division by zero and integer overflow.
 
 ## Roadmap
 
-1. Stabilize syntax, diagnostics and automated tests.
-2. Implement loops with reliable `break` and `continue` behavior.
-3. Add functions, scopes, types and better diagnostics.
-4. Define a stable bytecode format and bytecode-file support.
+1. Continue stabilizing syntax, diagnostics and automated regression tests.
+2. Add functions, scopes, types and better diagnostics.
+3. Define a stable bytecode format and bytecode-file support.
+4. Add execution limits and more robust runtime safety checks.
 5. Explore WebAssembly output and smart-contract integration after the core language is reliable.
 
 ## Status and safety
