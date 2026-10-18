@@ -5,28 +5,88 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zenvora-lang-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  compiler-vm:
+    name: Main compiler and bytecode VM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Check
-        run: cargo check
-      - name: Test
-        run: cargo test
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check compilation
+        run: cargo check --all-targets
+
+      - name: Run all tests
+        run: cargo test --all-targets
+
       - name: Run hello example
         run: cargo run -- examples/hello.zv
+
       - name: Run loop-control example
         run: cargo run -- examples/loops.zv
+
       - name: Run functions example
         run: cargo run -- examples/functions.zv
+
       - name: Run booleans example
         run: cargo run -- examples/booleans.zv
 
-      - name: Run string example
+      - name: Run strings example
         run: cargo run -- examples/strings.zv
 
-      - name: Run collection example
+      - name: Run collections example
         run: cargo run -- examples/collections.zv
+
+      - name: Compile example to bytecode
+        run: cargo run -- --emit-bytecode examples/functions.zv /tmp/zenvora-functions.zvb
+
+      - name: Execute compiled bytecode
+        run: cargo run -- --run-bytecode /tmp/zenvora-functions.zvb
+
+      - name: Verify CLI version
+        run: cargo run -- --version
+
+      - name: Verify CLI help
+        run: cargo run -- --help
+
+  interpreter-mvp:
+    name: Interpreter MVP regression suite
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: compiler
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: compiler -> compiler/target
+
+      - name: Check interpreter compilation
+        run: cargo check --all-targets
+
+      - name: Run interpreter tests
+        run: cargo test --all-targets
+
+      - name: Run shared hello example
+        run: cargo run -- ../examples/hello.zv
