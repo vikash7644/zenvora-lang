@@ -2,7 +2,7 @@ name: Zenvora Lang CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, chain-lang-integration]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -69,6 +69,9 @@ jobs:
 
       - name: Run contract DSL example
         run: cargo run -- examples/contracts.zv
+
+      - name: Run Zenvora Lang transaction-rule checks
+        run: cargo run -- examples/chain_transfer.zv
 
       - name: Run module import example
         run: cargo run -- examples/modules.zv
