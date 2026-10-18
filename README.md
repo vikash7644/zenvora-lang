@@ -13,6 +13,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 - `examples/booleans.zv` — native booleans and logical operators.
 - `examples/strings.zv` — string literals, escapes, concatenation, equality, and string function arguments.
 - `examples/collections.zv` — arrays, maps, collection access, and immutable update helpers.
+- `examples/modules.zv` — relative module imports and reusable functions.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
 - `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
@@ -32,6 +33,7 @@ cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
+cargo run -- examples/modules.zv
 cargo run -- --emit-bytecode examples/functions.zv functions.zvb
 cargo run -- --run-bytecode functions.zvb
 cargo run -- --version
@@ -49,7 +51,7 @@ Expected example output:
 
 ## Automated regression tests
 
-`cargo test` runs 63 automated tests across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips and malformed bytecode, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, arrays/maps, collection access/update helpers, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
+`cargo test` runs 67 automated tests across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips and malformed bytecode, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, arrays/maps, collection access/update helpers, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
 
 ## Bytecode files
 
