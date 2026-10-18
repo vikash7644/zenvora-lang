@@ -217,8 +217,19 @@ impl ChainRuntime {
         if metadata.len() > MAX_LEDGER_BYTES {
             return Err("ledger exceeds configured file-size limit".into());
         }
-        let content = std::fs::read_to_string(path)
+        // Bound the actual read as well as checking metadata: a file can grow or be
+        // replaced between metadata inspection and reading, so metadata alone is not a
+        // reliable allocation limit for untrusted ledger input.
+        use std::io::Read;
+        let mut content = String::new();
+        std::fs::File::open(path)
+            .map_err(|e| format!("cannot open ledger file: {e}"))?
+            .take(MAX_LEDGER_BYTES + 1)
+            .read_to_string(&mut content)
             .map_err(|e| format!("cannot read ledger file: {e}"))?;
+        if content.len() as u64 > MAX_LEDGER_BYTES {
+            return Err("ledger exceeds configured file-size limit".into());
+        }
         let mut lines = content.lines();
         let version = lines.next().ok_or_else(|| "missing ledger file version".to_string())?;
         if version != LEDGER_VERSION && version != LEGACY_LEDGER_VERSION {
