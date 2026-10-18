@@ -198,6 +198,45 @@ impl BlockHeaderV1 {
         put_bytes(&mut out, &self.consensus_proof)?;
         Ok(out)
     }
+
+    /// Decode the canonical version-1 block header, rejecting truncation and trailing data.
+    pub fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > MAX_BLOCK_BYTES {
+            return Err("block header exceeds maximum encoded size".into());
+        }
+        let mut reader = Reader::new(bytes);
+        reader.expect(BLOCK_DOMAIN)?;
+        if reader.read_u16()? != 1 {
+            return Err("unsupported block header version".into());
+        }
+        let chain_id = reader.read_u64()?;
+        let height = reader.read_u64()?;
+        let timestamp_secs = reader.read_u64()?;
+        let parent_hash: [u8; 32] = reader.read_exact(32)?.try_into().map_err(|_| "invalid parent hash")?;
+        let transaction_root: [u8; 32] = reader.read_exact(32)?.try_into().map_err(|_| "invalid transaction root")?;
+        let receipt_root: [u8; 32] = reader.read_exact(32)?.try_into().map_err(|_| "invalid receipt root")?;
+        let state_root: [u8; 32] = reader.read_exact(32)?.try_into().map_err(|_| "invalid state root")?;
+        let proposer = reader.read_string(MAX_ADDRESS_BYTES)?;
+        let consensus_proof = reader.read_bytes(MAX_CONSENSUS_PROOF_BYTES)?.to_vec();
+        reader.finish()?;
+
+        let header = Self {
+            chain_id,
+            height,
+            timestamp_secs,
+            parent_hash,
+            transaction_root,
+            receipt_root,
+            state_root,
+            proposer,
+            consensus_proof,
+        };
+        if header.canonical_bytes()? != bytes {
+            return Err("block header bytes are not canonical".into());
+        }
+        Ok(header)
+    }
+
 }
 
 struct Reader<'a> {
@@ -346,6 +385,33 @@ mod tests {
         invalid = tx();
         invalid.signature.clear();
         assert!(invalid.validate_for(71, 1).is_err());
+    }
+
+    #[test]
+    fn canonical_block_header_round_trips_and_rejects_truncation_or_trailing_data() {
+        let original = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: [4; 32],
+            transaction_root: [1; 32],
+            receipt_root: [2; 32],
+            state_root: [3; 32],
+            proposer: "validator_1".into(),
+            consensus_proof: vec![8, 9, 10],
+        };
+        let bytes = original.canonical_bytes().unwrap();
+        assert_eq!(BlockHeaderV1::from_canonical_bytes(&bytes).unwrap(), original);
+        for end in 0..bytes.len() {
+            assert!(BlockHeaderV1::from_canonical_bytes(&bytes[..end]).is_err());
+        }
+        let mut trailing = bytes.clone();
+        trailing.push(0);
+        assert!(BlockHeaderV1::from_canonical_bytes(&trailing).is_err());
+        let mut bad_version = bytes;
+        let version_offset = BLOCK_DOMAIN.len();
+        bad_version[version_offset + 1] = 2;
+        assert!(BlockHeaderV1::from_canonical_bytes(&bad_version).is_err());
     }
 
     #[test]
