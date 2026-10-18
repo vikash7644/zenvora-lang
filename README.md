@@ -74,6 +74,16 @@ cargo run -- --check my-first-project/main.zv
 
 The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. When using a built release binary, the same commands are `zv --new my-first-project`, `zv my-first-project/main.zv`, and `zv --check my-first-project/main.zv`.
 
+## Beginner workflow: from idea to runnable project
+
+1. Create a project: `zv --new my-project`.
+2. Open `my-project/main.zv` in any text editor and change the example.
+3. Compile-check it: `zv --check my-project/main.zv`.
+4. Run it: `zv my-project/main.zv`.
+5. Keep a small runnable example for each new feature and add a regression test when changing the compiler or VM.
+
+During development from this repository, prefix each command with `cargo run --`. For example, `cargo run -- --new my-project`. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The current CLI is not yet a full package manager, IDE, debugger, or cross-platform installer.
+
 ## Automated regression tests
 
 `cargo test` runs the compiler/VM, CLI, and language regression suites across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips, malformed bytecode, verifier stack-underflow and control-flow-join checks, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, arrays/maps, direct indexing and indexed assignment, collection access/update helpers, standard-library validation, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
