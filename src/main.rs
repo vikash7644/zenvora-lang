@@ -1594,6 +1594,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                     }
                 }
             }
+            }
             // Verify disconnected instruction islands too. Otherwise malformed bytecode can
             // hide stack underflow or an invalid return behind an unconditional jump.
             if let Some(unreachable) = (start..end).find(|pc| !depths.contains_key(pc)) {
