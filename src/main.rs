@@ -1219,7 +1219,10 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
             };
             match op {
                 Op::Jump(target) => {
-                    if is_main && pc == main_exit && *target == code.len() {\n                        if outgoing_depth != 0 { return Err(format!("bytecode verifier: main program exits with {outgoing_depth} value(s) left on the operand stack")); }\n                        continue;\n                    }
+                    if is_main && pc == main_exit && *target == code.len() {
+                        if outgoing_depth != 0 { return Err(format!("bytecode verifier: main program exits with {outgoing_depth} value(s) left on the operand stack")); }
+                        continue;
+                    }
                     enqueue(*target, outgoing_depth)?;
                 }
                 Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
