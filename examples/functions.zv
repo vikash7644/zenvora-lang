@@ -1,0 +1,15 @@
+# Basic functions are currently no-argument and return no value.
+call greet()
+call count_to_three()
+
+fn greet() {
+    show 2026
+}
+
+fn count_to_three() {
+    define count := 0
+    repeat count < 3 {
+        count := count + 1
+        show count
+    }
+}
