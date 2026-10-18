@@ -27,7 +27,7 @@ cargo run -- --run-bytecode functions.zvb
 | `PUSH_STRING_HEX hex` | `→ String` | Push UTF-8 string bytes encoded as hex; `-` represents an empty string |
 | `PUSH_BOOL true/false` | `→ Bool` | Push boolean |
 | `LOAD name` | `→ Value` | Push a variable's current value; undefined names fail at runtime |
-| `STORE name` | `Value →` | Update an existing local or global binding; undefined names fail |\n| `DECLARE name` | `Value →` | Declare a global at top level or a local inside a function |\n| `INDEX` | `Collection Index → Value` | Read an array by integer index or a map by string key; invalid indexes fail |
+| `STORE name` | `Value →` | Update an existing local or global binding; undefined names fail |\n| `DECLARE name` | `Value →` | Declare a global at top level or a local inside a function |\n| `INDEX` | `Collection Index → Value` | Read an array by integer index or a map by string key; invalid indexes fail |\n| `SET_INDEX name` | `Index Value →` | Update the named array element or map key; array bounds and key types are checked |
 | `ADD`, `SUB`, `MUL`, `DIV` | `a b → Value` | Integer arithmetic with overflow and divide-by-zero checks; `ADD` also concatenates two strings |
 | `NEG` | `Int → Int` | Negate an integer |
 | `NOT` | `Bool → Bool` | Boolean negation |
