@@ -89,7 +89,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone, PartialEq)]
 enum Op {
     Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Declare(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, Index, JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
+    Eq, Ne, Lt, Le, Gt, Ge, Index, SetIndex(String), JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
 struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
@@ -402,6 +402,38 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                 }
             }
             continue;
+        }
+
+        if !line.starts_with("define ") {
+            if let Some((left, right)) = line.split_once(":=") {
+                let left = left.trim();
+                if left.contains('[') {
+                    let (name, index_part) = left.split_once('[').ok_or_else(|| format!("line {}: invalid indexed assignment", line_no + 1))?;
+                    let index_expr = index_part.strip_suffix(']').ok_or_else(|| format!("line {}: expected ']' in indexed assignment", line_no + 1))?;
+                    if index_expr.contains('[') || index_expr.contains(']') || !valid_identifier(name.trim()) {
+                        return Err(format!("line {}: indexed assignment currently requires a variable and one index, such as items[0] := value", line_no + 1));
+                    }
+                    if right.trim().is_empty() {
+                        return Err(format!("line {}: missing value in indexed assignment", line_no + 1));
+                    }
+                    let index_tokens = lex(index_expr.trim()).map_err(|e| format!("line {}: invalid index: {e}", line_no + 1))?;
+                    let mut index_parser = Parser { tokens: index_tokens, pos: 0, code: Vec::new() };
+                    index_parser.expression().map_err(|e| format!("line {}: invalid index: {e}", line_no + 1))?;
+                    if index_parser.peek() != &Token::End {
+                        return Err(format!("line {}: unexpected token in index {:?}", line_no + 1, index_parser.peek()));
+                    }
+                    append_code(&mut code, index_parser.code);
+                    let value_tokens = lex(right.trim()).map_err(|e| format!("line {}: {e}", line_no + 1))?;
+                    let mut value_parser = Parser { tokens: value_tokens, pos: 0, code: Vec::new() };
+                    value_parser.expression().map_err(|e| format!("line {}: {e}", line_no + 1))?;
+                    if value_parser.peek() != &Token::End {
+                        return Err(format!("line {}: unexpected token in indexed assignment {:?}", line_no + 1, value_parser.peek()));
+                    }
+                    append_code(&mut code, value_parser.code);
+                    code.push(Op::SetIndex(name.trim().to_string()));
+                    continue;
+                }
+            }
         }
 
         let is_declaration = line.starts_with("define ");
@@ -844,6 +876,29 @@ where
                 Value::Bool(value) => output(format!("{value}")),
                 value @ (Value::Array(_) | Value::Map(_)) => output(value_to_string(&value)),
             },
+            Op::SetIndex(name) => {
+                let value = stack.pop().ok_or("VM stack underflow while reading indexed value")?;
+                let index = stack.pop().ok_or("VM stack underflow while reading collection index")?;
+                let collection = vars.get(name).or_else(|| globals.get(name)).cloned()
+                    .ok_or_else(|| format!("undefined variable '{name}'"))?;
+                let updated = match (collection, index) {
+                    (Value::Array(mut items), Value::Int(index)) if index >= 0 => {
+                        let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
+                        *slot = value;
+                        Value::Array(items)
+                    }
+                    (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
+                    (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
+                    (Value::Map(mut items), Value::Str(key)) => {
+                        items.insert(key, value);
+                        Value::Map(items)
+                    }
+                    (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
+                    _ => return Err("type error: indexed assignment expects an array or map".into()),
+                };
+                if vars.contains_key(name) { vars.insert(name.clone(), updated); }
+                else { globals.insert(name.clone(), updated); }
+            }
             Op::Index => {
                 let index = stack.pop().ok_or("VM stack underflow while reading collection index")?;
                 let collection = stack.pop().ok_or("VM stack underflow while reading collection")?;
@@ -988,6 +1043,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
             Op::Print => "PRINT".into(),
             Op::Eq => "EQ".into(),
             Op::Index => "INDEX".into(),
+            Op::SetIndex(name) => format!("SET_INDEX {name}"),
             Op::Ne => "NE".into(),
             Op::Lt => "LT".into(),
             Op::Le => "LE".into(),
@@ -1045,6 +1101,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "PRINT" if parts.len() == 1 => Op::Print,
             "EQ" if parts.len() == 1 => Op::Eq,
             "INDEX" if parts.len() == 1 => Op::Index,
+            "SET_INDEX" if parts.len() == 2 && valid_identifier(parts[1]) => Op::SetIndex(parts[1].into()),
             "NE" if parts.len() == 1 => Op::Ne,
             "LT" if parts.len() == 1 => Op::Lt,
             "LE" if parts.len() == 1 => Op::Le,
@@ -1233,7 +1290,7 @@ mod tests {
             Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Print,
             Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::JumpIfFalseKeep(27), Op::JumpIfTrueKeep(27), Op::Jump(24),
             Op::CallTarget { target: 0, params: vec!["arg".into()], arg_count: 1 },
-            Op::Return, Op::ReturnValue, Op::Index, Op::Declare("scope".into()),
+            Op::Return, Op::ReturnValue, Op::Index, Op::SetIndex("items".into()), Op::Declare("scope".into()),
         ];
         let encoded = super::serialize_bytecode(&code).unwrap();
         assert_eq!(super::deserialize_bytecode(&encoded).unwrap(), code);
@@ -1337,6 +1394,25 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn direct_indexed_assignment_updates_arrays_and_maps() {
+        let source = "define numbers := array(10, 20, 30)\nnumbers[1] := 99\nshow numbers[1]\ndefine profile := map(\"name\", \"Zenvora\")\nprofile[\"name\"] := \"ZVR\"\nprofile[\"level\"] := 8\nshow profile[\"name\"]\nshow profile[\"level\"]\n";
+        let code = compile(source).unwrap();
+        let encoded = super::serialize_bytecode(&code).unwrap();
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["99", "ZVR", "8"]);
+    }
+
+    #[test]
+    fn indexed_assignment_checks_names_types_and_bounds() {
+        assert!(execute("items[0] := 1\n").unwrap_err().contains("undefined variable"));
+        assert!(execute("define items := array(1)\nitems[2] := 5\n").unwrap_err().contains("out of bounds"));
+        assert!(execute("define items := array(1)\nitems[\"zero\"] := 5\n").unwrap_err().contains("must be an integer"));
+        assert!(execute("define value := 5\nvalue[0] := 2\n").unwrap_err().contains("expects an array or map"));
     }
 
     #[test]
