@@ -1831,6 +1831,7 @@ fn main() {
         return;
     }
     let result = match args.as_slice() {
+        [_, mode, name] if mode == "--new" => create_project(name),
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
