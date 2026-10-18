@@ -1,6 +1,6 @@
 # Zenvora Lang v0.3 — current implementation
 
-Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone adds `repeat` loops with `break` and `continue` to the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
+Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes `repeat` loops with `break` and `continue`, plus basic no-argument functions in the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
 
 ## Build and run
 
@@ -10,6 +10,7 @@ Requires Rust and Cargo (including in Termux where the Rust toolchain is install
 cargo check
 cargo test
 cargo run -- examples/hello.zv
+cargo run -- examples/functions.zv
 ```
 
 ## Supported syntax
@@ -37,6 +38,8 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `repeat condition { ... }` loops reevaluate their comparison condition before each iteration.
 - `break` exits the nearest enclosing loop; `continue` jumps back to reevaluate its condition.
 - `break` and `continue` outside a loop are rejected during compilation.
+- `fn name() { ... }` defines a no-argument function; `call name()` invokes it; `return` exits the current function.
+- Functions may be called before their definition and may call other functions. The current version has no function parameters, return values, or local variable scopes; variables are shared globally.
 - Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched block braces are reported as errors.
 
 ## How execution works
@@ -47,12 +50,12 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 
 ## Not implemented yet
 
-Strings, native boolean values, functions, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Strings, native boolean values, function parameters and return values, local scopes, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
 1. Stabilize syntax, diagnostics and automated tests.
-2. Add loops with correct `break`/`continue` behavior.
-3. Add functions, scopes and useful types.
+2. Add function parameters, return values, and local scopes.
+3. Add useful types and a stable bytecode format.
 4. Add serializable bytecode and a stable VM specification.
 5. Explore WebAssembly output and a contract ABI only after the core language is reliable.
