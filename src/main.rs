@@ -5,6 +5,7 @@ use std::path::Path;
 mod module_loader;
 mod chain_runtime;
 mod chain_protocol;
+mod chain_block;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
