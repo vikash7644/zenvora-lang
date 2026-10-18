@@ -1,15 +1,15 @@
 # Zenvora Lang
 
-Zenvora Lang is an independent programming-language project for the Zenvora ecosystem. The repository now includes the first runnable compiler/bytecode-VM milestone in Rust.
+Zenvora Lang is an independent programming-language project for the Zenvora ecosystem. The repository includes an early runnable compiler and stack-based bytecode virtual machine written in Rust.
 
 ## Repository contents
 
 - `Cargo.toml` — Rust package manifest for the `zv` command.
 - `src/main.rs` — lexer, expression parser, bytecode compiler and stack VM.
 - `examples/hello.zv` — runnable example program.
-- `docs/language-v0.1.md` — current feature status and roadmap.
-- `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; this is a design document, not a completed chain implementation.
-- `examples/token.zvl` — illustrative smart-contract DSL draft; it is not executable by the current compiler.
+- `docs/language-v0.1.md` — current language feature status and roadmap (updated for v0.2 features).
+- `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
+- `examples/token.zvl` — illustrative smart-contract DSL draft; not executable by the current compiler.
 - `website/` — static responsive ecosystem landing page.
 
 ## Build and run
@@ -18,6 +18,7 @@ Requires Rust and Cargo (including on Android through Termux if the Rust toolcha
 
 ```sh
 cargo check
+cargo test
 cargo run -- examples/hello.zv
 cargo run -- --help
 ```
@@ -34,29 +35,30 @@ Expected example output:
 ## Current language syntax
 
 ```zv
-define a := 10
-define b := 20
-define total := a + b
-show total
-show total * 2
-total := total + 5
-show total
+define age := 20
+
+if age >= 18 {
+    show 1
+} otherwise {
+    show 0
+}
 ```
 
-The current milestone supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, and `print(expression)`. It reports undefined variables, invalid syntax, division by zero and integer overflow.
+This prints `1`. Change the age to `16` and it prints `0`.
+
+The current prototype supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`) and nested `if/otherwise` blocks. Comparison results are represented as integer `1` (true) and `0` (false). It reports undefined variables, invalid syntax, division by zero and integer overflow.
 
 ## Roadmap
 
-1. Add automated tests and stabilize expression semantics.
-2. Add comparisons, booleans and conditional branches.
-3. Implement loops with reliable `break` and `continue` behavior.
-4. Add functions, scopes, types, and better diagnostics.
-5. Define a stable bytecode format and bytecode-file support.
-6. Explore WebAssembly output and smart-contract integration after the core language is reliable.
+1. Stabilize syntax, diagnostics and automated tests.
+2. Implement loops with reliable `break` and `continue` behavior.
+3. Add functions, scopes, types and better diagnostics.
+4. Define a stable bytecode format and bytecode-file support.
+5. Explore WebAssembly output and smart-contract integration after the core language is reliable.
 
 ## Status and safety
 
-This is an early work in progress. Strings, conditionals, loops, functions, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Strings, loops, functions, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
