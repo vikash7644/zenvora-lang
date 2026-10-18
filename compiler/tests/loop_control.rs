@@ -96,3 +96,54 @@ fn break_in_inner_loop_does_not_exit_outer_loop() {
         "11\n21\n31\n"
     );
 }
+
+#[test]
+fn break_inside_if_outside_loop_is_rejected() {
+    let output = run_program("if true {\n    break\n}\n");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("'break' used outside a repeat loop"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn continue_inside_if_outside_loop_is_rejected() {
+    let output = run_program("if true {\n    continue\n}\n");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("'continue' used outside a repeat loop"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn inner_continue_does_not_skip_outer_loop_body() {
+    let output = run_program(
+        "define outer := 0\nrepeat outer < 2 {\n    outer := outer + 1\n    define inner := 0\n    repeat inner < 3 {\n        inner := inner + 1\n        if inner == 2 {\n            continue\n        }\n        show outer * 10 + inner\n    }\n    show outer\n}\n",
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "11\n13\n1\n21\n23\n2\n"
+    );
+}
+
+#[test]
+fn loop_control_does_not_hide_runtime_errors() {
+    let output = run_program(
+        "define count := 0\nrepeat count < 3 {\n    count := count + 1\n    if count == 2 {\n        continue\n    }\n    show 10 / (count - 1)\n}\n",
+    );
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("division by zero"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
