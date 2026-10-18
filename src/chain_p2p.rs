@@ -10,7 +10,8 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::block_store::BlockStore;
-use super::chain_block::{execute_block, SignedTransactionEnvelope};
+use super::chain_block::{execute_block, execute_block_candidate, SignedTransactionEnvelope};
+use super::chain_consensus::{add_validator_signature, verify_partial_consensus_proof};
 use super::chain_protocol::{BlockHeaderV1, TransactionV1};
 use super::tx_pool::TransactionPool;
 
@@ -19,7 +20,7 @@ const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 const PEER_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn serve(store_path: String, chain_id: u64, bind_ip: &str, port: u16) -> Result<(), String> {
-    serve_inner(store_path, chain_id, None, bind_ip, port)
+    serve_inner(store_path, chain_id, None, None, bind_ip, port)
 }
 
 pub fn serve_with_pool(
@@ -29,13 +30,25 @@ pub fn serve_with_pool(
     bind_ip: &str,
     port: u16,
 ) -> Result<(), String> {
-    serve_inner(store_path, chain_id, Some(pool_path), bind_ip, port)
+    serve_inner(store_path, chain_id, Some(pool_path), None, bind_ip, port)
+}
+
+pub fn serve_with_validator(
+    store_path: String,
+    chain_id: u64,
+    pool_path: String,
+    validator_key_path: String,
+    bind_ip: &str,
+    port: u16,
+) -> Result<(), String> {
+    serve_inner(store_path, chain_id, Some(pool_path), Some(validator_key_path), bind_ip, port)
 }
 
 fn serve_inner(
     store_path: String,
     chain_id: u64,
     pool_path: Option<String>,
+    validator_key_path: Option<String>,
     bind_ip: &str,
     port: u16,
 ) -> Result<(), String> {
@@ -55,7 +68,7 @@ fn serve_inner(
                     .and_then(|bytes| serde_json::from_slice::<Value>(&bytes)
                         .map_err(|error| format!("invalid peer message JSON: {error}")))
                     .map(|request| handle_message_with_pool(
-                        &request, &store_path, chain_id, pool_path.as_deref(),
+                        &request, &store_path, chain_id, pool_path.as_deref(), validator_key_path.as_deref(),
                     ));
                 let response = match result {
                     Ok(value) => value,
@@ -164,6 +177,27 @@ pub fn gossip_pool_to_peer(store_path: &str, chain_id: u64, pool_path: &str, pee
     Ok(accepted)
 }
 
+/// Ask a validator peer to verify a candidate block and return its updated signature proof.
+pub fn request_block_signature(
+    peer: &str,
+    header: &BlockHeaderV1,
+    transactions: &[SignedTransactionEnvelope],
+) -> Result<Vec<u8>, String> {
+    let peer_address: SocketAddr = peer.parse()
+        .map_err(|_| "peer must be an IP:port socket address")?;
+    let encoded_transactions: Vec<Value> = transactions.iter().map(|envelope| json!({
+        "publicKey":hex_encode(&envelope.public_key),
+        "transaction":envelope.transaction.canonical_bytes().map(|bytes|hex_encode(&bytes)).unwrap_or_default()
+    })).collect();
+    let response = request_peer(peer_address, &json!({
+        "method":"sign_block",
+        "header":hex_encode(&header.canonical_bytes()?),
+        "transactions":encoded_transactions
+    }))?;
+    hex_decode(response.get("consensusProof").and_then(Value::as_str)
+        .ok_or_else(|| "validator peer response is missing consensus proof".to_string())?)
+}
+
 fn request_peer(peer: SocketAddr, request: &Value) -> Result<Value, String> {
     let mut stream = TcpStream::connect_timeout(&peer, PEER_TIMEOUT)
         .map_err(|error| format!("cannot connect to peer {peer}: {error}"))?;
@@ -179,7 +213,7 @@ fn request_peer(peer: SocketAddr, request: &Value) -> Result<Value, String> {
 }
 
 fn handle_message(request: &Value, store_path: &str, expected_chain_id: u64) -> Value {
-    handle_message_with_pool(request, store_path, expected_chain_id, None)
+    handle_message_with_pool(request, store_path, expected_chain_id, None, None)
 }
 
 fn handle_message_with_pool(
@@ -187,6 +221,7 @@ fn handle_message_with_pool(
     store_path: &str,
     expected_chain_id: u64,
     pool_path: Option<&str>,
+    validator_key_path: Option<&str>,
 ) -> Value {
     match request.get("method").and_then(Value::as_str) {
         Some("status") => {
@@ -230,6 +265,79 @@ fn handle_message_with_pool(
                 "transaction":envelope.transaction.canonical_bytes().map(|bytes|hex_encode(&bytes)).unwrap_or_default()
             })).collect();
             json!({"ok":true,"result":{"header":hex_encode(&header),"transactions":transactions}})
+        }
+        Some("sign_block") => {
+            let key_path = match validator_key_path {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"validator signing is disabled on this peer"}),
+            };
+            let header_bytes = match request.get("header").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"sign_block requires canonical header hex"}),
+            };
+            let mut header = match BlockHeaderV1::from_canonical_bytes(&header_bytes) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":error}),
+            };
+            let transaction_values = match request.get("transactions").and_then(Value::as_array) {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"sign_block requires a transaction array"}),
+            };
+            let mut transactions = Vec::with_capacity(transaction_values.len());
+            for item in transaction_values {
+                let public_key = match item.get("publicKey").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                    Some(value) => value,
+                    None => return json!({"ok":false,"error":"proposal transaction is missing public key"}),
+                };
+                let transaction_bytes = match item.get("transaction").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                    Some(value) => value,
+                    None => return json!({"ok":false,"error":"proposal transaction is missing canonical bytes"}),
+                };
+                let transaction = match TransactionV1::from_canonical_bytes(&transaction_bytes) {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":error}),
+                };
+                transactions.push(SignedTransactionEnvelope { transaction, public_key });
+            }
+            let (store, runtime) = match BlockStore::load_from_file(store_path, expected_chain_id) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":format!("local block store failed verification: {error}")}),
+            };
+            let previous = match store.blocks().last() {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"local store has no tip"}),
+            };
+            if header.chain_id != expected_chain_id
+                || header.height != previous.header.height.saturating_add(1)
+                || header.parent_hash != match previous.header.header_hash() {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":error}),
+                } {
+                return json!({"ok":false,"error":"proposal does not extend this peer's current tip"});
+            }
+            if let Err(error) = verify_partial_consensus_proof(&header, runtime.genesis_balances()) {
+                return json!({"ok":false,"error":format!("invalid existing proposal signatures: {error}")});
+            }
+            let mut candidate = runtime.clone();
+            if let Err(error) = execute_block_candidate(
+                &mut candidate, &header, &transactions, expected_chain_id, Some(&previous.header),
+            ) {
+                return json!({"ok":false,"error":format!("candidate block validation failed: {error}")});
+            }
+            let key = match super::read_chain_key(key_path) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":error}),
+            };
+            if let Err(error) = add_validator_signature(&mut header, &key) {
+                return json!({"ok":false,"error":error});
+            }
+            if let Err(error) = verify_partial_consensus_proof(&header, runtime.genesis_balances()) {
+                return json!({"ok":false,"error":format!("local validator is not authorized: {error}")});
+            }
+            json!({"ok":true,"result":{
+                "signer":header.proposer,
+                "consensusProof":hex_encode(&header.consensus_proof)
+            }})
         }
         Some("get_pending_transactions") => {
             let pool_path = match pool_path {
