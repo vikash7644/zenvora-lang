@@ -2,7 +2,21 @@
 
 ## Current milestone: VM-backed transaction runtime prototype
 
-`src/chain_runtime.rs` adds a Rust transaction harness that calls the existing Zenvora Lang compiler and VM for every transfer. The transfer policy is written as Zenvora source; the Rust host passes in the current balances and amount, executes the program, checks the VM result, and only then commits updated balances.
+`src/chain_runtime.rs` adds a Rust transaction harness that calls the existing Zenvora Lang compiler and VM for every transfer. The transfer policy is written as Zenvora source; the Rust host passes in the current balances and amount, executes the program, checks the VM result, and only then commits updated balances. A versioned `ZENVORA_LEDGER_V1` snapshot stores balances and receipts; the loader rejects malformed records and unsupported versions.
+
+### Local CLI for the prototype
+
+After building the `zv` binary, the current prototype supports:
+
+```text
+zv --chain-init ledger.zvr alice 1000
+zv --chain-init ledger.zvr bob 0
+zv --chain-transfer ledger.zvr alice bob 125
+zv --chain-balance ledger.zvr alice
+zv --chain-receipts ledger.zvr
+```
+
+`--chain-init` creates a new ledger and refuses to overwrite an existing file. To fund another address, use `--chain-init` only when creating a fresh ledger; genesis balances for multiple addresses should be added through a dedicated genesis/config format in a future milestone. Each transfer loads the snapshot, runs the transfer rule in the Zenvora VM, and saves the resulting balances and receipt. A rejected transfer is recorded as a rejected receipt without changing balances.
 
 Automated tests cover:
 - a valid transfer and subsequent transfer using the committed state;
@@ -32,4 +46,4 @@ The CI workflow must pass before this prototype is considered verified. This is 
 
 ## Safety/status
 
-The runtime currently models an in-memory ledger and receipt list. It does not implement consensus, cryptographic signatures, persistent chain state, a deployable ABI, production wallet security, or a public testnet. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing Zenvora Lang contracts.
+The runtime has versioned local-file snapshots, but does not yet implement a block database, consensus, cryptographic signatures, a deployable ABI, production wallet security, or a public testnet. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing Zenvora Lang contracts.
