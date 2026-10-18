@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Added `zv --check <file.zv>` to compile source and relative imports without executing the program; added regression coverage for successful compile-only validation and syntax errors.
+
 - Rejected language keywords as variable, function, parameter, and contract-state identifiers, with regression coverage for declaration and function headers.
 
 - Added `unique(array)` with stable first-occurrence ordering and `assert_eq(actual, expected[, message])` for test and contract-invariant assertions.
