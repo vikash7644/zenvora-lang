@@ -842,8 +842,14 @@ mod tests {
 
     #[test]
     fn logical_and_or_short_circuit_the_right_operand() {
-        let output = execute("show false and (1 / 0 == 0)\nshow true or (1 / 0 == 0)\nshow true and true\nshow false or true\n").unwrap();
-        assert_eq!(output, vec!["false", "true", "true", "true"]);
+        let output = execute("show false and (1 / 0 == 0)\nshow true or (1 / 0 == 0)\nshow true and true\nshow false or true\nshow skip_and()\nshow skip_or()\nfn skip_and() {\nreturn false and (1 / 0 == 0)\n}\nfn skip_or() {\nreturn true or (1 / 0 == 0)\n}\n").unwrap();
+        assert_eq!(output, vec!["false", "true", "true", "true", "false", "true"]);
+    }
+
+    #[test]
+    fn short_circuit_jumps_work_in_repeat_conditions() {
+        let output = execute("define count := 0\nrepeat count < 3 and (count != 1 or true) {\ncount := count + 1\nshow count\n}\n").unwrap();
+        assert_eq!(output, vec!["1", "2", "3"]);
     }
 
     #[test]
