@@ -1907,6 +1907,17 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
             crate::chain_rpc::serve(store_path.clone(), chain_id, port)
         }
+        [_, mode, store_path, chain_id, pool_path, bind_ip, port] if mode == "--chain-p2p-serve-pool" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "P2P port must be between 1 and 65535")?;
+            crate::chain_p2p::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), bind_ip, port)
+        }
+        [_, mode, store_path, chain_id, pool_path, peer] if mode == "--chain-p2p-gossip" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let sent = crate::chain_p2p::gossip_pool_to_peer(store_path, chain_id, pool_path, peer)?;
+            println!("Gossiped {sent} new pending transaction(s) to {peer}");
+            Ok(())
+        }
         [_, mode, store_path, chain_id, bind_ip, port] if mode == "--chain-p2p-serve" => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             let port: u16 = port.parse().map_err(|_| "P2P port must be between 1 and 65535")?;
@@ -2233,7 +2244,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
@@ -2256,7 +2267,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
