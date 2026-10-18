@@ -10,7 +10,8 @@ This folder contains the first repository-hosted Rust interpreter prototype for 
 - `if { ... } otherwise { ... }` and `otherwise if`
 - `repeat condition { ... }`, `break`, and `continue`
 - A one-million-iteration loop safety cap and nesting limit
-- Unit tests for expression precedence, booleans, and strings
+- `break` and `continue` are rejected outside loops with clear errors
+- Tests for expression precedence, booleans, strings, loop control, nested loops, and invalid loop-control statements
 
 ## Run on Android with Termux
 
@@ -42,6 +43,20 @@ repeat count <= 5 {
     }
     count := count + 1
 }
+```
+
+## Loop-control behavior
+
+- `break` exits only the nearest enclosing `repeat` loop.
+- `continue` skips the rest of the current loop body and reevaluates that loop's condition.
+- Using either statement outside a loop exits with a clear `Zenvora error`.
+- Nested loops are tested to ensure an inner `break` does not terminate the outer loop.
+
+Run the regression suite with:
+
+```sh
+cd compiler
+cargo test
 ```
 
 ## Current limitations
