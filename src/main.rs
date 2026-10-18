@@ -556,7 +556,7 @@ fn run(code: &[Op]) -> Result<(), String> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 || args[1] == "--help" || args[1] == "-h" {
-        println!("Zenvora Lang v0.4.0\nUsage: zv <file.zv>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.5.0\nUsage: zv <file.zv>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         if args.len() != 2 { process::exit(2); }
         return;
     }
