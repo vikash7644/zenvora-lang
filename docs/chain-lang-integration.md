@@ -26,11 +26,13 @@ Automated tests cover:
 
 The CI workflow must pass before this prototype is considered verified. This is a real VM-backed transaction execution path inside the Zenvora Lang repository, but it is **not yet a full blockchain node**.
 
-## Canonical protocol-format prototype
+## Canonical protocol-format and hashing prototype
 
-`src/chain_protocol.rs` now defines a versioned canonical encoding for a transaction signing payload and block header. It uses explicit big-endian integers, length-prefixed byte/string fields, and domain-separated format tags. Structural tests cover deterministic encoding, wrong-chain rejection, expiry, malformed fields, and genesis/parent-hash rules.
+`src/chain_protocol.rs` defines versioned canonical encodings for transaction signing payloads, signed transaction envelopes, and block headers. Encodings use explicit big-endian integers, length-prefixed fields, and distinct domain tags. Bounded decoders reject truncated inputs, trailing bytes, invalid versions, malformed fields, and oversized inputs.
 
-This is **not yet a complete transaction protocol**: signature bytes are opaque and not cryptographically verified; transaction nonces/balances are not checked by this module; roots are supplied rather than computed; there is no cryptographic transaction/block hash, block execution, persistent block database, P2P protocol, or consensus proof verification. Those are separate gates, not implied by the format structs.
+The module now uses the established `sha2` crate for domain-separated SHA-256 transaction IDs and block-header hashes. It also computes a transaction Merkle root using distinct leaf/node tags, a tagged empty-tree root, and duplicate-last handling for odd-width levels. CI tests cover deterministic encoding and hashes, round trips, malformed inputs, order-sensitive Merkle roots, chain ID/expiry checks, and genesis/parent-hash rules. Current CI result for the implementation checkpoint: [successful GitHub Actions run](https://github.com/vikash7644/zenvora-lang/actions/runs/39145294904).
+
+This is **not yet a complete transaction protocol or chain**: signature bytes are still opaque and not cryptographically verified; account nonces/balances are not validated by this module; receipt/state roots are supplied rather than computed; there is no block execution engine, persistent block database, P2P protocol, or consensus/finality proof verification. Hashing is implemented, but it does not establish consensus or production security. Those remain separate gates.
 
 ## Intended architecture
 
