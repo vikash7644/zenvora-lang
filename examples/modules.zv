@@ -1,0 +1,5 @@
+# Module paths are relative to the file containing the use directive.
+use "modules/math.zv"
+
+show add(20, 22)
+show square(7)
