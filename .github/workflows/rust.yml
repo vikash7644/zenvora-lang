@@ -43,6 +43,12 @@ jobs:
       - name: Run functions example
         run: cargo run -- examples/functions.zv
 
+      - name: Run basic functions example #35
+        run: cargo run -- examples/functions-basic.zv
+
+      - name: Run functions summary example #36
+        run: cargo run -- examples/functions-summary.zv
+
       - name: Run booleans example
         run: cargo run -- examples/booleans.zv
 
