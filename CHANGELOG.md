@@ -2,6 +2,14 @@
 
 Notable changes to Zenvora Lang are recorded here.
 
+## v0.7.0 — Standard library and modules
+
+- Added relative `use "path.zv"` imports with duplicate-load prevention, cycle detection, and an import-depth limit.
+- Added direct postfix array/map indexing, including nested indexing and computed index expressions.
+- Added `type_of`, `to_string`, `abs`, `min`, `max`, bounded end-exclusive `range`, and `assert` built-ins.
+- Added regression tests and runnable module, indexing, and standard-library examples.
+- CI verifies compiler/VM tests, interpreter tests, bytecode round trips, and runnable examples.
+
 ## Unreleased
 
 - Added relative use-path module imports for source files and bytecode builds.
