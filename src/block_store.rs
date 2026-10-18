@@ -280,3 +280,152 @@ fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
     }
     Ok(output)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::BlockStore;
+    use super::super::chain_block::{execute_block, SignedTransactionEnvelope};
+    use super::super::chain_protocol::{
+        address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1,
+    };
+    use super::super::chain_runtime::ChainRuntime;
+    use ed25519_dalek::{Signer, SigningKey};
+    use std::collections::BTreeMap;
+
+    fn genesis(key: &SigningKey) -> (ChainRuntime, BlockStore, BlockHeaderV1) {
+        let public_key = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public_key).unwrap();
+        let mut allocations = BTreeMap::new();
+        allocations.insert(address.clone(), 1_000);
+        allocations.insert("bob".to_string(), 0);
+        let mut runtime = ChainRuntime::new();
+        for (account, balance) in &allocations {
+            runtime.set_genesis_balance(account, *balance).unwrap();
+        }
+        let header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 0,
+            timestamp_secs: 1_800_000_000,
+            parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(),
+            proposer: "validator_1".into(),
+            consensus_proof: Vec::new(),
+        };
+        execute_block(&mut runtime, &header, &[], 71, None).unwrap();
+        let store = BlockStore::new(71, allocations).unwrap();
+        (runtime, store, header)
+    }
+
+    fn signed_transfer(key: &SigningKey, nonce: u64) -> SignedTransactionEnvelope {
+        let public_key = key.verifying_key().to_bytes();
+        let mut transaction = TransactionV1 {
+            chain_id: 71,
+            sender: address_from_public_key(&public_key).unwrap(),
+            nonce,
+            recipient: "bob".into(),
+            amount: 125,
+            max_fee: 3,
+            gas_limit: 21_000,
+            valid_until_height: Some(100),
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        SignedTransactionEnvelope { transaction, public_key: public_key.to_vec() }
+    }
+
+    #[test]
+    fn block_store_round_trips_and_replays_genesis_and_signed_block() {
+        let key = SigningKey::from_bytes(&[81; 32]);
+        let (mut runtime, mut store, genesis_header) = genesis(&key);
+        let path = std::env::temp_dir().join(format!("zenvora-block-store-{}.zvb", std::process::id()));
+        store.append_executed_block(&path, &runtime, &genesis_header, &[], &[]).unwrap();
+
+        let envelope = signed_transfer(&key, 0);
+        let mut candidate = runtime.clone();
+        let receipt = execute_block(
+            &mut candidate,
+            &BlockHeaderV1 {
+                chain_id: 71,
+                height: 1,
+                timestamp_secs: 1_800_000_001,
+                parent_hash: genesis_header.header_hash().unwrap(),
+                transaction_root: transaction_merkle_root(&[envelope.transaction.clone()]).unwrap(),
+                receipt_root: [0; 32],
+                state_root: [0; 32],
+                proposer: "validator_1".into(),
+                consensus_proof: Vec::new(),
+            },
+            &[envelope.clone()],
+            71,
+            Some(&genesis_header),
+        );
+        // Build the actual header from the executed candidate state and receipt.
+        assert!(receipt.is_err()); // Deliberately proves a bad commitment never changes the candidate.
+        assert_eq!(candidate.state_root(), runtime.state_root());
+
+        let mut expected = runtime.clone();
+        let expected_receipt = expected.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, 71, 1,
+        ).unwrap();
+        let header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: genesis_header.header_hash().unwrap(),
+            transaction_root: transaction_merkle_root(&[envelope.transaction.clone()]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[expected_receipt.clone()]).unwrap(),
+            state_root: expected.state_root(),
+            proposer: "validator_1".into(),
+            consensus_proof: Vec::new(),
+        };
+        let receipts = execute_block(&mut runtime, &header, &[envelope.clone()], 71, Some(&genesis_header)).unwrap();
+        assert_eq!(receipts, vec![expected_receipt]);
+        store.append_executed_block(&path, &runtime, &header, &[envelope], &receipts).unwrap();
+
+        let (loaded, replayed) = BlockStore::load_from_file(&path, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 2);
+        assert_eq!(replayed.balance("bob"), 125);
+        assert_eq!(replayed.account_nonce(&address_from_public_key(&key.verifying_key().to_bytes()).unwrap()), 1);
+        assert_eq!(replayed.state_root(), runtime.state_root());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn block_store_replay_rejects_tampered_signed_transaction() {
+        let key = SigningKey::from_bytes(&[82; 32]);
+        let (mut runtime, mut store, genesis_header) = genesis(&key);
+        let path = std::env::temp_dir().join(format!("zenvora-block-store-tamper-{}.zvb", std::process::id()));
+        store.append_executed_block(&path, &runtime, &genesis_header, &[], &[]).unwrap();
+
+        let envelope = signed_transfer(&key, 0);
+        let mut expected = runtime.clone();
+        let receipt = expected.apply_signed_transaction(&envelope.transaction, &envelope.public_key, 71, 1).unwrap();
+        let header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: genesis_header.header_hash().unwrap(),
+            transaction_root: transaction_merkle_root(&[envelope.transaction.clone()]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[receipt.clone()]).unwrap(),
+            state_root: expected.state_root(),
+            proposer: "validator_1".into(),
+            consensus_proof: Vec::new(),
+        };
+        let receipts = execute_block(&mut runtime, &header, &[envelope.clone()], 71, Some(&genesis_header)).unwrap();
+        store.append_executed_block(&path, &runtime, &header, &[envelope], &receipts).unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<String> = content.lines().map(str::to_string).collect();
+        let transaction_line = lines.iter_mut().find(|line| line.starts_with("T\t1\t0\t")).unwrap();
+        let mut fields: Vec<String> = transaction_line.split('\t').map(str::to_string).collect();
+        let last = fields[4].pop().unwrap();
+        fields[4].push(if last == '0' { '1' } else { '0' });
+        *transaction_line = fields.join("\t");
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+
+        assert!(BlockStore::load_from_file(&path, 71).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+}
