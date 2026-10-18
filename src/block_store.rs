@@ -113,6 +113,41 @@ impl BlockStore {
             envelope.transaction.verify_signature(&envelope.public_key)?;
         }
 
+        // Do not trust the caller's claim that this runtime is the result of these
+        // transactions. Replay the stored prefix and independently execute the candidate
+        // before persisting it; otherwise a correctly signed header could commit a state
+        // produced by unrelated transactions and only fail on the next restart.
+        let mut replayed = ChainRuntime::new();
+        for (address, balance) in &self.genesis_balances {
+            replayed.set_genesis_balance(address, *balance)?;
+        }
+        let mut previous_header: Option<BlockHeaderV1> = None;
+        for stored in &self.blocks {
+            execute_block(
+                &mut replayed,
+                &stored.header,
+                &stored.transactions,
+                self.chain_id,
+                previous_header.as_ref(),
+            )?;
+            previous_header = Some(stored.header.clone());
+        }
+        let replayed_receipts = execute_block(
+            &mut replayed,
+            header,
+            transactions,
+            self.chain_id,
+            previous_header.as_ref(),
+        )?;
+        if replayed.state_root() != runtime_after.state_root()
+            || replayed.receipts() != runtime_after.receipts()
+        {
+            return Err("runtime does not match independently replayed block execution".into());
+        }
+        if replayed_receipts != block_receipts {
+            return Err("supplied block receipts do not match independently executed transactions".into());
+        }
+
         self.blocks.push(StoredBlock { header: header.clone(), transactions: transactions.to_vec() });
         if let Err(error) = self.save_to_file(path) {
             self.blocks.pop();
@@ -391,6 +426,56 @@ mod tests {
         assert_eq!(replayed.balance("bob"), 125);
         assert_eq!(replayed.account_nonce(&address_from_public_key(&key.verifying_key().to_bytes()).unwrap()), 1);
         assert_eq!(replayed.state_root(), runtime.state_root());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn append_rejects_state_and_receipts_from_unrelated_transactions() {
+        let key = SigningKey::from_bytes(&[83; 32]);
+        let (runtime, mut store, genesis_header) = genesis(&key);
+        let path = std::env::temp_dir().join(format!("zenvora-block-store-mismatch-{}.zvb", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        store.append_executed_block(&path, &runtime, &genesis_header, &[], &[]).unwrap();
+
+        // The supplied transaction transfers 125, but the caller supplies a runtime,
+        // receipt and signed header produced by a different 200-unit transaction.
+        let supplied = signed_transfer(&key, 0);
+        let public_key = key.verifying_key().to_bytes();
+        let mut unrelated = TransactionV1 {
+            chain_id: 71,
+            sender: address_from_public_key(&public_key).unwrap(),
+            nonce: 0,
+            recipient: "bob".into(),
+            amount: 200,
+            max_fee: 3,
+            gas_limit: 21_000,
+            valid_until_height: Some(100),
+            signature: Vec::new(),
+        };
+        unrelated.signature = key.sign(&unrelated.signing_bytes().unwrap()).to_bytes().to_vec();
+        let mut fake_runtime = runtime.clone();
+        let fake_receipt = fake_runtime.apply_signed_transaction(&unrelated, &public_key, 71, 1).unwrap();
+        let mut header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: genesis_header.header_hash().unwrap(),
+            transaction_root: transaction_merkle_root(&[supplied.transaction.clone()]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[fake_receipt.clone()]).unwrap(),
+            state_root: fake_runtime.state_root(),
+            proposer: "validator_1".into(),
+            consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut header, &key).unwrap();
+
+        let error = store.append_executed_block(
+            &path, &fake_runtime, &header, &[supplied], &[fake_receipt],
+        ).unwrap_err();
+        assert!(error.contains("independently replayed") || error.contains("independently executed"));
+        assert_eq!(store.blocks().len(), 1);
+        let (loaded, replayed) = BlockStore::load_from_file(&path, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 1);
+        assert_eq!(replayed.balance("bob"), 0);
         std::fs::remove_file(path).unwrap();
     }
 
