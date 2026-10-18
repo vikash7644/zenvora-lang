@@ -111,7 +111,7 @@ impl ChainRuntime {
             encoded.extend_from_slice(&self.balance(address).to_be_bytes());
             encoded.extend_from_slice(&self.account_nonce(address).to_be_bytes());
         }
-        hash_tagged(b"ZENVORA_STATE_ROOT_V1\\0", &encoded)
+        hash_tagged(b"ZENVORA_STATE_ROOT_V1\0", &encoded)
     }
 
     /// Deterministic Merkle commitment for an ordered set of execution receipts.
@@ -143,10 +143,10 @@ impl ChainRuntime {
                 }
                 None => encoded.push(0),
             }
-            level.push(hash_tagged(b"ZENVORA_RECEIPT_LEAF_V1\\0", &encoded));
+            level.push(hash_tagged(b"ZENVORA_RECEIPT_LEAF_V1\0", &encoded));
         }
         if level.is_empty() {
-            return Ok(hash_tagged(b"ZENVORA_RECEIPT_EMPTY_V1\\0", &[]));
+            return Ok(hash_tagged(b"ZENVORA_RECEIPT_EMPTY_V1\0", &[]));
         }
         while level.len() > 1 {
             let mut next = Vec::with_capacity((level.len() + 1) / 2);
@@ -155,7 +155,7 @@ impl ChainRuntime {
                 let mut encoded = Vec::with_capacity(64);
                 encoded.extend_from_slice(&pair[0]);
                 encoded.extend_from_slice(right);
-                next.push(hash_tagged(b"ZENVORA_RECEIPT_NODE_V1\\0", &encoded));
+                next.push(hash_tagged(b"ZENVORA_RECEIPT_NODE_V1\0", &encoded));
             }
             level = next;
         }
