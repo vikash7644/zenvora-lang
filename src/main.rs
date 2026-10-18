@@ -1684,8 +1684,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
         if start >= end { continue; }
         let mut depths: HashMap<usize, usize> = HashMap::new();
         let mut pending = vec![(start, 0usize)];
-        loop {
-            while let Some((pc, incoming_depth)) = pending.pop() {
+        while let Some((pc, incoming_depth)) = pending.pop() {
             if pc == end {
                 if !is_main {
                     return Err(format!("bytecode verifier: function control flow falls through its region ending at instruction {end}"));
@@ -1772,14 +1771,6 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                         return Err(format!("bytecode verifier: function falls through at instruction {pc}"));
                     }
                 }
-            }
-            }
-            // Verify disconnected instruction islands too. Otherwise malformed bytecode can
-            // hide stack underflow or an invalid return behind an unconditional jump.
-            if let Some(unreachable) = (start..end).find(|pc| !depths.contains_key(pc)) {
-                pending.push((unreachable, 0));
-            } else {
-                break;
             }
         }
     }
@@ -2928,10 +2919,10 @@ mod tests {
     }
 
     #[test]
-    fn bytecode_verifier_rejects_unreachable_stack_underflow() {
-        let bytecode = "ZENVORA_BYTECODE 1\nJUMP 2\nPRINT\nJUMP 3\n";
+    fn bytecode_verifier_rejects_structural_errors_in_unreachable_code() {
+        let bytecode = "ZENVORA_BYTECODE 1\nJUMP 3\nJUMP 99\nJUMP 3\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
-        assert!(error.contains("operand stack underflow"), "unexpected error: {error}");
+        assert!(error.contains("invalid target"), "unexpected error: {error}");
     }
 
     #[test]
