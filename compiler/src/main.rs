@@ -145,9 +145,13 @@ fn collect_block(lines: &[String], start: usize) -> Result<(Vec<String>, usize),
     let mut i = start;
     while i < lines.len() {
         let line = clean(&lines[i]);
+        // A combined "} otherwise {" line closes one branch and opens
+        // the next at the same nesting level, so its net depth change is zero.
         if line == "}" {
             depth -= 1;
             if depth == 0 { return Ok((body, i + 1)); }
+            body.push(lines[i].clone());
+        } else if line == "} otherwise {" || (line.starts_with("} otherwise if ") && line.ends_with('{')) {
             body.push(lines[i].clone());
         } else {
             if line.ends_with('{') { depth += 1; }
@@ -268,5 +272,46 @@ mod tests {
     #[test] fn string_value() {
         let vars = HashMap::new();
         assert_eq!(ExprParser::parse("\"Zenvora\"", &vars).unwrap(), Value::Text("Zenvora".into()));
+    }
+
+    #[test] fn nested_otherwise_braces_are_collected() {
+        let lines = vec![
+            "if true {".to_string(),
+            "show 1".to_string(),
+            "} otherwise {".to_string(),
+            "show 2".to_string(),
+            "}".to_string(),
+            "show 3".to_string(),
+        ];
+        let (body, next) = collect_block(&lines, 1).unwrap();
+        assert_eq!(body.len(), 4);
+        assert_eq!(next, 5);
+    }
+
+    #[test] fn assignment_requires_existing_variable() {
+        let lines = vec!["count := 2".to_string()];
+        let mut vars = HashMap::new();
+        let result = run_lines(&lines, &mut vars, 0);
+        assert!(result.unwrap_err().contains("undefined variable 'count'"));
+    }
+
+    #[test] fn break_propagates_out_of_nested_condition() {
+        let lines = vec![
+            "define count := 1".to_string(),
+            "repeat count <= 3 {".to_string(),
+            "if count == 2 {".to_string(),
+            "break".to_string(),
+            "}".to_string(),
+            "count := count + 1".to_string(),
+            "}".to_string(),
+        ];
+        let mut vars = HashMap::new();
+        assert_eq!(run_lines(&lines, &mut vars, 0).unwrap(), Flow::Normal);
+        assert_eq!(vars.get("count"), Some(&Value::Number(2.0)));
+    }
+
+    #[test] fn invalid_number_format_is_rejected() {
+        let vars = HashMap::new();
+        assert!(ExprParser::parse("1.2.3", &vars).is_err());
     }
 }
