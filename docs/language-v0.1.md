@@ -1,6 +1,6 @@
-# Zenvora Lang v0.6 — current implementation
+# Zenvora Lang v0.6.1 — current implementation
 
-Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes integer, boolean, and string values; short-circuit logical operators; `repeat` loops with `break` and `continue`; functions with value parameters, return values, recursion, and isolated local variable environments; and versioned bytecode serialization in the Rust compiler and stack-based virtual machine. It remains an early prototype, not a production smart-contract language.
+Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes integer, boolean, string, array, and map values; short-circuit logical operators; `repeat` loops with `break` and `continue`; functions with value parameters, return values, recursion, and isolated local variable environments; and versioned bytecode serialization in the Rust compiler and stack-based virtual machine. It remains an early prototype, not a production smart-contract language.
 
 ## Build and run
 
@@ -13,11 +13,12 @@ cargo run -- examples/hello.zv
 cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
+cargo run -- examples/collections.zv
 ```
 
 ## Automated tests
 
-The Rust unit and integration suites run 60 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+The Rust unit and integration suites run 62 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
 
 ## Supported syntax
 
@@ -33,9 +34,9 @@ if age >= 18 {
 
 The program prints `1`. Set `age := 16` and it prints `0`.
 
-- `define name := expression` declares a variable whose value can be an integer, boolean, or string.
+- `define name := expression` declares a variable whose value can be an integer, boolean, string, array, or map.
 - `name := expression` updates or creates a variable.
-- `show expression` prints an integer, boolean, or string; `print(expression)` is also accepted.
+- `show expression` prints an integer, boolean, string, array, or map; `print(expression)` is also accepted.
 - Integer arithmetic: unary minus, `+`, `-`, `*`, `/`, and parentheses.
 - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons produce native boolean values `true` or `false`.
 - Logical operators: `not`, `and`, and `or`; `and` and `or` short-circuit, and logical operands must be booleans when evaluated.
@@ -49,7 +50,8 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `fn name(a, b) { ... }` defines a function with parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
 - `return` exits the current function. Calls may occur before definitions and functions may call other functions.
 - Each function call has an isolated local variable environment; caller variables are restored on return. Function calls can appear inside expressions, and `return expression` returns an integer, boolean, or string value to the caller. Access to caller/global variables from functions is not implemented yet.
-- Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched block braces are reported as errors.
+- Collection built-ins: `array(...)`, `map("key", value, ...)`, `get(collection, key)`, `len(collection)`, `contains(collection, item_or_key)`, `push(array, value)`, `put(map, key, value)`, `keys(map)`, and `values(map)`. Map keys must be strings. Array indexes are zero-based. `push` and `put` return new collections and leave the original unchanged.
+- Division by zero, undefined variables, invalid syntax, integer overflow, invalid collection keys/indexes, and unmatched block braces are reported as errors.
 
 ## Bytecode files
 
@@ -70,7 +72,7 @@ Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The lo
 
 ## Not implemented yet
 
-Explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions and limits nested function calls to 1,024 frames. These are basic safeguards; broader resource accounting and stronger runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Direct indexing syntax (`items[0]`), in-place collection mutation, explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions and limits nested function calls to 1,024 frames. These are basic safeguards; broader resource accounting and stronger runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
