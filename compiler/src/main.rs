@@ -67,11 +67,11 @@ fn tokenize(src: &str) -> Result<Vec<Token>, String> {
     Ok(out)
 }
 
-struct ExprParser<'t, 'v> { tokens: &'t [Token], pos: usize, vars: &'v HashMap<String, Value> }
-impl<'t, 'v> ExprParser<'t, 'v> {
+struct ExprParser<'v> { tokens: Vec<Token>, pos: usize, vars: &'v HashMap<String, Value> }
+impl<'v> ExprParser<'v> {
     fn parse(src: &str, vars: &'v HashMap<String, Value>) -> Result<Value, String> {
         let tokens = tokenize(src)?;
-        let mut p = Self { tokens: &tokens, pos: 0, vars };
+        let mut p = Self { tokens, pos: 0, vars };
         let value = p.expr(0)?;
         if p.pos != p.tokens.len() { return Err(format!("unexpected token {:?}", p.tokens[p.pos])); }
         Ok(value)
