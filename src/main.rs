@@ -3,7 +3,7 @@ use std::{env, fs, process};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Number(i64), Bool(bool), Ident(String), And, Or, Not, Plus, Minus, Star, Slash,
+    Number(i64), String(String), Bool(bool), Ident(String), And, Or, Not, Plus, Minus, Star, Slash,
     LParen, RParen, Comma, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
 }
 
@@ -15,6 +15,35 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
         let c = chars[i];
         if c.is_whitespace() { i += 1; continue; }
         if c == '#' { break; }
+        if c == '"' {
+            i += 1;
+            let mut value = String::new();
+            let mut closed = false;
+            while i < chars.len() {
+                let ch = chars[i];
+                i += 1;
+                match ch {
+                    '"' => { closed = true; break; }
+                    '\\' => {
+                        if i >= chars.len() { return Err("unterminated escape in string literal".into()); }
+                        let escaped = chars[i];
+                        i += 1;
+                        match escaped {
+                            '"' => value.push('"'),
+                            '\\' => value.push('\\'),
+                            'n' => value.push('\n'),
+                            'r' => value.push('\r'),
+                            't' => value.push('\t'),
+                            _ => return Err(format!("unsupported string escape '\\{escaped}'")),
+                        }
+                    }
+                    _ => value.push(ch),
+                }
+            }
+            if !closed { return Err("unterminated string literal".into()); }
+            out.push(Token::String(value));
+            continue;
+        }
         if c.is_ascii_digit() {
             let start = i;
             while i < chars.len() && chars[i].is_ascii_digit() { i += 1; }
@@ -56,7 +85,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Op {
-    Push(i64), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
+    Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
     Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
@@ -134,6 +163,7 @@ impl Parser {
     fn factor(&mut self) -> Result<(), String> {
         match self.take() {
             Token::Number(n) => self.code.push(Op::Push(n)),
+            Token::String(value) => self.code.push(Op::PushString(value)),
             Token::Bool(value) => self.code.push(Op::PushBool(value)),
             Token::Ident(name) => {
                 if self.peek() == &Token::LParen {
@@ -449,6 +479,7 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
 #[derive(Debug, Clone, PartialEq)]
 enum Value {
     Int(i64),
+    Str(String),
     Bool(bool),
 }
 
@@ -473,25 +504,27 @@ where
         }
         match &code[pc] {
             Op::Push(n) => stack.push(Value::Int(*n)),
+            Op::PushString(value) => stack.push(Value::Str(value.clone())),
             Op::PushBool(value) => stack.push(Value::Bool(*value)),
             Op::Load(name) => stack.push(vars.get(name).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?),
             Op::Store(name) => { let value = stack.pop().ok_or("VM stack underflow")?; vars.insert(name.clone(), value); }
             Op::Print => match stack.pop().ok_or("VM stack underflow")? {
                 Value::Int(n) => output(format!("{n}")),
+                Value::Str(value) => output(value),
                 Value::Bool(value) => output(format!("{value}")),
             },
             Op::Neg => {
                 let value = stack.pop().ok_or("VM stack underflow")?;
                 match value {
                     Value::Int(n) => stack.push(Value::Int(n.checked_neg().ok_or("integer overflow")?)),
-                    Value::Bool(_) => return Err("type error: unary '-' expects an integer".into()),
+                    Value::Bool(_) | Value::Str(_) => return Err("type error: unary '-' expects an integer".into()),
                 }
             }
             Op::Not => {
                 let value = stack.pop().ok_or("VM stack underflow")?;
                 match value {
                     Value::Bool(value) => stack.push(Value::Bool(!value)),
-                    Value::Int(_) => return Err("type error: 'not' expects a boolean".into()),
+                    Value::Int(_) | Value::Str(_) => return Err("type error: 'not' expects a boolean".into()),
                 }
             }
             Op::JumpIfFalse(target) => {
@@ -499,6 +532,7 @@ where
                 let is_false = match value {
                     Value::Bool(value) => !value,
                     Value::Int(n) => n == 0,
+                    Value::Str(_) => return Err("type error: condition expects a boolean or integer".into()),
                 };
                 if is_false { pc = *target; continue; }
             }
@@ -534,6 +568,8 @@ where
                 let a = stack.pop().ok_or("VM stack underflow")?;
                 let value = match (&code[pc], a, b) {
                     (Op::Add, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_add(b).ok_or("integer overflow")?),
+                    (Op::Add, Value::Str(a), Value::Str(b)) => Value::Str(format!("{a}{b}")),
+                    (Op::Add, Value::Str(_), Value::Int(_)) | (Op::Add, Value::Int(_), Value::Str(_)) => return Err("type error: '+' requires two integers or two strings".into()),
                     (Op::Sub, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_sub(b).ok_or("integer overflow")?),
                     (Op::Mul, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_mul(b).ok_or("integer overflow")?),
                     (Op::Div, Value::Int(_), Value::Int(0)) => return Err("division by zero".into()),
@@ -572,6 +608,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
     for op in code {
         let line = match op {
             Op::Push(n) => format!("PUSH {n}"),
+            Op::PushString(value) => format!("PUSH_STRING_HEX {}", hex_encode(value)),
             Op::PushBool(value) => format!("PUSH_BOOL {value}"),
             Op::Load(name) => format!("LOAD {name}"),
             Op::Store(name) => format!("STORE {name}"),
@@ -619,6 +656,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
         let invalid = || format!("invalid bytecode instruction on line {line_no}");
         let op = match parts[0] {
             "PUSH" if parts.len() == 2 => Op::Push(parts[1].parse().map_err(|_| invalid())?),
+            "PUSH_STRING_HEX" if parts.len() == 2 => Op::PushString(hex_decode(parts[1])?),
             "PUSH_BOOL" if parts.len() == 2 => Op::PushBool(match parts[1] {
                 "true" => true,
                 "false" => false,
@@ -668,6 +706,25 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
         }
     }
     Ok(code)
+}
+
+
+fn hex_encode(input: &str) -> String {
+    if input.is_empty() { return "-".into(); }
+    input.as_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hex_decode(input: &str) -> Result<String, String> {
+    if input == "-" { return Ok(String::new()); }
+    if input.len() % 2 != 0 {
+        return Err("invalid hex string in bytecode".into());
+    }
+    let mut bytes = Vec::with_capacity(input.len() / 2);
+    for pair in input.as_bytes().chunks_exact(2) {
+        let digits = std::str::from_utf8(pair).map_err(|_| "invalid hex string in bytecode")?;
+        bytes.push(u8::from_str_radix(digits, 16).map_err(|_| "invalid hex string in bytecode")?);
+    }
+    String::from_utf8(bytes).map_err(|_| "bytecode string is not valid UTF-8".into())
 }
 
 fn valid_identifier(name: &str) -> bool {
@@ -732,6 +789,25 @@ mod tests {
     }
 
     #[test]
+    fn strings_support_escapes_concatenation_and_bytecode_round_trip() {
+        let source = "define message := \"hello\\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\n";
+        let code = compile(source).unwrap();
+        let encoded = super::serialize_bytecode(&code).unwrap();
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        assert_eq!(decoded, code);
+        let mut output = Vec::new();
+        run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["hello\nworld", "Zenvora Lang", ""]);
+    }
+
+    #[test]
+    fn strings_are_not_valid_conditions_or_numeric_operands() {
+        assert!(execute("show \"text\" - 1\n").unwrap_err().contains("expects integers"));
+        assert!(execute("if \"text\" {\nshow 1\n}\n").unwrap_err().contains("condition expects"));
+        assert!(super::hex_decode("0g").unwrap_err().contains("invalid hex"));
+    }
+
+    #[test]
     fn bytecode_round_trip_preserves_execution() {
         let source = "define total := 20 + 22\nshow total\nif total >= 40 {\nshow true\n} otherwise {\nshow false\n}\nfn twice(n) {\nreturn n * 2\n}\nshow twice(21)\n";
         let compiled = compile(source).unwrap();
@@ -747,7 +823,7 @@ mod tests {
     #[test]
     fn bytecode_serializes_every_instruction_variant() {
         let code = vec![
-            Op::Push(-7), Op::PushBool(true), Op::Load("value".into()), Op::Store("value".into()),
+            Op::Push(-7), Op::PushString("text".into()), Op::PushBool(true), Op::Load("value".into()), Op::Store("value".into()),
             Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Print,
             Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::Jump(24),
             Op::CallTarget { target: 0, params: vec!["arg".into()], arg_count: 1 },
