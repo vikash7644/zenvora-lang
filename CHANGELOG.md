@@ -2,6 +2,12 @@
 
 Notable changes to Zenvora Lang are recorded here.
 
+## Unreleased
+
+- Hardened bytecode loading with file-size, instruction-count, decoded-string, and call-argument limits.
+- Added a VM operand-stack limit alongside existing instruction and call-depth limits.
+- Added regression assertions for oversized bytecode payloads and excessive argument counts.
+
 ## v0.8.0 — Contract DSL prototype
 
 - Added experimental `contract`, `state`, `action`, and `view` syntax lowered to global declarations and functions.
