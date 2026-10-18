@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Hardened bytecode v1 function-call metadata validation: argument counts must match parameter lists, parameter names must be valid and unique, and call sites targeting the same function entry must agree on the exact parameter list. Added malformed-bytecode regression tests and updated the bytecode specification.
+
 - The loopback JSON-RPC listener now logs per-client response write failures and continues serving instead of terminating the entire service when a client disconnects mid-response.
 
 - Block-store and transaction-pool loaders now cap the bytes read from the opened file itself, not only its earlier metadata size, so concurrent file growth/replacement cannot bypass their configured input limits.
