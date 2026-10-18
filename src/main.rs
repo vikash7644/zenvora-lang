@@ -86,7 +86,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone, PartialEq)]
 enum Op {
     Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
+    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
 struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
@@ -190,7 +190,7 @@ impl Parser {
                     } else {
                         self.take();
                     }
-                    self.code.push(Op::Call(name, arg_count));
+                    if is_builtin(&name) { self.code.push(Op::Builtin(name, arg_count)); } else { self.code.push(Op::Call(name, arg_count)); }
                 } else {
                     self.code.push(Op::Load(name));
                 }
@@ -517,6 +517,85 @@ enum Value {
     Int(i64),
     Str(String),
     Bool(bool),
+    Array(Vec<Value>),
+    Map(std::collections::BTreeMap<String, Value>),
+}
+
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values") }
+
+fn value_to_string(value: &Value) -> String {
+    match value {
+        Value::Int(n) => n.to_string(),
+        Value::Str(s) => s.clone(),
+        Value::Bool(b) => b.to_string(),
+        Value::Array(items) => format!("[{}]", items.iter().map(value_to_string).collect::<Vec<_>>().join(", ")),
+        Value::Map(items) => format!("{{{}}}", items.iter().map(|(k, v)| format!("\"{}\": {}", k, value_to_string(v))).collect::<Vec<_>>().join(", ")),
+    }
+}
+
+fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
+    let arg_len = args.len();
+    let arity = |expected: usize| if arg_len == expected { Ok(()) } else { Err(format!("builtin '{name}' expects {expected} argument(s), got {arg_len}")) };
+    match name {
+        "array" => Ok(Value::Array(args)),
+        "map" => {
+            if args.len() % 2 != 0 { return Err("builtin 'map' expects alternating string keys and values".into()); }
+            let mut result = std::collections::BTreeMap::new();
+            let mut it = args.into_iter();
+            while let Some(key) = it.next() {
+                let Value::Str(key) = key else { return Err("builtin 'map' keys must be strings".into()); };
+                let value = it.next().ok_or("missing map value")?;
+                result.insert(key, value);
+            }
+            Ok(Value::Map(result))
+        }
+        "len" => {
+            arity(1)?;
+            let n = match &args[0] { Value::Array(v) => v.len(), Value::Map(v) => v.len(), Value::Str(v) => v.chars().count(), _ => return Err("type error: len expects an array, map, or string".into()) };
+            Ok(Value::Int(i64::try_from(n).map_err(|_| "length exceeds integer range")?))
+        }
+        "get" => {
+            arity(2)?;
+            match (&args[0], &args[1]) {
+                (Value::Array(items), Value::Int(index)) if *index >= 0 => items.get(*index as usize).cloned().ok_or_else(|| format!("array index {index} out of bounds")),
+                (Value::Array(_), Value::Int(index)) => Err(format!("array index {index} out of bounds")),
+                (Value::Map(items), Value::Str(key)) => items.get(key).cloned().ok_or_else(|| format!("map key '{key}' not found")),
+                (Value::Array(_), _) => Err("type error: array index must be an integer".into()),
+                (Value::Map(_), _) => Err("type error: map key must be a string".into()),
+                _ => Err("type error: get expects an array or map as its first argument".into()),
+            }
+        }
+        "contains" => {
+            arity(2)?;
+            let found = match (&args[0], &args[1]) {
+                (Value::Array(items), needle) => items.contains(needle),
+                (Value::Map(items), Value::Str(key)) => items.contains_key(key),
+                (Value::Map(_), _) => return Err("type error: map contains expects a string key".into()),
+                _ => return Err("type error: contains expects an array or map".into()),
+            };
+            Ok(Value::Bool(found))
+        }
+        "push" => {
+            arity(2)?;
+            let mut items = match &args[0] { Value::Array(items) => items.clone(), _ => return Err("type error: push expects an array as its first argument".into()) };
+            items.push(args[1].clone());
+            Ok(Value::Array(items))
+        }
+        "put" => {
+            arity(3)?;
+            let mut items = match &args[0] { Value::Map(items) => items.clone(), _ => return Err("type error: put expects a map as its first argument".into()) };
+            let Value::Str(key) = &args[1] else { return Err("type error: put key must be a string".into()); };
+            items.insert(key.clone(), args[2].clone());
+            Ok(Value::Map(items))
+        }
+        "keys" | "values" => {
+            arity(1)?;
+            let Value::Map(items) = &args[0] else { return Err(format!("type error: {name} expects a map")); };
+            let values = if name == "keys" { items.keys().cloned().map(Value::Str).collect() } else { items.values().cloned().collect() };
+            Ok(Value::Array(values))
+        }
+        _ => Err(format!("unknown builtin '{name}'")),
+    }
 }
 
 fn run(code: &[Op]) -> Result<(), String> {
@@ -549,19 +628,20 @@ where
                 Value::Int(n) => output(format!("{n}")),
                 Value::Str(value) => output(value),
                 Value::Bool(value) => output(format!("{value}")),
+                value @ (Value::Array(_) | Value::Map(_)) => output(value_to_string(&value)),
             },
             Op::Neg => {
                 let value = stack.pop().ok_or("VM stack underflow")?;
                 match value {
                     Value::Int(n) => stack.push(Value::Int(n.checked_neg().ok_or("integer overflow")?)),
-                    Value::Bool(_) | Value::Str(_) => return Err("type error: unary '-' expects an integer".into()),
+                    Value::Bool(_) | Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: unary '-' expects an integer".into()),
                 }
             }
             Op::Not => {
                 let value = stack.pop().ok_or("VM stack underflow")?;
                 match value {
                     Value::Bool(value) => stack.push(Value::Bool(!value)),
-                    Value::Int(_) | Value::Str(_) => return Err("type error: 'not' expects a boolean".into()),
+                    Value::Int(_) | Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: 'not' expects a boolean".into()),
                 }
             }
             Op::JumpIfFalse(target) => {
@@ -569,7 +649,7 @@ where
                 let is_false = match value {
                     Value::Bool(value) => !value,
                     Value::Int(n) => n == 0,
-                    Value::Str(_) => return Err("type error: condition expects a boolean or integer".into()),
+                    Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: condition expects a boolean or integer".into()),
                 };
                 if is_false { pc = *target; continue; }
             }
@@ -587,6 +667,12 @@ where
             },
             Op::Jump(target) => { pc = *target; continue; }
             Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
+            Op::Builtin(name, arg_count) => {
+                let mut values = Vec::with_capacity(*arg_count);
+                for _ in 0..*arg_count { values.push(stack.pop().ok_or("VM stack underflow while reading builtin arguments")?); }
+                values.reverse();
+                stack.push(builtin(name, values)?);
+            }
             Op::CallTarget { target, params, arg_count } => {
                 if call_stack.len() >= MAX_CALL_DEPTH {
                     return Err(format!("maximum function call depth exceeded ({MAX_CALL_DEPTH})"));
@@ -684,6 +770,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
             Op::JumpIfTrueKeep(target) => format!("JUMP_IF_TRUE_KEEP {target}"),
             Op::Jump(target) => format!("JUMP {target}"),
             Op::Call(name, _) => return Err(format!("cannot serialize unresolved function call '{name}'")),
+            Op::Builtin(name, count) => format!("BUILTIN {name} {count}"),
             Op::CallTarget { target, params, arg_count } => {
                 let names = if params.is_empty() { "-".to_string() } else { params.join(",") };
                 format!("CALL_TARGET {target} {arg_count} {names}")
@@ -737,6 +824,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "JUMP_IF_FALSE_KEEP" if parts.len() == 2 => Op::JumpIfFalseKeep(parts[1].parse().map_err(|_| invalid())?),
             "JUMP_IF_TRUE_KEEP" if parts.len() == 2 => Op::JumpIfTrueKeep(parts[1].parse().map_err(|_| invalid())?),
             "JUMP" if parts.len() == 2 => Op::Jump(parts[1].parse().map_err(|_| invalid())?),
+            "BUILTIN" if parts.len() == 3 && is_builtin(parts[1]) => Op::Builtin(parts[1].into(), parts[2].parse().map_err(|_| invalid())?),
             "CALL_TARGET" if parts.len() == 4 => {
                 let target: usize = parts[1].parse().map_err(|_| invalid())?;
                 let arg_count: usize = parts[2].parse().map_err(|_| invalid())?;
@@ -809,11 +897,11 @@ fn run_bytecode(path: &str) -> Result<(), String> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
-        println!("Zenvora Lang v0.6.0");
+        println!("Zenvora Lang v0.6.1");
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.6.0\nUsage: zv <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.6.1\nUsage: zv <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     let result = match args.as_slice() {
@@ -907,7 +995,7 @@ mod tests {
     #[test]
     fn bytecode_serializes_every_instruction_variant() {
         let code = vec![
-            Op::Push(-7), Op::PushString("text".into()), Op::PushBool(true), Op::Load("value".into()), Op::Store("value".into()),
+            Op::Push(-7), Op::PushString("text".into()), Op::PushBool(true), Op::Load("value".into()), Op::Store("value".into()), Op::Builtin("array".into(), 2),
             Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Print,
             Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::JumpIfFalseKeep(27), Op::JumpIfTrueKeep(27), Op::Jump(24),
             Op::CallTarget { target: 0, params: vec!["arg".into()], arg_count: 1 },
@@ -1004,6 +1092,26 @@ mod tests {
         assert!(execute("show 1 / 0\n").unwrap_err().contains("division by zero"));
         assert!(execute("show missing\n").unwrap_err().contains("undefined variable"));
         assert!(execute("show 9223372036854775807 + 1\n").unwrap_err().contains("integer overflow"));
+    }
+
+    #[test]
+    fn arrays_and_maps_support_construction_access_updates_and_bytecode() {
+        let source = "define numbers := array(10, 20, 30)\nshow len(numbers)\nshow get(numbers, 1)\ndefine grown := push(numbers, 40)\nshow get(grown, 3)\nshow contains(grown, 20)\ndefine profile := map(\"name\", \"Zenvora\", \"level\", 6)\nshow get(profile, \"name\")\nshow get(put(profile, \"level\", 7), \"level\")\nshow len(keys(profile))\nshow get(values(profile), 1)\n";
+        let code = compile(source).unwrap();
+        let encoded = super::serialize_bytecode(&code).unwrap();
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "6"]);
+    }
+
+    #[test]
+    fn collections_report_invalid_types_and_indexes() {
+        assert!(execute("show get(array(1), 4)\n").unwrap_err().contains("out of bounds"));
+        assert!(execute("show get(map(\"x\", 1), \"missing\")\n").unwrap_err().contains("not found"));
+        assert!(execute("show map(\"x\")\n").unwrap_err().contains("alternating string keys"));
+        assert!(execute("show map(1, 2)\n").unwrap_err().contains("keys must be strings"));
+        assert!(execute("show len(true)\n").unwrap_err().contains("len expects"));
     }
 
     #[test]
