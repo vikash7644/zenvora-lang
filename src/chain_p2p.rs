@@ -568,7 +568,7 @@ mod tests {
         store.append_executed_block(&store_text, &runtime, &genesis, &[], &[]).unwrap();
 
         let mut transaction = TransactionV1 {
-            chain_id: 71, sender: proposer_address, nonce: 0, recipient: "bob".into(),
+            chain_id: 71, sender: proposer_address.clone(), nonce: 0, recipient: "bob".into(),
             amount: 100, max_fee: 1, gas_limit: 21_000, valid_until_height: Some(10),
             signature: Vec::new(),
         };
