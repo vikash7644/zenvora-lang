@@ -1,6 +1,6 @@
-# Zenvora Lang v0.3 — current implementation
+# Zenvora Lang v0.4 — current implementation
 
-Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes `repeat` loops with `break` and `continue`, plus functions with integer parameters and isolated local variable environments in the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
+Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes `repeat` loops with `break` and `continue`, plus functions with value parameters, return values, recursion, and isolated local variable environments in the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
 
 ## Build and run
 
@@ -27,9 +27,9 @@ if age >= 18 {
 
 The program prints `1`. Set `age := 16` and it prints `0`.
 
-- `define name := expression` declares an integer variable.
+- `define name := expression` declares a variable whose value can be an integer or boolean.
 - `name := expression` updates or creates an integer variable.
-- `show expression` prints an integer; `print(expression)` is also accepted.
+- `show expression` prints an integer or boolean; `print(expression)` is also accepted.
 - Integer arithmetic: unary minus, `+`, `-`, `*`, `/`, and parentheses.
 - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons produce native boolean values `true` or `false`.
 - Conditional blocks use `if condition {`, followed by statements and a closing `}`; an optional else branch uses the exact line ` } otherwise {` without the leading space (normally written as `} otherwise {`).
@@ -38,7 +38,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `repeat condition { ... }` loops reevaluate their comparison condition before each iteration.
 - `break` exits the nearest enclosing loop; `continue` jumps back to reevaluate its condition.
 - `break` and `continue` outside a loop are rejected during compilation.
-- `fn name(a, b) { ... }` defines a function with integer parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
+- `fn name(a, b) { ... }` defines a function with parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
 - `return` exits the current function. Calls may occur before definitions and functions may call other functions.
 - Each function call has an isolated local variable environment; caller variables are restored on return. Function calls can appear inside expressions, and `return expression` returns an integer value to the caller. Access to caller/global variables from functions is not implemented yet.
 - Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched block braces are reported as errors.
@@ -47,7 +47,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 
 1. Source text is parsed into stack-machine instructions.
 2. The compiler emits operations such as PUSH, LOAD, STORE, ADD, comparison operations and conditional jumps.
-3. The VM executes the bytecode and stores integer variables in its runtime environment.
+3. The VM executes the bytecode and stores values in the active runtime environment.
 
 ## Not implemented yet
 
