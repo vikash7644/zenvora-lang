@@ -67,6 +67,100 @@ impl ChainRuntime {
         &self.receipts
     }
 
+    /// Saves ledger state and receipts using a versioned, line-oriented format.
+    /// Writes to a sibling temporary file first, then renames it into place.
+    pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> Result<(), String> {
+        use std::io::Write;
+        let path = path.as_ref();
+        let temp_path = path.with_extension("zvr.tmp");
+        let write_result = (|| -> Result<(), String> {
+            let mut file = std::fs::File::create(&temp_path)
+                .map_err(|e| format!("cannot create ledger temp file: {e}"))?;
+            writeln!(file, "ZENVORA_LEDGER_V1").map_err(|e| format!("cannot write ledger: {e}"))?;
+            for (address, balance) in &self.balances {
+                writeln!(file, "B\\t{address}\\t{balance}")
+                    .map_err(|e| format!("cannot write ledger balance: {e}"))?;
+            }
+            for receipt in &self.receipts {
+                writeln!(file, "R\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}",
+                    receipt.sequence, receipt.from, receipt.to, receipt.amount,
+                    receipt.accepted, receipt.sender_balance, receipt.recipient_balance)
+                    .map_err(|e| format!("cannot write ledger receipt: {e}"))?;
+            }
+            file.sync_all().map_err(|e| format!("cannot sync ledger file: {e}"))?;
+            std::fs::rename(&temp_path, path)
+                .map_err(|e| format!("cannot replace ledger file: {e}"))?;
+            Ok(())
+        })();
+        if write_result.is_err() {
+            let _ = std::fs::remove_file(&temp_path);
+        }
+        write_result
+    }
+
+    /// Loads and validates a versioned ledger snapshot without partially mutating state.
+    pub fn load_from_file(path: impl AsRef<std::path::Path>) -> Result<Self, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("cannot read ledger file: {e}"))?;
+        let mut lines = content.lines();
+        if lines.next() != Some("ZENVORA_LEDGER_V1") {
+            return Err("unsupported or missing ledger file version".into());
+        }
+
+        let mut runtime = Self::new();
+        let mut seen_receipt = false;
+        for (index, line) in lines.enumerate() {
+            if line.is_empty() { continue; }
+            let fields: Vec<&str> = line.split('\\t').collect();
+            match fields.as_slice() {
+                ["B", address, balance] if !seen_receipt => {
+                    if !valid_address(address) {
+                        return Err(format!("ledger line {} has invalid address", index + 2));
+                    }
+                    let balance: i64 = balance.parse()
+                        .map_err(|_| format!("ledger line {} has invalid balance", index + 2))?;
+                    if balance < 0 || runtime.balances.insert((*address).to_string(), balance).is_some() {
+                        return Err(format!("ledger line {} has negative balance or duplicate address", index + 2));
+                    }
+                }
+                ["R", sequence, from, to, amount, accepted, sender_balance, recipient_balance] => {
+                    seen_receipt = true;
+                    if !valid_address(from) || !valid_address(to) || from == to {
+                        return Err(format!("ledger line {} has invalid receipt addresses", index + 2));
+                    }
+                    let sequence: u64 = sequence.parse()
+                        .map_err(|_| format!("ledger line {} has invalid receipt sequence", index + 2))?;
+                    let amount: i64 = amount.parse()
+                        .map_err(|_| format!("ledger line {} has invalid amount", index + 2))?;
+                    let accepted: bool = accepted.parse()
+                        .map_err(|_| format!("ledger line {} has invalid accepted flag", index + 2))?;
+                    let sender_balance: i64 = sender_balance.parse()
+                        .map_err(|_| format!("ledger line {} has invalid sender balance", index + 2))?;
+                    let recipient_balance: i64 = recipient_balance.parse()
+                        .map_err(|_| format!("ledger line {} has invalid recipient balance", index + 2))?;
+                    if sequence != runtime.receipts.len() as u64 + 1
+                        || sender_balance < 0 || recipient_balance < 0
+                        || (accepted && amount <= 0)
+                        || (!accepted && amount > 0 && sender_balance.checked_add(amount).is_none()) {
+                        return Err(format!("ledger line {} violates receipt invariants", index + 2));
+                    }
+                    runtime.receipts.push(TransferReceipt {
+                        sequence, from: (*from).to_string(), to: (*to).to_string(), amount,
+                        accepted, sender_balance, recipient_balance,
+                    });
+                }
+                _ => return Err(format!("ledger line {} has an invalid record", index + 2)),
+            }
+        }
+        if let Some(last) = runtime.receipts.last() {
+            if runtime.balance(&last.from) != last.sender_balance
+                || runtime.balance(&last.to) != last.recipient_balance {
+                return Err("ledger balances do not match the latest receipt".into());
+            }
+        }
+        Ok(runtime)
+    }
+
     /// Runs the transfer rule through the actual Zenvora Lang compiler and VM.
     /// Ledger balances are only committed after a successful VM result.
     pub fn transfer(&mut self, from: &str, to: &str, amount: i64) -> Result<TransferReceipt, String> {
@@ -188,6 +282,29 @@ mod tests {
         assert!(runtime.transfer("alice", "alice", 1).is_err());
         assert!(runtime.set_genesis_balance("bob", -1).is_err());
         assert!(runtime.receipts().is_empty());
+    }
+
+    #[test]
+    fn ledger_round_trips_balances_and_receipts_across_restart() {
+        let path = std::env::temp_dir().join(format!("zenvora-ledger-{}-{}.zvr", std::process::id(), 17));
+        let mut runtime = funded_runtime();
+        runtime.transfer("alice", "bob", 125).unwrap();
+        runtime.save_to_file(&path).unwrap();
+        let restored = ChainRuntime::load_from_file(&path).unwrap();
+        assert_eq!(restored.balance("alice"), 875);
+        assert_eq!(restored.balance("bob"), 125);
+        assert_eq!(restored.receipts(), runtime.receipts());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn ledger_loader_rejects_tampered_or_duplicate_records() {
+        let path = std::env::temp_dir().join(format!("zenvora-ledger-bad-{}.zvr", std::process::id()));
+        std::fs::write(&path, "ZENVORA_LEDGER_V1\\nB\\talice\\t10\\nB\\talice\\t20\\n").unwrap();
+        assert!(ChainRuntime::load_from_file(&path).is_err());
+        std::fs::write(&path, "NOT_A_LEDGER\\n").unwrap();
+        assert!(ChainRuntime::load_from_file(&path).is_err());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
