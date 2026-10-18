@@ -14,6 +14,7 @@ cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
+cargo run -- examples/indexing.zv
 cargo run -- examples/modules.zv
 ```
 
