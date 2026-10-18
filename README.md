@@ -57,7 +57,7 @@ The current prototype supports integer variables, assignment, arithmetic (`+`, `
 1. Continue stabilizing syntax, diagnostics and automated regression tests.
 2. Add functions, scopes, types and better diagnostics.
 3. Define a stable bytecode format and bytecode-file support.
-4. Add execution limits and more robust runtime safety checks.
+4. Strengthen runtime safety checks and add resource-aware execution limits.
 5. Explore WebAssembly output and smart-contract integration after the core language is reliable.
 
 ## Status and safety
