@@ -1,6 +1,6 @@
 # Zenvora Lang — interpreter MVP
 
-This folder contains the first repository-hosted Rust interpreter prototype for the `.zv` language. It is separate from the Termux working copy, so it does not overwrite any files on your phone.
+This folder contains an isolated line-based Rust interpreter used for syntax experiments and regression tests. The canonical bytecode compiler and VM live at the repository root (`src/main.rs`). GitHub Actions tests both implementations separately; no phone-local setup is required.
 
 ## Implemented in this MVP
 
@@ -13,24 +13,9 @@ This folder contains the first repository-hosted Rust interpreter prototype for 
 - `break` and `continue` are rejected outside loops with clear errors
 - Tests for expression precedence, booleans, strings, loop control, nested loops, and invalid loop-control statements
 
-## Run on Android with Termux
+## Automated verification
 
-Install Rust if needed, then:
-
-```sh
-cd ~/zenvora-lang
-mkdir -p compiler/src
-```
-
-The repo-hosted version lives in `compiler/`. To run it from this repository root:
-
-```sh
-cd compiler
-cargo test
-cargo run -- ../examples/hello.zv
-```
-
-If you already have a separate local crate at `~/zenvora-lang/zenvora`, keep it intact for now. Compare/test this isolated MVP first rather than overwriting your working copy.
+GitHub Actions runs `cargo test` in this folder and executes the shared hello example on every relevant push. The main bytecode VM has its own root-level test suite and also runs `examples/loops.zv` in CI. You do not need to run commands on your phone to keep these cloud checks working.
 
 ## Syntax
 
