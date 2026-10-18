@@ -146,15 +146,10 @@ pub fn sync_from_peer(store_path: &str, chain_id: u64, peer: &str) -> Result<usi
 pub fn gossip_pool_to_peer(store_path: &str, chain_id: u64, pool_path: &str, peer: &str) -> Result<usize, String> {
     let peer_address: SocketAddr = peer.parse()
         .map_err(|_| "peer must be an IP:port socket address")?;
-    let (_, runtime) = BlockStore::load_from_file(store_path, chain_id)?;
-    let next_height = runtime.receipts().last()
-        .map(|_| 0_u64)
-        .unwrap_or(0);
-    let (store, _) = BlockStore::load_from_file(store_path, chain_id)?;
+    let (store, runtime) = BlockStore::load_from_file(store_path, chain_id)?;
     let height = store.blocks().last().and_then(|block| block.header.height.checked_add(1))
         .ok_or_else(|| "cannot determine next block height".to_string())?;
     let pool = TransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
-    let _ = next_height;
     let mut accepted = 0_usize;
     for envelope in pool.pending() {
         let response = request_peer(peer_address, &json!({
