@@ -243,3 +243,21 @@ fn function_parameters_are_required_and_are_local() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "7\n");
 }
+
+#[test]
+fn functions_can_return_values_into_expressions() {
+    let output = run_program(
+        "define result := add(2, multiply(3, 4))\nshow result\nfn add(left, right) {\nreturn left + right\n}\nfn multiply(left, right) {\nreturn left * right\n}\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "14\n");
+}
+
+#[test]
+fn recursive_functions_use_independent_local_frames() {
+    let output = run_program(
+        "show sum_to(5)\nfn sum_to(n) {\nif n <= 0 {\nreturn 0\n} otherwise {\nreturn n + sum_to(n - 1)\n}\n}\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "15\n");
+}
