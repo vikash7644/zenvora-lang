@@ -47,7 +47,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 
 ## Not implemented yet
 
-Strings, native boolean values, functions, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. Loop execution limits and further runtime safety checks also remain to be added. Do not use this prototype for funds or production contracts.
+Strings, native boolean values, functions, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
