@@ -2901,6 +2901,17 @@ mod tests {
     }
 
     #[test]
+    fn bytecode_verifier_rejects_duplicate_and_invalid_function_parameter_names() {
+        let duplicate = "ZENVORA_BYTECODE 1\nCALL_TARGET 5 2 value,value\nPUSH 1\nPUSH 2\nJUMP 6\nRETURN\n";
+        let error = super::deserialize_bytecode(duplicate).unwrap_err();
+        assert!(error.contains("duplicate parameter"), "unexpected error: {error}");
+
+        let invalid = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 bad-name\nPUSH 1\nJUMP 5\nRETURN\n";
+        let error = super::deserialize_bytecode(invalid).unwrap_err();
+        assert!(error.contains("invalid parameter name"), "unexpected error: {error}");
+    }
+
+    #[test]
     fn bytecode_verifier_rejects_stack_underflow_and_bad_control_flow() {
         for bytecode in [
             "ZENVORA_BYTECODE 1\nPRINT\nJUMP 2\n",
