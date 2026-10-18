@@ -3,6 +3,7 @@ use std::{env, fs, process};
 use std::path::Path;
 
 mod module_loader;
+mod chain_runtime;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
