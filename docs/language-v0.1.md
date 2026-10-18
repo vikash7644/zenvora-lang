@@ -1,6 +1,6 @@
 # Zenvora Lang v0.6 — current implementation
 
-Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes `repeat` loops with `break` and `continue`, plus functions with value parameters, return values, recursion, and isolated local variable environments in the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
+Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes integer, boolean, and string values; short-circuit logical operators; `repeat` loops with `break` and `continue`; functions with value parameters, return values, recursion, and isolated local variable environments; and versioned bytecode serialization in the Rust compiler and stack-based virtual machine. It remains an early prototype, not a production smart-contract language.
 
 ## Build and run
 
@@ -17,7 +17,7 @@ cargo run -- examples/strings.zv
 
 ## Automated tests
 
-The Rust unit and integration suites run 58 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+The Rust unit and integration suites run 59 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
 
 ## Supported syntax
 
@@ -70,7 +70,7 @@ Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The lo
 
 ## Not implemented yet
 
-Explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
