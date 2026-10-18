@@ -70,7 +70,7 @@ Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The lo
 
 ## Not implemented yet
 
-Explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions and limits nested function calls to 1,024 frames. These are basic safeguards; broader resource accounting and stronger runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
