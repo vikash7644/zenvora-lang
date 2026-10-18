@@ -16,6 +16,8 @@ jobs:
         run: cargo check
       - name: Test
         run: cargo test
+      - name: Run hello example
+        run: cargo run -- examples/hello.zv
       - name: Run loop-control example
         run: cargo run -- examples/loops.zv
       - name: Run functions example
