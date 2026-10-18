@@ -43,7 +43,7 @@ struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
 impl Parser {
     fn peek(&self) -> &Token { &self.tokens[self.pos] }
     fn take(&mut self) -> Token { let t = self.tokens[self.pos].clone(); self.pos += 1; t }
-    fn expression(&mut self) -> Result<(), String> { self.term()?; loop { match self.peek() {
+    fn expression(&mut self) -> Result<(), String> { self.term()?; loop { match self.peek().clone() {
         Token::Plus => { self.take(); self.term()?; self.code.push(Op::Add); }
         Token::Minus => { self.take(); self.term()?; self.code.push(Op::Sub); }
         _ => break,
