@@ -126,11 +126,14 @@ zv --chain-store-produce dev.zvb 71 pending.zvp owner.zvk
 zv --chain-p2p-serve dev.zvb 71 0.0.0.0 9000
 # On another node initialized from the exact same genesis:
 zv --chain-p2p-sync node-b.zvb 71 192.168.1.10:9000
+# Optional manual transaction gossip (pool-enabled peer):
+zv --chain-p2p-serve-pool dev.zvb 71 pending.zvp 0.0.0.0 9000
+zv --chain-p2p-gossip node-b.zvb 71 pending-b.zvp 192.168.1.10:9000
 ```
 
 The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
 
-**Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; the TCP peer prototype only syncs blocks and has no transaction gossip, peer authentication, automated voting, full BFT consensus/finality, or production wallet/security review. Quorum signatures alone do not provide decentralized consensus. Never expose it to the public internet. Do not use real funds or treat the local file as a decentralized blockchain.
+**Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; the TCP peer prototype supports block sync and manual transaction gossip but has no peer authentication, automatic discovery/gossip, automated voting, full BFT consensus/finality, or production wallet/security review. Quorum signatures alone do not provide decentralized consensus. Never expose it to the public internet. Do not use real funds or treat the local file as a decentralized blockchain.
 
 ## Scientific computing (early integer-only helpers)
 
