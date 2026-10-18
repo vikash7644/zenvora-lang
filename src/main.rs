@@ -3,7 +3,7 @@ use std::{env, fs, process};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Number(i64), Bool(bool), Ident(String), Plus, Minus, Star, Slash,
+    Number(i64), Bool(bool), Ident(String), And, Or, Not, Plus, Minus, Star, Slash,
     LParen, RParen, Comma, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
 }
 
@@ -29,6 +29,9 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
             match ident.as_str() {
                 "true" => out.push(Token::Bool(true)),
                 "false" => out.push(Token::Bool(false)),
+                "and" => out.push(Token::And),
+                "or" => out.push(Token::Or),
+                "not" => out.push(Token::Not),
                 _ => out.push(Token::Ident(ident)),
             }
             continue;
@@ -53,7 +56,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 
 #[derive(Debug, Clone)]
 enum Op {
-    Push(i64), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Print,
+    Push(i64), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
     Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
@@ -63,6 +66,30 @@ impl Parser {
     fn take(&mut self) -> Token { let t = self.tokens[self.pos].clone(); self.pos += 1; t }
 
     fn expression(&mut self) -> Result<(), String> {
+        self.logical_or()
+    }
+
+    fn logical_or(&mut self) -> Result<(), String> {
+        self.logical_and()?;
+        while self.peek() == &Token::Or {
+            self.take();
+            self.logical_and()?;
+            self.code.push(Op::Or);
+        }
+        Ok(())
+    }
+
+    fn logical_and(&mut self) -> Result<(), String> {
+        self.comparison()?;
+        while self.peek() == &Token::And {
+            self.take();
+            self.comparison()?;
+            self.code.push(Op::And);
+        }
+        Ok(())
+    }
+
+    fn comparison(&mut self) -> Result<(), String> {
         self.additive()?;
         let op = match self.peek().clone() {
             Token::EqEq => { self.take(); Some(Op::Eq) },
@@ -131,6 +158,7 @@ impl Parser {
                 }
             },
             Token::Minus => { self.factor()?; self.code.push(Op::Neg); }
+            Token::Not => { self.factor()?; self.code.push(Op::Not); }
             Token::LParen => {
                 self.expression()?;
                 if self.take() != Token::RParen { return Err("expected ')'".into()); }
@@ -449,6 +477,13 @@ fn run(code: &[Op]) -> Result<(), String> {
                     Value::Bool(_) => return Err("type error: unary '-' expects an integer".into()),
                 }
             }
+            Op::Not => {
+                let value = stack.pop().ok_or("VM stack underflow")?;
+                match value {
+                    Value::Bool(value) => stack.push(Value::Bool(!value)),
+                    Value::Int(_) => return Err("type error: 'not' expects a boolean".into()),
+                }
+            }
             Op::JumpIfFalse(target) => {
                 let value = stack.pop().ok_or("VM stack underflow")?;
                 let is_false = match value {
@@ -484,7 +519,7 @@ fn run(code: &[Op]) -> Result<(), String> {
                 pc = return_pc;
                 continue;
             }
-            Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => {
+            Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge | Op::And | Op::Or => {
                 let b = stack.pop().ok_or("VM stack underflow")?;
                 let a = stack.pop().ok_or("VM stack underflow")?;
                 let value = match (&code[pc], a, b) {
@@ -495,6 +530,10 @@ fn run(code: &[Op]) -> Result<(), String> {
                     (Op::Div, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_div(b).ok_or("integer overflow")?),
                     (Op::Eq, a, b) => Value::Bool(a == b),
                     (Op::Ne, a, b) => Value::Bool(a != b),
+                    (Op::And, Value::Bool(a), Value::Bool(b)) => Value::Bool(a && b),
+                    (Op::Or, Value::Bool(a), Value::Bool(b)) => Value::Bool(a || b),
+                    (Op::And, _, _) => return Err("type error: 'and' expects booleans".into()),
+                    (Op::Or, _, _) => return Err("type error: 'or' expects booleans".into()),
                     (Op::Lt, Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
                     (Op::Le, Value::Int(a), Value::Int(b)) => Value::Bool(a <= b),
                     (Op::Gt, Value::Int(a), Value::Int(b)) => Value::Bool(a > b),
