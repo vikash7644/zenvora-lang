@@ -152,3 +152,14 @@ fn otherwise_inside_loop_keeps_jump_targets_correct() {
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n20\n3\n");
 }
 
+#[test]
+fn infinite_repeat_is_stopped_by_the_vm_instruction_limit() {
+    let output = run_program("repeat 1 == 1 {\n}\n");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("execution exceeded safety limit"),
+        "unexpected stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
