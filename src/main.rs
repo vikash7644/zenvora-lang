@@ -2171,7 +2171,7 @@ mod tests {
 
     #[test]
     fn strings_support_escapes_concatenation_and_bytecode_round_trip() {
-        let source = "define message := \"hello\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
+        let source = "define message := \"hello\\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
         let code = compile(source).unwrap();
         let encoded = super::serialize_bytecode(&code).unwrap();
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
