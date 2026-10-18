@@ -88,7 +88,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Op {
-    Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
+    Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Declare(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
     Eq, Ne, Lt, Le, Gt, Ge, Index, JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
@@ -404,6 +404,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             continue;
         }
 
+        let is_declaration = line.starts_with("define ");
         let statement = if let Some(rest) = line.strip_prefix("define ") {
             let (name, expr) = rest.split_once(":=").ok_or_else(|| format!("line {}: expected 'define name := expression'", line_no + 1))?;
             let name = name.trim();
@@ -432,7 +433,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             return Err(format!("line {}: unexpected token {:?}", line_no + 1, parser.peek()));
         }
         append_code(&mut code, parser.code);
-        if statement.2 { code.push(Op::Print); } else { code.push(Op::Store(statement.0)); }
+        if statement.2 { code.push(Op::Print); } else if is_declaration { code.push(Op::Declare(statement.0)); } else { code.push(Op::Store(statement.0)); }
     }
 
     if let Some(frame) = blocks.last() {
@@ -706,6 +707,7 @@ where
 {
     let mut stack: Vec<Value> = Vec::new();
     let mut vars: HashMap<String, Value> = HashMap::new();
+    let mut globals: HashMap<String, Value> = HashMap::new();
     let mut pc = 0usize;
     let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
     let mut steps = 0usize;
@@ -720,8 +722,18 @@ where
             Op::Push(n) => stack.push(Value::Int(*n)),
             Op::PushString(value) => stack.push(Value::Str(value.clone())),
             Op::PushBool(value) => stack.push(Value::Bool(*value)),
-            Op::Load(name) => stack.push(vars.get(name).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?),
-            Op::Store(name) => { let value = stack.pop().ok_or("VM stack underflow")?; vars.insert(name.clone(), value); }
+            Op::Load(name) => stack.push(vars.get(name).or_else(|| globals.get(name)).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?),
+            Op::Store(name) => {
+                let value = stack.pop().ok_or("VM stack underflow")?;
+                if vars.contains_key(name) { vars.insert(name.clone(), value); }
+                else if globals.contains_key(name) { globals.insert(name.clone(), value); }
+                else { return Err(format!("assignment to undefined variable '{name}'; use 'define' first")); }
+            }
+            Op::Declare(name) => {
+                let value = stack.pop().ok_or("VM stack underflow")?;
+                if call_stack.is_empty() { globals.insert(name.clone(), value); }
+                else { vars.insert(name.clone(), value); }
+            }
             Op::Print => match stack.pop().ok_or("VM stack underflow")? {
                 Value::Int(n) => output(format!("{n}")),
                 Value::Str(value) => output(value),
@@ -860,6 +872,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
             Op::PushBool(value) => format!("PUSH_BOOL {value}"),
             Op::Load(name) => format!("LOAD {name}"),
             Op::Store(name) => format!("STORE {name}"),
+            Op::Declare(name) => format!("DECLARE {name}"),
             Op::Add => "ADD".into(),
             Op::Sub => "SUB".into(),
             Op::Mul => "MUL".into(),
@@ -916,6 +929,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             }),
             "LOAD" if parts.len() == 2 && valid_identifier(parts[1]) => Op::Load(parts[1].into()),
             "STORE" if parts.len() == 2 && valid_identifier(parts[1]) => Op::Store(parts[1].into()),
+            "DECLARE" if parts.len() == 2 && valid_identifier(parts[1]) => Op::Declare(parts[1].into()),
             "ADD" if parts.len() == 1 => Op::Add,
             "SUB" if parts.len() == 1 => Op::Sub,
             "MUL" if parts.len() == 1 => Op::Mul,
@@ -1115,7 +1129,7 @@ mod tests {
             Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Print,
             Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::JumpIfFalseKeep(27), Op::JumpIfTrueKeep(27), Op::Jump(24),
             Op::CallTarget { target: 0, params: vec!["arg".into()], arg_count: 1 },
-            Op::Return, Op::ReturnValue, Op::Index,
+            Op::Return, Op::ReturnValue, Op::Index, Op::Declare("scope".into()),
         ];
         let encoded = super::serialize_bytecode(&code).unwrap();
         assert_eq!(super::deserialize_bytecode(&encoded).unwrap(), code);
@@ -1219,6 +1233,24 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn functions_can_read_and_update_globals_without_leaking_locals() {
+        let output = execute("define total := 10\nshow add_to_total(5)\nshow total\nshow read_total()\nfn add_to_total(amount) {\ntotal := total + amount\ndefine temporary := 99\nreturn total\n}\nfn read_total() {\nreturn total\n}\n").unwrap();
+        assert_eq!(output, vec!["15", "15", "15"]);
+        assert!(execute("fn bad() {\nmissing := 3\n}\ncall bad()\n").unwrap_err().contains("assignment to undefined variable"));
+    }
+
+    #[test]
+    fn local_declarations_shadow_globals_and_bytecode_preserves_scope_ops() {
+        let source = "define value := 10\nshow shadow()\nshow value\nfn shadow() {\ndefine value := 20\nreturn value\n}\n";
+        let code = compile(source).unwrap();
+        let encoded = super::serialize_bytecode(&code).unwrap();
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["20", "10"]);
     }
 
     #[test]
