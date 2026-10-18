@@ -6,6 +6,7 @@ Notable changes to Zenvora Lang are recorded here.
 
 - Added `starts_with`, `ends_with`, `replace`, `split`, and `join` string helpers, plus overflow-checked `sum` for integer arrays.
 - Added `first`, `last`, and `reverse` collection/text helpers, `is_empty` checks for arrays/maps/strings, and range-validated integer `clamp`.
+- Added whitespace trimming, Unicode-aware lowercase/uppercase conversion, Unicode scalar counting, and checked string-to-`i64` conversion.
 - Added argument/type validation, empty-separator/search rejection, and result-size/item-count limits for the new standard-library functions.
 - Added runnable `examples/stdlib-strings.zv` and regression tests for successful operations, invalid input, and overflow.
 - Hardened bytecode loading with file-size, instruction-count, decoded-string, and call-argument limits.
