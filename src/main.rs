@@ -1865,8 +1865,8 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
                     return Err(format!("bytecode function argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
                 }
                 let params: Vec<String> = if parts[3] == "-" { Vec::new() } else { parts[3].split(',').map(str::to_string).collect() };
-                if arg_count != params.len() || params.iter().any(|name| !valid_identifier(name)) {
-                    return Err(invalid());
+                if arg_count != params.len() {
+                    return Err(format!("bytecode verifier: function entry {target} declares {} parameter(s), but CALL_TARGET records {arg_count}", params.len()));
                 }
                 Op::CallTarget { target, params, arg_count }
             }
