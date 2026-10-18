@@ -1661,6 +1661,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
             return Err(format!("bytecode verifier: invalid function entry point {entry}"));
         }
     }
+    let mut function_params: HashMap<usize, Vec<String>> = HashMap::new();
     for (index, op) in code.iter().enumerate() {
         match op {
             Op::CallTarget { target, params, arg_count } => {
@@ -1669,6 +1670,13 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                 }
                 if params.len() != *arg_count {
                     return Err(format!("bytecode verifier: function entry {target} declares {} parameter(s), but CALL_TARGET records {arg_count}", params.len()));
+                }
+                if let Some(previous) = function_params.get(target) {
+                    if previous != params {
+                        return Err(format!("bytecode verifier: function entry {target} has inconsistent parameter metadata across call sites"));
+                    }
+                } else {
+                    function_params.insert(*target, params.clone());
                 }
                 let mut seen_params = HashSet::new();
                 for name in params {
@@ -2883,6 +2891,13 @@ mod tests {
         let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 -\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
         assert!(error.contains("declares 0 parameter(s)") && error.contains("records 1"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_inconsistent_function_parameter_metadata_across_calls() {
+        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 5 1 first\nCALL_TARGET 5 1 second\nJUMP 6\nPUSH 1\nRETURN\n";
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("inconsistent parameter metadata across call sites"), "unexpected error: {error}");
     }
 
     #[test]
