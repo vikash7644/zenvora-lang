@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Hardened block-store appends by replaying the stored chain prefix and independently executing the candidate block before persistence. Added regression coverage proving that state/receipt commitments from unrelated transactions are rejected without altering the stored tip.
+
 - Added `zv --new <project-name>` to create a safe starter project with a runnable `main.zv` and project README; existing paths are never overwritten. Added CLI dispatch and regression coverage.
 - Documented the beginner starter-project workflow in the README.
 - Added DNA complement and GC-content helpers plus an integer atomic-mass summation helper, with input validation and regression tests.
