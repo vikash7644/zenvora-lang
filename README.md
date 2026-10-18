@@ -14,7 +14,11 @@ These are design drafts, not proof that listed features are implemented. Consens
 
 - `Cargo.toml` — Rust package manifest for the `zv` command.
 - `CHANGELOG.md` — v0.8.0 release notes and current feature status.
-- `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM and automated regression tests.
+- `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM, CLI, and automated regression tests.
+- `src/chain_protocol.rs` — canonical transaction/header encodings, SHA-256 IDs, Merkle roots, and Ed25519 signature verification.
+- `src/chain_runtime.rs` — Zenvora-VM transfer execution, V3 ledger persistence, signed nonce tracking, and state/receipt roots.
+- `src/chain_block.rs` — atomic candidate-block execution and transaction/receipt/state-root validation.
+- `src/block_store.rs` — append-only local block storage and full replay verification.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
 - `examples/functions.zv` — function parameters, local variables, return values, and loops.
@@ -103,6 +107,22 @@ Use `zv --check <file.zv>` to load relative imports and compile the program with
 ```sh
 cargo run -- --check examples/functions.zv
 ```
+
+## Local signed-chain development prototype
+
+A local-only signed transaction workflow is available in the `zv` CLI:
+
+```sh
+zv --chain-keygen owner.zvk
+zv --chain-store-init dev.zvb 71 owner.zvk 1000000
+zv --chain-store-transfer dev.zvb 71 owner.zvk bob 125 3
+zv --chain-store-balance dev.zvb 71 bob
+zv --chain-store-info dev.zvb 71
+```
+
+The prototype signs Ed25519 transactions, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store, and replays stored blocks to verify the resulting state. See [the chain integration guide](docs/chain-lang-integration.md) for the exact behavior and limits.
+
+**Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; there is no networked testnet, consensus/finality, P2P, or production wallet/security review. Do not use real funds or treat the local file as a decentralized blockchain.
 
 ## Scientific computing (early integer-only helpers)
 
