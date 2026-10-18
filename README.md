@@ -15,6 +15,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 - `examples/collections.zv` — arrays, maps, collection access, and immutable update helpers.
 - `examples/indexing.zv` — direct array/map indexing, computed indexes, and nested collections.
 - `examples/stdlib.zv` — safe range, type inspection, string conversion, integer helpers, and assertions.
+- `examples/science.zv` — checked integer mathematics and introductory physics/science helper functions.
 - `examples/contracts.zv` — experimental `contract`, `state`, `action`, and `view` syntax.
 - `examples/modules.zv` — relative module imports and reusable functions.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
@@ -38,6 +39,7 @@ cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
 cargo run -- examples/indexing.zv
 cargo run -- examples/stdlib.zv
+cargo run -- examples/science.zv
 cargo run -- examples/stdlib-strings.zv
 cargo run -- examples/contracts.zv
 cargo run -- examples/modules.zv
@@ -68,6 +70,12 @@ Use `zv --check <file.zv>` to load relative imports and compile the program with
 ```sh
 cargo run -- --check examples/functions.zv
 ```
+
+## Scientific computing (early integer-only helpers)
+
+The runtime now includes checked integer helpers: `gcd`, `lcm`, `factorial` (0–20), `is_prime`, `fibonacci` (0–92), `pow_int`, and integer-array `mean`. Introductory formula helpers include `speed`, `force`, `kinetic_energy`, `density`, `molarity`, and `bmi_x10` (BMI multiplied by 10). See [`examples/science.zv`](examples/science.zv).
+
+**Important limits:** the language currently uses signed 64-bit integers only; division truncates, and the science helpers do not track physical units or provide floating-point precision. These are starter utilities, not validated scientific, medical, chemistry-lab, or engineering software. Next steps include floating-point/decimal support, dimensions and units, and domain libraries with independent tests.
 
 ## Bytecode files
 
