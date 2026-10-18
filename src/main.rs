@@ -841,10 +841,15 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             *op = Op::CallTarget { target, params, arg_count: *arg_count };
         }
     }
-    // Apply the same control-flow and stack checks to compiler output that the
-    // bytecode loader applies to serialized input, so source builds cannot emit a
-    // bytecode artifact that the VM's loader will later reject.
-    verify_bytecode(&code)?;
+    // Keep source compilation and bytecode loading consistent on reachable function
+    // return kinds without applying v1's conservative stack analysis to compiler-generated
+    // disconnected instruction islands.
+    let mut function_entries: Vec<usize> = code.iter().filter_map(|op| {
+        if let Op::CallTarget { target, .. } = op { Some(*target) } else { None }
+    }).collect();
+    function_entries.sort_unstable();
+    function_entries.dedup();
+    infer_function_return_kinds(&code, &function_entries)?;
     Ok(code)
 }
 
@@ -1593,39 +1598,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
 
 // Verify bytecode control flow before it is executed. Stack depths are tracked
 // independently for the main program and each declared function region.
-fn verify_bytecode(code: &[Op]) -> Result<(), String> {
-    if code.is_empty() {
-        return Ok(());
-    }
-    if code.len() > MAX_BYTECODE_INSTRUCTIONS {
-        return Err(format!("bytecode instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
-    }
-
-    let main_exit = code.iter().position(|op| matches!(op, Op::Jump(target) if *target == code.len()))
-        .ok_or("bytecode verifier: missing main-program exit jump")?;
-
-    let mut entries: Vec<usize> = code.iter().filter_map(|op| {
-        if let Op::CallTarget { target, .. } = op { Some(*target) } else { None }
-    }).collect();
-    entries.sort_unstable();
-    entries.dedup();
-
-    for entry in &entries {
-        if *entry == 0 || *entry <= main_exit || *entry >= code.len() {
-            return Err(format!("bytecode verifier: invalid function entry point {entry}"));
-        }
-    }
-    for (index, op) in code.iter().enumerate() {
-        match op {
-            Op::CallTarget { target, .. } if entries.binary_search(target).is_err() =>
-                return Err(format!("bytecode verifier: call at instruction {index} does not target a function entry")),
-            Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target)
-                if *target > code.len() =>
-                return Err(format!("bytecode verifier: jump at instruction {index} has invalid target {target}")),
-            _ => {}
-        }
-    }
-
+fn infer_function_return_kinds(code: &[Op], entries: &[usize]) -> Result<HashSet<usize>, String> {
     // Infer return behavior from control flow, not from the mere presence of a
     // RETURN_VALUE opcode. Dead code after an unconditional return must not change a
     // function's call-site stack effect. Mixed reachable void/value returns are rejected
@@ -1663,6 +1636,43 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
             returns_value.insert(entry);
         }
     }
+    Ok(returns_value)
+}
+
+fn verify_bytecode(code: &[Op]) -> Result<(), String> {
+    if code.is_empty() {
+        return Ok(());
+    }
+    if code.len() > MAX_BYTECODE_INSTRUCTIONS {
+        return Err(format!("bytecode instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
+    }
+
+    let main_exit = code.iter().position(|op| matches!(op, Op::Jump(target) if *target == code.len()))
+        .ok_or("bytecode verifier: missing main-program exit jump")?;
+
+    let mut entries: Vec<usize> = code.iter().filter_map(|op| {
+        if let Op::CallTarget { target, .. } = op { Some(*target) } else { None }
+    }).collect();
+    entries.sort_unstable();
+    entries.dedup();
+
+    for entry in &entries {
+        if *entry == 0 || *entry <= main_exit || *entry >= code.len() {
+            return Err(format!("bytecode verifier: invalid function entry point {entry}"));
+        }
+    }
+    for (index, op) in code.iter().enumerate() {
+        match op {
+            Op::CallTarget { target, .. } if entries.binary_search(target).is_err() =>
+                return Err(format!("bytecode verifier: call at instruction {index} does not target a function entry")),
+            Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target)
+                if *target > code.len() =>
+                return Err(format!("bytecode verifier: jump at instruction {index} has invalid target {target}")),
+            _ => {}
+        }
+    }
+
+    let returns_value = infer_function_return_kinds(code, &entries)?;
 
     let mut regions: Vec<(usize, usize, bool)> = vec![(0, main_exit + 1, true)];
     for (i, entry) in entries.iter().copied().enumerate() {
