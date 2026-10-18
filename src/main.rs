@@ -541,7 +541,10 @@ fn calls_named_function(statement: &str, name: &str) -> bool {
             index += 1;
             continue;
         }
-        if byte == b'#' { break; }
+        if byte == b'#' {
+            while index < bytes.len() && bytes[index] != b'\n' { index += 1; }
+            continue;
+        }
         if byte == b'"' {
             in_string = true;
             index += 1;
@@ -3111,7 +3114,7 @@ mod tests {
 
     #[test]
     fn contract_views_reject_indirect_state_mutation_through_helpers() {
-        let source = "define count := 0\nfn mutate() {\ncount := count + 1\nreturn count\n}\nfn helper() {\ncall mutate()\nreturn count\n}\ncontract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\nreturn helper()\n}\n}\n";
+        let source = "define count := 0\nfn mutate() {\ncount := count + 1\nreturn count\n}\nfn helper() {\n# a comment must not hide the call from effect analysis\ncall mutate()\nreturn count\n}\ncontract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\nreturn helper()\n}\n}\n";
         assert!(compile(source).unwrap_err().contains("view cannot call state-mutating function 'helper'"));
     }
 
