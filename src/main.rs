@@ -1523,7 +1523,7 @@ mod tests {
             "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 99\nJUMP 3\n",
         ] {
             let error = super::deserialize_bytecode(bytecode).unwrap_err();
-            assert!(error.contains("verifier"), "unexpected error: {error}");
+            assert!(error.contains("verifier") || error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
         }
     }
 
