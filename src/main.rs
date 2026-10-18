@@ -1113,6 +1113,143 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
     Ok(output)
 }
 
+
+// Verify bytecode control flow before it is executed. Stack depths are tracked
+// independently for the main program and each declared function region.
+fn verify_bytecode(code: &[Op]) -> Result<(), String> {
+    if code.is_empty() {
+        return Ok(());
+    }
+    if code.len() > MAX_BYTECODE_INSTRUCTIONS {
+        return Err(format!("bytecode instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
+    }
+
+    let main_exit = code.iter().position(|op| matches!(op, Op::Jump(target) if *target == code.len()))
+        .ok_or("bytecode verifier: missing main-program exit jump")?;
+
+    let mut entries: Vec<usize> = code.iter().filter_map(|op| {
+        if let Op::CallTarget { target, .. } = op { Some(*target) } else { None }
+    }).collect();
+    entries.sort_unstable();
+    entries.dedup();
+
+    for entry in &entries {
+        if *entry == 0 || *entry <= main_exit || *entry >= code.len() {
+            return Err(format!("bytecode verifier: invalid function entry point {entry}"));
+        }
+    }
+    for (index, op) in code.iter().enumerate() {
+        match op {
+            Op::CallTarget { target, .. } if entries.binary_search(target).is_err() =>
+                return Err(format!("bytecode verifier: call at instruction {index} does not target a function entry")),
+            Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target)
+                if *target > code.len() =>
+                return Err(format!("bytecode verifier: jump at instruction {index} has invalid target {target}")),
+            _ => {}
+        }
+    }
+
+    // A call's static stack effect depends on whether its target can return a
+    // value. This first-generation format does not encode return types.
+    let returns_value: HashSet<usize> = entries.iter().copied().filter(|entry| {
+        let end = entries.iter().copied().find(|candidate| candidate > *entry).unwrap_or(code.len());
+        code[*entry..end].iter().any(|op| matches!(op, Op::ReturnValue))
+    }).collect();
+
+    let mut regions: Vec<(usize, usize, bool)> = vec![(0, main_exit + 1, true)];
+    for (i, entry) in entries.iter().copied().enumerate() {
+        let end = entries.get(i + 1).copied().unwrap_or(code.len());
+        regions.push((entry, end, false));
+    }
+
+    for (start, end, is_main) in regions {
+        if start >= end { continue; }
+        let mut depths: HashMap<usize, usize> = HashMap::new();
+        let mut pending = vec![(start, 0usize)];
+        while let Some((pc, incoming_depth)) = pending.pop() {
+            if pc == end {
+                if !is_main {
+                    return Err(format!("bytecode verifier: function control flow falls through its region ending at instruction {end}"));
+                }
+                continue;
+            }
+            if pc < start || pc > end || pc >= code.len() {
+                return Err(format!("bytecode verifier: control flow escapes region at instruction {pc}"));
+            }
+            if let Some(previous) = depths.get(&pc) {
+                if *previous != incoming_depth {
+                    return Err(format!("bytecode verifier: inconsistent stack depth at instruction {pc} ({previous} vs {incoming_depth})"));
+                }
+                continue;
+            }
+            depths.insert(pc, incoming_depth);
+
+            let op = &code[pc];
+            let (required, delta): (usize, isize) = match op {
+                Op::Push(_) | Op::PushString(_) | Op::PushBool(_) | Op::Load(_) => (0, 1),
+                Op::Store(_) | Op::Declare(_) | Op::Print | Op::Neg | Op::Not | Op::ReturnValue | Op::JumpIfFalse(_) => (1, -1),
+                Op::SetIndex(_) => (2, -2),
+                Op::Index => (2, -1),
+                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::And | Op::Or | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => (2, -1),
+                Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_) => (1, 0),
+                Op::Jump(_) | Op::Return => (0, 0),
+                Op::Builtin(_, count) => (*count, 1 - *count as isize),
+                Op::CallTarget { target, arg_count, .. } => (*arg_count, 1 - *arg_count as isize * 1 + if returns_value.contains(target) { 1 } else { 0 }),
+                Op::Call(name, _) => return Err(format!("bytecode verifier: unresolved call '{name}' at instruction {pc}")),
+            };
+            if incoming_depth < required {
+                return Err(format!("bytecode verifier: operand stack underflow at instruction {pc}"));
+            }
+            let outgoing_depth = if delta < 0 {
+                incoming_depth - (-delta) as usize
+            } else {
+                incoming_depth.checked_add(delta as usize).ok_or("bytecode verifier: stack depth overflow")?
+            };
+            if outgoing_depth > MAX_STACK_VALUES {
+                return Err(format!("bytecode verifier: operand stack exceeds safety limit at instruction {pc}"));
+            }
+
+            let mut enqueue = |target: usize, depth: usize| -> Result<(), String> {
+                if target == code.len() && is_main { return Ok(()); }
+                if target < start || target >= end {
+                    return Err(format!("bytecode verifier: jump at instruction {pc} escapes its code region to {target}"));
+                }
+                pending.push((target, depth));
+                Ok(())
+            };
+            match op {
+                Op::Jump(target) => {
+                    if is_main && pc == main_exit && *target == code.len() { continue; }
+                    enqueue(*target, outgoing_depth)?;
+                }
+                Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
+                    enqueue(*target, outgoing_depth)?;
+                    if pc + 1 < end { pending.push((pc + 1, outgoing_depth)); }
+                    else if !is_main { return Err(format!("bytecode verifier: function falls through at instruction {pc}")); }
+                }
+                Op::Return | Op::ReturnValue => {
+                    if is_main {
+                        return Err(format!("bytecode verifier: return instruction outside a function at {pc}"));
+                    }
+                }
+                Op::CallTarget { .. } => {
+                    if pc + 1 < end { pending.push((pc + 1, outgoing_depth)); }
+                    else if !is_main { return Err(format!("bytecode verifier: function falls through at instruction {pc}")); }
+                }
+                _ => {
+                    if pc + 1 < end { pending.push((pc + 1, outgoing_depth)); }
+                    else if is_main {
+                        return Err(format!("bytecode verifier: main program falls through at instruction {pc}"));
+                    } else {
+                        return Err(format!("bytecode verifier: function falls through at instruction {pc}"));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_BYTECODE_BYTES {
         return Err(format!("bytecode file exceeds safety limit ({} bytes)", MAX_BYTECODE_BYTES));
@@ -1201,6 +1338,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             _ => {}
         }
     }
+    verify_bytecode(&code)?;
     Ok(code)
 }
 
@@ -1372,6 +1510,34 @@ mod tests {
         assert!(execute("show \"text\" - 1\n").unwrap_err().contains("expects integers"));
         assert!(execute("if \"text\" {\nshow 1\n}\n").unwrap_err().contains("condition expects"));
         assert!(super::hex_decode("0g").unwrap_err().contains("invalid hex"));
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_stack_underflow_and_bad_control_flow() {
+        for bytecode in [
+            "ZENVORA_BYTECODE 1\nPRINT\n",
+            "ZENVORA_BYTECODE 1\nPUSH 1\nADD\n",
+            "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE_KEEP 3\nJUMP 3\n",
+        ] {
+            let error = super::deserialize_bytecode(bytecode).unwrap_err();
+            assert!(error.contains("verifier"), "unexpected error: {error}");
+        }
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_inconsistent_stack_depth_at_merge() {
+        let bytecode = "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 4\nPUSH 1\nJUMP 5\nPUSH 2\nPRINT\nJUMP 8\n";
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("inconsistent stack depth") || error.contains("invalid"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bytecode_verifier_accepts_compiler_output_with_functions_and_loops() {
+        let source = "define n := 0\nrepeat n < 3 {\nn := n + 1\n}\nshow twice(n)\nfn twice(value) {\nreturn value * 2\n}\n";
+        let code = super::compile(source).unwrap();
+        let serialized = super::serialize_bytecode(&code).unwrap();
+        let decoded = super::deserialize_bytecode(&serialized).unwrap();
+        assert_eq!(decoded, code);
     }
 
     #[test]
