@@ -353,6 +353,7 @@ fn run(code: &[Op]) -> Result<(), String> {
                 if condition == 0 { pc = *target; continue; }
             }
             Op::Jump(target) => { pc = *target; continue; }
+            Op::Call(name) => return Err(format!("unresolved function call '{name}'")),
             Op::CallTarget(target) => { call_stack.push(pc + 1); pc = *target; continue; }
             Op::Return => { pc = call_stack.pop().ok_or("return used outside a function call")?; continue; }
             Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => {
