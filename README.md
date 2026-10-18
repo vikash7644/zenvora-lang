@@ -68,7 +68,7 @@ cargo run -- --emit-bytecode examples/functions.zv functions.zvb
 cargo run -- --run-bytecode functions.zvb
 ```
 
-The current text format starts with `ZENVORA_BYTECODE 1`. The loader checks the format version, instruction syntax, jump targets, and function-entry targets. Version 1 is an early format and is not yet promised to remain compatible forever.
+The current text format starts with `ZENVORA_BYTECODE 1`. The loader checks the format version, instruction syntax, jump targets, and function-entry targets. It also limits bytecode files to 16 MiB, programs to 1,000,000 instructions, strings to 1 MiB, and call arguments to 1,024; VM execution has instruction, call-depth, and operand-stack limits. Version 1 is an early format and is not yet promised to remain compatible forever.
 
 ## Current language syntax
 
