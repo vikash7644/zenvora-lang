@@ -717,7 +717,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace") }
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp") }
 
 fn value_to_string(value: &Value) -> String {
     match value {
@@ -835,6 +835,38 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 current = current.checked_add(1).ok_or("integer overflow while building range")?;
             }
             Ok(Value::Array(items))
+        }
+        "first" | "last" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else { return Err(format!("type error: {name} expects an array")); };
+            if items.is_empty() { return Err(format!("{name} cannot be used with an empty array")); }
+            Ok(if name == "first" { items[0].clone() } else { items[items.len() - 1].clone() })
+        }
+        "reverse" => {
+            arity(1)?;
+            match &args[0] {
+                Value::Array(items) => Ok(Value::Array(items.iter().rev().cloned().collect())),
+                Value::Str(value) => Ok(Value::Str(value.chars().rev().collect())),
+                _ => Err("type error: reverse expects an array or string".into()),
+            }
+        }
+        "is_empty" => {
+            arity(1)?;
+            let empty = match &args[0] {
+                Value::Array(items) => items.is_empty(),
+                Value::Map(items) => items.is_empty(),
+                Value::Str(value) => value.is_empty(),
+                _ => return Err("type error: is_empty expects an array, map, or string".into()),
+            };
+            Ok(Value::Bool(empty))
+        }
+        "clamp" => {
+            arity(3)?;
+            let (Value::Int(value), Value::Int(minimum), Value::Int(maximum)) = (&args[0], &args[1], &args[2]) else {
+                return Err("type error: clamp expects three integers".into());
+            };
+            if minimum > maximum { return Err("clamp minimum must be less than or equal to maximum".into()); }
+            Ok(Value::Int((*value).clamp(*minimum, *maximum)))
         }
         "sum" => {
             arity(1)?;
@@ -1879,6 +1911,31 @@ show sum(array(10, 20, 12))
 "#).unwrap_err().contains("only integers"));
         assert!(execute(r#"show sum(array(9223372036854775807, 1))
 "#).unwrap_err().contains("integer overflow"));
+    }
+
+    #[test]
+    fn collection_and_numeric_helpers_cover_boundaries() {
+        let output = execute(r#"show first(array(7, 8, 9))
+show last(array(7, 8, 9))
+show reverse(array(1, 2, 3))
+show reverse("héllo")
+show is_empty(array())
+show is_empty(map())
+show is_empty("")
+show clamp(12, 0, 10)
+show clamp(-3, 0, 10)
+"#).unwrap();
+        assert_eq!(output, vec!["7", "9", "[3, 2, 1]", "olléh", "true", "true", "true", "10", "0"]);
+    }
+
+    #[test]
+    fn collection_and_numeric_helpers_reject_invalid_inputs() {
+        assert!(execute("show first(array())\n").unwrap_err().contains("empty array"));
+        assert!(execute("show last(4)\n").unwrap_err().contains("expects an array"));
+        assert!(execute("show reverse(true)\n").unwrap_err().contains("array or string"));
+        assert!(execute("show is_empty(3)\n").unwrap_err().contains("array, map, or string"));
+        assert!(execute("show clamp(1, 5, 2)\n").unwrap_err().contains("minimum must be less than or equal"));
+        assert!(execute("show clamp(1, false, 2)\n").unwrap_err().contains("three integers"));
     }
 
     #[test]
