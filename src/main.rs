@@ -2895,7 +2895,7 @@ mod tests {
 
     #[test]
     fn bytecode_verifier_rejects_inconsistent_function_parameter_metadata_across_calls() {
-        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 5 1 first\nCALL_TARGET 5 1 second\nJUMP 6\nPUSH 1\nRETURN\n";
+        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 first\nCALL_TARGET 4 1 second\nJUMP 5\nPUSH 1\nRETURN\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
         assert!(error.contains("inconsistent parameter metadata across call sites"), "unexpected error: {error}");
     }
