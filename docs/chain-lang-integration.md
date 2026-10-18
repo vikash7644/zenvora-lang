@@ -105,9 +105,13 @@ zv --chain-p2p-serve node-a.zvb 71 0.0.0.0 9000
 zv --chain-store-init node-b.zvb 71 owner.zvk 1000000
 zv --chain-p2p-sync node-b.zvb 71 192.168.1.10:9000
 zv --chain-store-info node-b.zvb 71
+
+# Optional pool-enabled peer for manual transaction gossip
+zv --chain-p2p-serve-pool node-a.zvb 71 node-a-pool.zvp 0.0.0.0 9000
+zv --chain-p2p-gossip node-b.zvb 71 node-b-pool.zvp 192.168.1.10:9000
 ```
 
-The protocol supports peer status and fetching a block by height. Sync verifies the chain ID, exact genesis header hash and state root, header linkage, canonical transaction encodings, signatures, nonce/balance rules, and transaction/receipt/state roots by replaying blocks before persisting them. Sync is append-only: it refuses a peer that is behind or has a different tip at the same height; fork choice and reorganization are not implemented.
+The protocol supports peer status, fetching a block by height, and optional signed-transaction gossip between pool-enabled peers. Sync verifies the chain ID, exact genesis header hash and state root, header linkage, canonical transaction encodings, signatures, nonce/balance rules, quorum signatures, and transaction/receipt/state roots by replaying blocks before persisting them. Manual gossip sends pending transactions to one peer; it does not discover peers or run periodically. Sync is append-only: it refuses a peer that is behind or has a different tip at the same height; fork choice and reorganization are not implemented.
 
 **Network warning:** the peer service has no peer authentication, fork choice, or full consensus/finality. Block headers now require genesis-authorized validator quorum signatures, but the CLI currently supports only one genesis validator and does not implement a BFT round protocol. Binding to `0.0.0.0` exposes it on reachable interfaces; use only on a trusted private network and never on the public internet. This is a block-sync prototype, not a secure public testnet.
 
@@ -144,7 +148,7 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 - Add validator discovery/communication and an automated multi-validator round/vote workflow.
 - Implement a full consensus round protocol: validator-set configuration, proposal/vote messages, timeouts, equivocation handling, fork choice, and explicit finality rules.
 - Add transaction fee charging, gas metering, per-operation cost schedule, and deterministic execution limits.
-- Add transaction gossip, authenticated RPC for non-loopback deployments, peer authentication, rate limits, and abuse controls.
+- Add automatic peer discovery/periodic transaction gossip, authenticated RPC for non-loopback deployments, peer authentication, rate limits, and abuse controls.
 - Add indexed block/receipt storage, snapshots, recovery tests, and state/receipt proof APIs.
 - Replace the illustrative transfer rule with compiled Zenvora contract artifacts and a typed contract ABI/state host interface.
 - Add fuzzing, property tests, multi-node adversarial tests, reproducible builds, and an external security review before any public testnet with value.
