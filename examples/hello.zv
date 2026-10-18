@@ -1,0 +1,20 @@
+# Zenvora Lang first runnable example
+define name := "Zenvora"
+define count := 1
+
+show "Hello from " + name
+
+repeat count <= 10 {
+    if count == 5 {
+        show "Reached five; stopping the loop."
+        break
+    }
+    show count
+    count := count + 1
+}
+
+if count == 5 {
+    show "Break works."
+} otherwise {
+    show "Unexpected result."
+}
