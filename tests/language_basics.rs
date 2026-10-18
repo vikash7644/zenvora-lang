@@ -64,10 +64,10 @@ fn nested_if_branches_work() {
 }
 
 #[test]
-fn supports_all_comparison_operators() {
+fn supports_all_comparison_operators_in_conditions() {
     let output = run_program(
-        "show 2 == 2\nshow 2 != 3\nshow 2 < 3\nshow 2 <= 2\nshow 3 > 2\nshow 3 >= 3\n",
+        "if 2 == 2 {\nshow 1\n}\nif 2 != 3 {\nshow 2\n}\nif 2 < 3 {\nshow 3\n}\nif 2 <= 2 {\nshow 4\n}\nif 3 > 2 {\nshow 5\n}\nif 3 >= 3 {\nshow 6\n}\n",
     );
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n1\n1\n1\n1\n1\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n2\n3\n4\n5\n6\n");
 }
