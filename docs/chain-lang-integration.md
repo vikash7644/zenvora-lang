@@ -23,7 +23,30 @@ zv --chain-store-balance dev.zvb 71 bob
 zv --chain-store-info dev.zvb 71
 ```
 
-`--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The CLI currently supports one genesis validator per new store; multi-account genesis configuration and a multi-validator CLI workflow remain unfinished. Genesis headers use a deterministic timestamp so stores initialized from the same key, chain ID, and balance share the same genesis hash.
+`--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The single-account initializer remains available, and `--chain-store-init-multi` accepts a multi-account genesis config. Genesis headers use a deterministic timestamp so stores initialized from the same chain ID and allocations share the same genesis hash.
+
+### Multi-validator genesis configuration
+
+Create one key file per validator with `zv --chain-keygen validator-1.zvk`, then copy the printed addresses into a text file such as `genesis.txt`:
+
+```text
+ZENVORA_GENESIS_V1
+chain_id=71
+zv<first-validator-address> 1000000
+zv<second-validator-address> 1000000
+zv<third-validator-address> 1000000
+zv<fourth-validator-address> 1000000
+```
+
+Replace each placeholder with the exact `zv...` address printed by key generation; do not include angle brackets. The address and balance are whitespace-separated. The config accepts up to 42 funded public-key-derived validator addresses, plus optional ordinary genesis allocations.
+
+```text
+zv --chain-store-init-multi dev.zvb 71 genesis.txt
+# For four validators, provide at least three distinct authorized validator keys:
+zv --chain-store-transfer-multi dev.zvb 71 validator-1.zvk bob 125 3 validator-1.zvk validator-2.zvk validator-3.zvk
+```
+
+The transaction key must control a funded account. The trailing validator key files must match genesis validators and meet the 2/3+1 quorum. For a four-validator set, two signatures are insufficient; three are required. The CLI does not coordinate these signatures over the network—you supply the validator key files locally.
 
 **Key warning:** `owner.zvk` contains an unencrypted private seed. On Unix-like systems the CLI requests owner-only file permissions, but this is a development key format, not a production wallet or secure key-management system. Fees are checked as a reserve but are not charged. The block store is a local file and the CLI currently runs a single validator. A quorum-signature prototype exists, but full BFT consensus/finality and production key management are not implemented. No real funds should be used.
 
@@ -85,7 +108,7 @@ The protocol supports peer status and fetching a block by height. Sync verifies 
 
 Block execution and block-store replay now verify this proof before accepting non-genesis blocks. Tests cover single-validator verification, a 3-of-4 quorum, duplicate signatures, unsigned blocks, non-validator signers, and signature invalidation after header mutation. CI passed: [GitHub Actions run 39148065358](https://github.com/vikash7644/zenvora-lang/actions/runs/39148065358).
 
-**Important limitation:** this is validator authorization and quorum-signature verification, not a complete BFT consensus protocol. There is no leader election, round/view changes, timeout recovery, equivocation handling, slashing, fork choice, or finality protocol. The current CLI genesis flow supports one validator, so multi-validator genesis setup and signing are still pending.
+**Important limitation:** this is validator authorization and quorum-signature verification, not a complete BFT consensus protocol. There is no leader election, round/view changes, timeout recovery, equivocation handling, slashing, fork choice, or finality protocol. The multi-validator CLI is a local block-production/testing tool; it does not provide validator networking, automated voting, or fault-tolerant consensus.
 
 ## Canonical protocol-format and hashing prototype
 
@@ -109,7 +132,7 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 
 ## Next implementation gates
 
-- Add a validated multi-account genesis configuration and CLI workflow for multiple validator keys.
+- Add validator discovery/communication and an automated multi-validator round/vote workflow.
 - Implement a full consensus round protocol: validator-set configuration, proposal/vote messages, timeouts, equivocation handling, fork choice, and explicit finality rules.
 - Add transaction fee charging, gas metering, per-operation cost schedule, and deterministic execution limits.
 - Add transaction submission over authenticated RPC, transaction pool policy, peer authentication, rate limits, and abuse controls.
