@@ -40,7 +40,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `break` and `continue` outside a loop are rejected during compilation.
 - `fn name(a, b) { ... }` defines a function with integer parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
 - `return` exits the current function. Calls may occur before definitions and functions may call other functions.
-- Each function call has an isolated local variable environment; caller variables are restored on return. Function return values and access to caller/global variables from functions are not implemented yet.
+- Each function call has an isolated local variable environment; caller variables are restored on return. Function calls can appear inside expressions, and `return expression` returns an integer value to the caller. Access to caller/global variables from functions is not implemented yet.
 - Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched block braces are reported as errors.
 
 ## How execution works
@@ -51,12 +51,12 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 
 ## Not implemented yet
 
-Strings, native boolean values, function return values, explicit global/module scope rules, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Strings, native boolean values, explicit global/module scope rules, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
 1. Stabilize syntax, diagnostics and automated tests.
-2. Add function return values and explicit global/module scope rules.
-3. Add useful types and a stable bytecode format.
+2. Add explicit global/module scope rules and useful types.
+3. Define a stable bytecode format.
 4. Add serializable bytecode and a stable VM specification.
 5. Explore WebAssembly output and a contract ABI only after the core language is reliable.
