@@ -133,3 +133,22 @@ fn repeat_with_false_initial_condition_skips_body() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "5\n");
 }
+
+#[test]
+fn continue_inside_nested_if_rechecks_the_loop_condition() {
+    let output = run_program(
+        "define count := 0\nrepeat count < 4 {\ncount := count + 1\nif count == 2 {\nif count > 1 {\ncontinue\n}\n}\nshow count\n}\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n3\n4\n");
+}
+
+#[test]
+fn otherwise_inside_loop_keeps_jump_targets_correct() {
+    let output = run_program(
+        "define count := 0\nrepeat count < 3 {\ncount := count + 1\nif count == 2 {\nshow 20\n} otherwise {\nshow count\n}\n}\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n20\n3\n");
+}
+
