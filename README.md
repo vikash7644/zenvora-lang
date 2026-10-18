@@ -5,7 +5,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 ## Repository contents
 
 - `Cargo.toml` — Rust package manifest for the `zv` command.
-- `CHANGELOG.md` — v0.7.0 release notes and current feature status.
+- `CHANGELOG.md` — v0.8.0 release notes and current feature status.
 - `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM and automated regression tests.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
@@ -15,6 +15,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 - `examples/collections.zv` — arrays, maps, collection access, and immutable update helpers.
 - `examples/indexing.zv` — direct array/map indexing, computed indexes, and nested collections.
 - `examples/stdlib.zv` — safe range, type inspection, string conversion, integer helpers, and assertions.
+- `examples/contracts.zv` — experimental `contract`, `state`, `action`, and `view` syntax.
 - `examples/modules.zv` — relative module imports and reusable functions.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
@@ -37,6 +38,7 @@ cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
 cargo run -- examples/indexing.zv
 cargo run -- examples/stdlib.zv
+cargo run -- examples/contracts.zv
 cargo run -- examples/modules.zv
 cargo run -- --emit-bytecode examples/functions.zv functions.zvb
 cargo run -- --run-bytecode functions.zvb
@@ -55,7 +57,7 @@ Expected example output:
 
 ## Automated regression tests
 
-`cargo test` runs 73 automated tests across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips and malformed bytecode, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, arrays/maps, direct indexing, collection access/update helpers, standard-library validation, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
+`cargo test` runs 75 automated tests across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips and malformed bytecode, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, arrays/maps, direct indexing, collection access/update helpers, standard-library validation, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
 
 ## Bytecode files
 
@@ -96,7 +98,7 @@ The current prototype supports integer, boolean, string, array, and map values, 
 
 ## Status and safety
 
-This is an early work in progress. Direct collection mutation, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Direct collection mutation, advanced static type checking, native machine-code generation, production smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
