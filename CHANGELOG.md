@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Added `zv --new <project-name>` to create a safe starter project with a runnable `main.zv` and project README; existing paths are never overwritten. Added CLI dispatch and regression coverage.
+- Documented the beginner starter-project workflow in the README.
 - Added DNA complement and GC-content helpers plus an integer atomic-mass summation helper, with input validation and regression tests.
 - Added checked integer mathematics helpers (`gcd`, `lcm`, `factorial`, `is_prime`, `fibonacci`, `pow_int`, `mean`) and introductory integer-only science formula helpers (`speed`, `force`, `kinetic_energy`, `density`, `molarity`, `bmi_x10`), with regression tests and `examples/science.zv`.
 
