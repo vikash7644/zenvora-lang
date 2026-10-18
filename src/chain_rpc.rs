@@ -10,19 +10,41 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::block_store::BlockStore;
+use super::chain_block::SignedTransactionEnvelope;
+use super::chain_protocol::TransactionV1;
+use super::tx_pool::TransactionPool;
 
 const MAX_HTTP_REQUEST_BYTES: usize = 64 * 1024;
 const READ_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub fn serve(store_path: String, chain_id: u64, port: u16) -> Result<(), String> {
+    serve_inner(store_path, chain_id, port, None)
+}
+
+/// Start loopback RPC with a persisted transaction pool enabled.
+pub fn serve_with_pool(store_path: String, chain_id: u64, pool_path: String, port: u16) -> Result<(), String> {
+    serve_inner(store_path, chain_id, port, Some(pool_path))
+}
+
+fn serve_inner(
+    store_path: String,
+    chain_id: u64,
+    port: u16,
+    pool_path: Option<String>,
+) -> Result<(), String> {
     if chain_id == 0 {
         return Err("chain ID must be nonzero".into());
     }
     let address = format!("127.0.0.1:{port}");
     let listener = TcpListener::bind(&address)
         .map_err(|error| format!("cannot bind local RPC at {address}: {error}"))?;
-    println!("Zenvora read-only RPC listening at http://{address}");
+    println!("Zenvora RPC listening at http://{address}");
     println!("Only loopback clients can connect. Press Ctrl+C to stop.");
+    if pool_path.is_some() {
+        println!("Signed transaction submission is enabled; block production remains a separate validator command.");
+    } else {
+        println!("Read-only mode: transaction submission is disabled.");
+    }
     for incoming in listener.incoming() {
         match incoming {
             Ok(mut stream) => {
@@ -30,7 +52,9 @@ pub fn serve(store_path: String, chain_id: u64, port: u16) -> Result<(), String>
                 let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
                 match read_http_body(&mut stream) {
                     Ok(body) => {
-                        let response = handle_json_rpc(&body, &store_path, chain_id).to_string();
+                        let response = handle_json_rpc_with_pool(
+                            &body, &store_path, chain_id, pool_path.as_deref(),
+                        ).to_string();
                         write_http_response(&mut stream, "200 OK", &response)?;
                     }
                     Err(error) => {
@@ -105,6 +129,15 @@ fn write_http_response(stream: &mut TcpStream, status: &str, body: &str) -> Resu
 }
 
 pub fn handle_json_rpc(body: &[u8], store_path: &str, expected_chain_id: u64) -> Value {
+    handle_json_rpc_with_pool(body, store_path, expected_chain_id, None)
+}
+
+fn handle_json_rpc_with_pool(
+    body: &[u8],
+    store_path: &str,
+    expected_chain_id: u64,
+    pool_path: Option<&str>,
+) -> Value {
     let request: Value = match serde_json::from_slice(body) {
         Ok(value) => value,
         Err(_) => return rpc_error(Value::Null, -32700, "parse error"),
@@ -177,6 +210,73 @@ pub fn handle_json_rpc(body: &[u8], store_path: &str, expected_chain_id: u64) ->
                 "transactions": transactions
             })
         }
+        "chain_submitTransaction" => {
+            let pool_path = match pool_path {
+                Some(value) => value,
+                None => return rpc_error(id, -32601, "transaction submission is disabled on read-only RPC"),
+            };
+            let public_key = match string_param(&params, "publicKey", 0) {
+                Some(value) => match hex_decode(value) {
+                    Ok(bytes) => bytes,
+                    Err(error) => return rpc_error(id, -32602, &error),
+                },
+                None => return rpc_error(id, -32602, "expected publicKey hex parameter"),
+            };
+            let transaction_bytes = match string_param(&params, "transaction", 1) {
+                Some(value) => match hex_decode(value) {
+                    Ok(bytes) => bytes,
+                    Err(error) => return rpc_error(id, -32602, &error),
+                },
+                None => return rpc_error(id, -32602, "expected canonical transaction hex parameter"),
+            };
+            let transaction = match TransactionV1::from_canonical_bytes(&transaction_bytes) {
+                Ok(value) => value,
+                Err(error) => return rpc_error(id, -32602, &error),
+            };
+            let envelope = SignedTransactionEnvelope { transaction, public_key };
+            let next_height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value,
+                None => return rpc_error(id, -32000, "cannot determine next block height"),
+            };
+            let mut pool = match TransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, next_height) {
+                Ok(value) => value,
+                Err(error) => return rpc_error(id, -32000, &error),
+            };
+            let transaction_id = match pool.submit(&runtime, envelope) {
+                Ok(value) => value,
+                Err(error) => return rpc_error(id, -32010, &error),
+            };
+            if let Err(error) = pool.save_to_file(pool_path) {
+                return rpc_error(id, -32000, &error);
+            }
+            json!({
+                "transactionId": hex_encode(&transaction_id),
+                "poolSize": pool.len(),
+                "nextBlockHeight": next_height
+            })
+        }
+        "chain_getPendingTransactions" => {
+            let pool_path = match pool_path {
+                Some(value) => value,
+                None => return rpc_error(id, -32601, "transaction pool is disabled on read-only RPC"),
+            };
+            let next_height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value,
+                None => return rpc_error(id, -32000, "cannot determine next block height"),
+            };
+            let pool = match TransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, next_height) {
+                Ok(value) => value,
+                Err(error) => return rpc_error(id, -32000, &error),
+            };
+            let transactions: Vec<Value> = pool.pending().iter().map(|envelope| json!({
+                "transactionId": envelope.transaction.transaction_id().map(|id|hex_encode(&id)).unwrap_or_default(),
+                "sender": envelope.transaction.sender,
+                "recipient": envelope.transaction.recipient,
+                "nonce": envelope.transaction.nonce,
+                "amount": envelope.transaction.amount
+            })).collect();
+            json!({"count": pool.len(), "transactions": transactions})
+        }
         "chain_getTransaction" => {
             let id_text = match string_param(&params, "transactionId", 0) {
                 Some(value) => value,
@@ -222,6 +322,20 @@ fn number_param(params: &Value, object_key: &str, index: usize) -> Option<u64> {
 
 fn rpc_error(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+}
+
+fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
+    if value.is_empty() || value.len() % 2 != 0
+        || !value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return Err("invalid lowercase hexadecimal value".into());
+    }
+    let mut output = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        let high = (pair[0] as char).to_digit(16).ok_or_else(|| "invalid hex digit".to_string())?;
+        let low = (pair[1] as char).to_digit(16).ok_or_else(|| "invalid hex digit".to_string())?;
+        output.push(((high << 4) | low) as u8);
+    }
+    Ok(output)
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
