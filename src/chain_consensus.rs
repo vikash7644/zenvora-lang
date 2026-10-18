@@ -128,7 +128,7 @@ fn is_public_key_address(address: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{add_validator_signature, sign_header_as_proposer, verify_consensus_proof};
+    use super::{add_validator_signature, sign_header_as_proposer, verify_consensus_proof, SIGNATURE_RECORD_BYTES};
     use super::super::chain_protocol::{address_from_public_key, BlockHeaderV1};
     use ed25519_dalek::SigningKey;
     use std::collections::BTreeMap;
