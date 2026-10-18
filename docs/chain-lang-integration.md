@@ -59,6 +59,26 @@ Example request body:
 
 This is read-only and reloads/replays the local block store for each request. It is deliberately not a public RPC endpoint and has no authentication layer because it only binds loopback. Do not expose it through a tunnel or public interface. HTTP requests are size-bounded; chunked transfer encoding and non-POST requests are rejected. The RPC does not submit transactions or implement peer networking.
 
+## TCP peer status and verified block synchronization
+
+Two local nodes can exchange blocks over a length-prefixed TCP protocol:
+
+```text
+# Node A: create the genesis store and serve it on a trusted network interface
+zv --chain-keygen owner.zvk
+zv --chain-store-init node-a.zvb 71 owner.zvk 1000000
+zv --chain-p2p-serve node-a.zvb 71 0.0.0.0 9000
+
+# Node B: use the exact same genesis key/config, then sync from Node A
+zv --chain-store-init node-b.zvb 71 owner.zvk 1000000
+zv --chain-p2p-sync node-b.zvb 71 192.168.1.10:9000
+zv --chain-store-info node-b.zvb 71
+```
+
+The protocol supports peer status and fetching a block by height. Sync verifies the chain ID, exact genesis header hash and state root, header linkage, canonical transaction encodings, signatures, nonce/balance rules, and transaction/receipt/state roots by replaying blocks before persisting them. Sync is append-only: it refuses a peer that is behind or has a different tip at the same height; fork choice and reorganization are not implemented.
+
+**Network warning:** the peer service has no authentication or consensus/finality. Binding to `0.0.0.0` exposes it on reachable interfaces; use only on a trusted private network and never on the public internet. Peers can exchange data, but without consensus the protocol cannot decide which competing chain is authoritative. This is a block-sync prototype, not a secure public testnet.
+
 ## Canonical protocol-format and hashing prototype
 
 `src/chain_protocol.rs` defines versioned canonical encodings for transaction signing payloads, signed transaction envelopes, and block headers. Encodings use explicit big-endian integers, length-prefixed fields, and distinct domain tags. Bounded decoders reject truncated inputs, trailing bytes, invalid versions, malformed fields, and oversized inputs.
