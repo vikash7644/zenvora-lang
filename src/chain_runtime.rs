@@ -111,7 +111,7 @@ impl ChainRuntime {
         let mut seen_receipt = false;
         for (index, line) in lines.enumerate() {
             if line.is_empty() { continue; }
-            let fields: Vec<&str> = line.split('\\t').collect();
+            let fields: Vec<&str> = line.split('\t').collect();
             match fields.as_slice() {
                 ["B", address, balance] if !seen_receipt => {
                     if !valid_address(address) {
