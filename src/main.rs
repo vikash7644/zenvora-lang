@@ -1791,6 +1791,28 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
     }
 }
 
+fn create_project(name: &str) -> Result<(), String> {
+    let path = Path::new(name);
+    if name.is_empty() || path.components().count() != 1
+        || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        || !name.chars().next().is_some_and(|c| c.is_ascii_alphanumeric()) {
+        return Err("project name must start with a letter or digit and contain only letters, digits, '-' or '_'".into());
+    }
+    fs::create_dir(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("project path '{name}' already exists; refusing to overwrite it")
+        } else { format!("cannot create project '{name}': {error}") }
+    })?;
+    let main_source = "# Welcome to your first Zenvora project!\ndefine student := \"Creator\"\nshow \"Hello, \" + student\nshow \"Your first calculation:\"\nshow 6 * 7\n\ndefine scores := array(10, 20, 30)\nshow \"Total score:\"\nshow sum(scores)\n";
+    let readme = format!("# {name}\n\nA starter project written in Zenvora Lang.\n\nRun from the Zenvora Lang repository root:\n\n    cargo run -- {name}/main.zv\n    cargo run -- --check {name}/main.zv\n\nEdit main.zv to make this project your own.\n");
+    if let Err(error) = fs::write(path.join("main.zv"), main_source).and_then(|_| fs::write(path.join("README.md"), readme)) {
+        let _ = fs::remove_dir_all(path);
+        return Err(format!("cannot write starter project files: {error}"));
+    }
+    println!("Created Zenvora project '{name}'");
+    println!("Next: zv {name}/main.zv");
+    Ok(())
+}
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
@@ -1798,7 +1820,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
@@ -1820,7 +1842,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr>");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr>");
             process::exit(2);
         }
     };
@@ -1834,6 +1856,13 @@ fn main() {
 mod tests {
     use super::{compile, compile_core, run_with_output, Op};
 
+    fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
+        let code = compile(source)?;
+        let mut output = Vec::new();
+        run_with_output(&code, &mut |line| output.push(line))?;
+        Ok(output)
+    }
+
     fn execute(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
         let mut output = Vec::new();
@@ -1841,6 +1870,25 @@ mod tests {
         Ok(output)
     }
 
+    #[test]
+    fn new_project_creates_runnable_files_and_refuses_overwrite() {
+        let name = format!("zenvora-test-project-{}", std::process::id());
+        let path = std::path::Path::new(&name);
+        let _ = std::fs::remove_dir_all(path);
+        super::create_project(&name).unwrap();
+        assert!(path.join("main.zv").is_file());
+        assert!(path.join("README.md").is_file());
+        let source = std::fs::read_to_string(path.join("main.zv")).unwrap();
+        assert_eq!(execute_source_for_test(&source).unwrap(), vec!["Hello, Creator", "Your first calculation:", "42", "Total score:", "60"]);
+        assert!(super::create_project(&name).unwrap_err().contains("refusing to overwrite"));
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn new_project_rejects_unsafe_names() {
+        assert!(super::create_project("../escape").is_err());
+        assert!(super::create_project("").is_err());
+    }
     #[test]
     fn check_program_compiles_without_running_side_effects() {
         let path = std::env::temp_dir().join(format!("zenvora-check-{}.zv", std::process::id()));
