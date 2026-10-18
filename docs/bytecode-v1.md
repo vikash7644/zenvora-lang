@@ -27,11 +27,11 @@ cargo run -- --run-bytecode functions.zvb
 | \`PUSH_BOOL true/false\` | \`→ Bool\` | Push boolean |
 | \`LOAD name\` | \`→ Value\` | Push a variable's current value; undefined names fail at runtime |
 | \`STORE name\` | \`Value →\` | Store the top value in the active local environment |
-| \`ADD\`, \`SUB\`, \`MUL\`, \`DIV\` | \`a b → Int\` | Integer arithmetic with overflow and divide-by-zero checks |
+| \`ADD\`, \`SUB\`, \`MUL\`, \`DIV\` | \`a b → Int\` | Integer arithmetic with overflow and divide-by-zero checks; `ADD` also concatenates two strings |
 | \`NEG\` | \`Int → Int\` | Negate an integer |
 | \`NOT\` | \`Bool → Bool\` | Boolean negation |
 | \`AND\`, \`OR\` | \`Bool Bool → Bool\` | Eager boolean logic; operands are both evaluated |
-| \`PRINT\` | \`Value →\` | Print an integer or boolean |
+| \`PRINT\` | \`Value →\` | Print an integer, string, or boolean |
 | \`EQ\`, \`NE\` | \`a b → Bool\` | Compare values for equality or inequality |
 | \`LT\`, \`LE\`, \`GT\`, \`GE\` | \`Int Int → Bool\` | Ordered integer comparisons |
 | \`JUMP_IF_FALSE target\` | \`Condition →\` | Pop a condition; jump when false. Booleans are preferred; integer zero/non-zero is also accepted |
