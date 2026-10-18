@@ -76,7 +76,7 @@ These checks are meaningful hardening, but **arbitrary bytecode is not productio
 
 ## Experimental contract DSL
 
-A single `contract` block can declare `state`, `action`, and `view` members. The compiler lowers these to globals and ordinary functions for a local VM run. Direct assignments to declared contract state inside a `view` body are rejected.
+A single `contract` block can declare `state`, `action`, and `view` members. The compiler lowers these to globals and ordinary functions for a local VM run. Direct assignments to declared contract state and direct calls to declared `action` functions inside a `view` body are rejected. Indirect mutation through an arbitrary helper function is not fully analyzed.
 
 This is **not yet a secure smart-contract runtime**. State is not persisted between program runs; indirect view mutation, action authorization, a stable contract ABI, deterministic gas accounting, deployment, consensus, and full chain integration are not delivered by the contract compiler. The separate local chain prototype is also not a public testnet or mainnet.
 
