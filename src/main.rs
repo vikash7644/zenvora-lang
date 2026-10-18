@@ -1844,4 +1844,26 @@ mod tests {
         assert!(compile_core("if true {\n show 1\n").unwrap_err().contains("missing closing brace"));
         assert!(compile_core("}\n").unwrap_err().contains("closing brace without matching block"));
     }
+    #[test]
+    fn chain_cli_initializes_transfers_and_persists_the_ledger() {
+        let path = std::env::temp_dir().join(format!("zenvora-chain-cli-{}.zvr", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let path_text = path.to_string_lossy().to_string();
+
+        let init = vec!["zv".to_string(), "--chain-init".to_string(), path_text.clone(), "alice".to_string(), "1000".to_string()];
+        super::run_chain_command(&init).unwrap();
+
+        let transfer = vec!["zv".to_string(), "--chain-transfer".to_string(), path_text.clone(), "alice".to_string(), "bob".to_string(), "125".to_string()];
+        super::run_chain_command(&transfer).unwrap();
+
+        let restored = super::chain_runtime::ChainRuntime::load_from_file(&path).unwrap();
+        assert_eq!(restored.balance("alice"), 875);
+        assert_eq!(restored.balance("bob"), 125);
+        assert_eq!(restored.receipts().len(), 1);
+
+        let duplicate_init = vec!["zv".to_string(), "--chain-init".to_string(), path_text, "alice".to_string(), "500".to_string()];
+        assert!(super::run_chain_command(&duplicate_init).unwrap_err().contains("refusing to overwrite"));
+        std::fs::remove_file(path).unwrap();
+    }
+
 }
