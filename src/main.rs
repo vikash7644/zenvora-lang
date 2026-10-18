@@ -891,11 +891,15 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 return Err("type error: replace expects three strings".into());
             };
             if from.is_empty() { return Err("replace search string cannot be empty".into()); }
-            let result = value.replace(from, to);
-            if result.len() > MAX_BYTECODE_STRING_BYTES {
+            let matches = value.matches(from).count();
+            let removed = matches.checked_mul(from.len()).ok_or("replace size calculation overflow")?;
+            let added = matches.checked_mul(to.len()).ok_or("replace size calculation overflow")?;
+            let result_len = value.len().checked_sub(removed).and_then(|len| len.checked_add(added))
+                .ok_or("replace result size calculation overflow")?;
+            if result_len > MAX_BYTECODE_STRING_BYTES {
                 return Err(format!("replace result exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
             }
-            Ok(Value::Str(result))
+            Ok(Value::Str(value.replace(from, to)))
         }
         "split" => {
             arity(2)?;
@@ -919,15 +923,20 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 return Err("type error: join expects an array of strings and a string separator".into());
             };
             let mut parts = Vec::with_capacity(items.len());
+            let mut result_len = 0usize;
             for item in items {
                 let Value::Str(value) = item else { return Err("type error: join expects an array containing only strings".into()); };
+                result_len = result_len.checked_add(value.len()).ok_or("join result size calculation overflow")?;
                 parts.push(value.as_str());
             }
-            let result = parts.join(separator);
-            if result.len() > MAX_BYTECODE_STRING_BYTES {
+            if parts.len() > 1 {
+                result_len = result_len.checked_add(separator.len().checked_mul(parts.len() - 1)
+                    .ok_or("join result size calculation overflow")?).ok_or("join result size calculation overflow")?;
+            }
+            if result_len > MAX_BYTECODE_STRING_BYTES {
                 return Err(format!("join result exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
             }
-            Ok(Value::Str(result))
+            Ok(Value::Str(parts.join(separator)))
         }
         "assert" => {
             if !(1..=2).contains(&arg_len) {
