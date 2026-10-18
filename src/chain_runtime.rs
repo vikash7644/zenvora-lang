@@ -1,7 +1,9 @@
 //! Deterministic transaction runtime prototype powered by the Zenvora Lang VM.
 //! This is a local execution harness, not a consensus protocol or production chain.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+use super::chain_protocol::TransactionV1;
 
 use super::{compile, run_with_output};
 
@@ -26,7 +28,8 @@ show sender_balance
 show recipient_balance
 "#;
 
-const LEDGER_VERSION: &str = "ZENVORA_LEDGER_V2";
+const LEDGER_VERSION: &str = "ZENVORA_LEDGER_V3";
+const LEGACY_LEDGER_VERSION: &str = "ZENVORA_LEDGER_V2";
 const MAX_LEDGER_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_ACCOUNTS: usize = 100_000;
 const MAX_RECEIPTS: usize = 1_000_000;
@@ -40,6 +43,10 @@ pub struct TransferReceipt {
     pub accepted: bool,
     pub sender_balance: i64,
     pub recipient_balance: i64,
+    /// Present only when the receipt was produced by authenticated transaction admission.
+    pub nonce: Option<u64>,
+    /// Lowercase hexadecimal transaction ID, present for signed transactions.
+    pub transaction_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -47,6 +54,8 @@ pub struct ChainRuntime {
     genesis_balances: BTreeMap<String, i64>,
     balances: BTreeMap<String, i64>,
     receipts: Vec<TransferReceipt>,
+    account_nonces: BTreeMap<String, u64>,
+    seen_transaction_ids: BTreeSet<String>,
 }
 
 impl ChainRuntime {
@@ -81,6 +90,11 @@ impl ChainRuntime {
         &self.receipts
     }
 
+    /// Next expected nonce for an account. Signed transactions start at nonce zero.
+    pub fn account_nonce(&self, address: &str) -> u64 {
+        *self.account_nonces.get(address).unwrap_or(&0)
+    }
+
     /// Saves genesis allocations and the receipt log. Current balances are derived by replay,
     /// rather than trusted as independent snapshot data.
     pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> Result<(), String> {
@@ -99,9 +113,12 @@ impl ChainRuntime {
                     .map_err(|e| format!("cannot write genesis allocation: {e}"))?;
             }
             for receipt in &self.receipts {
-                writeln!(file, "R\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                let nonce = receipt.nonce.map(|value| value.to_string()).unwrap_or_else(|| "-".into());
+                let transaction_id = receipt.transaction_id.as_deref().unwrap_or("-");
+                writeln!(file, "R\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                     receipt.sequence, receipt.from, receipt.to, receipt.amount,
-                    receipt.accepted, receipt.sender_balance, receipt.recipient_balance)
+                    receipt.accepted, receipt.sender_balance, receipt.recipient_balance,
+                    nonce, transaction_id)
                     .map_err(|e| format!("cannot write ledger receipt: {e}"))?;
             }
             file.sync_all().map_err(|e| format!("cannot sync ledger file: {e}"))?;
@@ -131,7 +148,8 @@ impl ChainRuntime {
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("cannot read ledger file: {e}"))?;
         let mut lines = content.lines();
-        if lines.next() != Some(LEDGER_VERSION) {
+        let version = lines.next().ok_or_else(|| "missing ledger file version".to_string())?;
+        if version != LEDGER_VERSION && version != LEGACY_LEDGER_VERSION {
             return Err("unsupported or missing ledger file version".into());
         }
 
@@ -143,7 +161,18 @@ impl ChainRuntime {
             if line.len() > 4096 {
                 return Err(format!("ledger line {line_number} exceeds maximum length"));
             }
-            let fields: Vec<&str> = line.split('\t').collect();
+            let mut fields: Vec<&str> = line.split('\t').collect();
+            if fields.first() == Some(&"R") {
+                if version == LEGACY_LEDGER_VERSION {
+                    if fields.len() != 8 {
+                        return Err(format!("ledger line {line_number} has invalid legacy receipt fields"));
+                    }
+                    fields.push("-");
+                    fields.push("-");
+                } else if fields.len() != 10 {
+                    return Err(format!("ledger line {line_number} has invalid receipt fields"));
+                }
+            }
             match fields.as_slice() {
                 ["G", address, balance] if !seen_receipt => {
                     if !valid_address(address) {
@@ -160,7 +189,7 @@ impl ChainRuntime {
                     runtime.genesis_balances.insert((*address).to_string(), balance);
                     runtime.balances.insert((*address).to_string(), balance);
                 }
-                ["R", sequence, from, to, amount, accepted, sender_balance, recipient_balance] => {
+                ["R", sequence, from, to, amount, accepted, sender_balance, recipient_balance, nonce_field, transaction_id_field] => {
                     seen_receipt = true;
                     if runtime.receipts.len() >= MAX_RECEIPTS {
                         return Err("ledger receipt limit exceeded".into());
@@ -180,6 +209,39 @@ impl ChainRuntime {
                         .map_err(|_| format!("ledger line {line_number} has invalid recipient balance"))?;
                     if sequence != runtime.receipts.len() as u64 + 1 {
                         return Err(format!("ledger line {line_number} has non-contiguous receipt sequence"));
+                    }
+
+                    let nonce = if *nonce_field == "-" {
+                        None
+                    } else {
+                        Some(nonce_field.parse::<u64>()
+                            .map_err(|_| format!("ledger line {line_number} has invalid signed nonce"))?)
+                    };
+                    let transaction_id = if *transaction_id_field == "-" {
+                        None
+                    } else {
+                        let id = (*transaction_id_field).to_string();
+                        if !valid_transaction_id(&id) {
+                            return Err(format!("ledger line {line_number} has invalid transaction ID"));
+                        }
+                        Some(id)
+                    };
+                    match (nonce, transaction_id.as_ref()) {
+                        (None, None) => {}
+                        (Some(nonce), Some(id)) => {
+                            let expected_nonce = runtime.account_nonce(from);
+                            if nonce != expected_nonce {
+                                return Err(format!("ledger line {line_number} has non-contiguous account nonce"));
+                            }
+                            if runtime.seen_transaction_ids.contains(id) {
+                                return Err(format!("ledger line {line_number} repeats a transaction ID"));
+                            }
+                            let next_nonce = nonce.checked_add(1)
+                                .ok_or_else(|| format!("ledger line {line_number} account nonce overflow"))?;
+                            runtime.account_nonces.insert((*from).to_string(), next_nonce);
+                            runtime.seen_transaction_ids.insert(id.clone());
+                        }
+                        _ => return Err(format!("ledger line {line_number} has incomplete signed transaction metadata")),
                     }
 
                     let sender_before = runtime.balance(from);
@@ -207,6 +269,7 @@ impl ChainRuntime {
                     runtime.receipts.push(TransferReceipt {
                         sequence, from: (*from).to_string(), to: (*to).to_string(), amount,
                         accepted, sender_balance: sender_after, recipient_balance: recipient_after,
+                        nonce, transaction_id,
                     });
                 }
                 _ => return Err(format!("ledger line {line_number} has an invalid record or misplaced genesis entry")),
@@ -271,10 +334,76 @@ impl ChainRuntime {
             accepted,
             sender_balance: sender_after,
             recipient_balance: recipient_after,
+            nonce: None,
+            transaction_id: None,
         };
         self.receipts.push(receipt.clone());
         Ok(receipt)
     }
+
+    /// Authenticate, admit, and execute a signed transfer through the Zenvora Lang VM.
+    /// The account nonce and transaction ID are committed only after transfer execution succeeds.
+    /// Fees are reserved during admission but are not charged until fee accounting is implemented.
+    pub fn apply_signed_transaction(
+        &mut self,
+        transaction: &TransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<TransferReceipt, String> {
+        let sender = transaction.sender.clone();
+        let expected_nonce = self.account_nonce(&sender);
+        let sender_balance = self.balance(&sender);
+        if sender_balance < 0 {
+            return Err("sender balance cannot be negative".into());
+        }
+        if expected_nonce == u64::MAX {
+            return Err("account nonce exhausted".into());
+        }
+        transaction.validate_signed_transfer(
+            public_key,
+            expected_chain_id,
+            current_height,
+            expected_nonce,
+            sender_balance as u64,
+        )?;
+        let amount = i64::try_from(transaction.amount)
+            .map_err(|_| "transaction amount exceeds the local VM's integer range")?;
+        let id_bytes = transaction.transaction_id()?;
+        let transaction_id = hex_encode(&id_bytes);
+        if self.seen_transaction_ids.contains(&transaction_id) {
+            return Err("transaction has already been applied".into());
+        }
+
+        let receipt = self.transfer(&sender, &transaction.recipient, amount)?;
+        if !receipt.accepted {
+            self.receipts.pop();
+            return Err("signed transfer was unexpectedly rejected by the VM".into());
+        }
+        let next_nonce = expected_nonce + 1;
+        let committed_receipt = self.receipts.last_mut()
+            .ok_or_else(|| "internal error: transfer receipt missing after execution".to_string())?;
+        committed_receipt.nonce = Some(expected_nonce);
+        committed_receipt.transaction_id = Some(transaction_id.clone());
+        let committed_receipt = committed_receipt.clone();
+        self.account_nonces.insert(sender, next_nonce);
+        self.seen_transaction_ids.insert(transaction_id);
+        Ok(committed_receipt)
+    }
+}
+
+fn valid_transaction_id(value: &str) -> bool {
+    value.len() == 64
+        && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(&mut output, "{byte:02x}");
+    }
+    output
 }
 
 fn valid_address(address: &str) -> bool {
