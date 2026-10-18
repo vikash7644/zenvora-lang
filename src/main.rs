@@ -1395,6 +1395,48 @@ fn run_bytecode(path: &str) -> Result<(), String> {
     run(&code)
 }
 
+fn run_chain_command(args: &[String]) -> Result<(), String> {
+    use std::path::Path;
+    match args {
+        [_, mode, ledger_path, address, amount] if mode == "--chain-init" => {
+            if Path::new(ledger_path).exists() {
+                return Err(format!("ledger already exists at {ledger_path}; refusing to overwrite it"));
+            }
+            let amount: i64 = amount.parse().map_err(|_| "genesis balance must be a valid 64-bit integer")?;
+            let mut runtime = chain_runtime::ChainRuntime::new();
+            runtime.set_genesis_balance(address, amount)?;
+            runtime.save_to_file(ledger_path)?;
+            println!("Zenvora ledger initialized: {address} balance={amount}");
+            Ok(())
+        }
+        [_, mode, ledger_path, from, to, amount] if mode == "--chain-transfer" => {
+            let amount: i64 = amount.parse().map_err(|_| "transfer amount must be a valid 64-bit integer")?;
+            let mut runtime = chain_runtime::ChainRuntime::load_from_file(ledger_path)?;
+            let receipt = runtime.transfer(from, to, amount)?;
+            runtime.save_to_file(ledger_path)?;
+            println!("sequence={} status={} from={} to={} amount={} sender_balance={} recipient_balance={}",
+                receipt.sequence, if receipt.accepted { "ACCEPTED" } else { "REJECTED" },
+                receipt.from, receipt.to, receipt.amount, receipt.sender_balance, receipt.recipient_balance);
+            Ok(())
+        }
+        [_, mode, ledger_path, address] if mode == "--chain-balance" => {
+            let runtime = chain_runtime::ChainRuntime::load_from_file(ledger_path)?;
+            println!("{}: {}", address, runtime.balance(address));
+            Ok(())
+        }
+        [_, mode, ledger_path] if mode == "--chain-receipts" => {
+            let runtime = chain_runtime::ChainRuntime::load_from_file(ledger_path)?;
+            for receipt in runtime.receipts() {
+                println!("sequence={} status={} from={} to={} amount={} sender_balance={} recipient_balance={}",
+                    receipt.sequence, if receipt.accepted { "ACCEPTED" } else { "REJECTED" },
+                    receipt.from, receipt.to, receipt.amount, receipt.sender_balance, receipt.recipient_balance);
+            }
+            Ok(())
+        }
+        _ => Err("invalid chain command arguments".into()),
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
@@ -1402,7 +1444,14 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        return;
+    }
+    if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
+        if let Err(error) = run_chain_command(&args) {
+            eprintln!("Zenvora chain error: {error}");
+            process::exit(1);
+        }
         return;
     }
     let result = match args.as_slice() {
@@ -1416,7 +1465,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb>");
+            eprintln!("Usage: zv <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr>");
             process::exit(2);
         }
     };
