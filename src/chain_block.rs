@@ -4,6 +4,7 @@
 //! not verify the consensus proof or persist a canonical block database.
 
 use super::chain_protocol::{transaction_merkle_root, BlockHeaderV1, TransactionV1};
+use super::chain_consensus::verify_consensus_proof;
 use super::chain_runtime::{ChainRuntime, TransferReceipt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +28,7 @@ pub fn execute_block(
     if header.chain_id != expected_chain_id {
         return Err("block chain ID does not match this network".into());
     }
+    verify_consensus_proof(header, runtime.genesis_balances())?;
 
     match previous_header {
         Some(previous) => {
@@ -93,6 +95,7 @@ mod tests {
     use super::super::chain_protocol::{
         address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1,
     };
+    use super::super::chain_consensus::sign_header_as_proposer;
     use super::super::chain_runtime::ChainRuntime;
     use ed25519_dalek::{Signer, SigningKey};
 
@@ -130,6 +133,7 @@ mod tests {
     fn candidate_header(
         runtime_before: &ChainRuntime,
         envelope: &SignedTransactionEnvelope,
+        key: &SigningKey,
         height: u64,
         parent_hash: [u8; 32],
         timestamp_secs: u64,
@@ -138,7 +142,7 @@ mod tests {
         let receipt = candidate.apply_signed_transaction(
             &envelope.transaction, &envelope.public_key, 71, height,
         ).unwrap();
-        BlockHeaderV1 {
+        let mut header = BlockHeaderV1 {
             chain_id: 71,
             height,
             timestamp_secs,
@@ -148,7 +152,9 @@ mod tests {
             state_root: candidate.state_root(),
             proposer: "validator_1".into(),
             consensus_proof: Vec::new(),
-        }
+        };
+        sign_header_as_proposer(&mut header, key).unwrap();
+        header
     }
 
     fn funded_runtime(key: &SigningKey) -> ChainRuntime {
@@ -166,7 +172,7 @@ mod tests {
         let genesis = genesis_header(&runtime);
         assert!(execute_block(&mut runtime, &genesis, &[], 71, None).unwrap().is_empty());
         let envelope = signed_transfer(&key, 0, 125);
-        let header = candidate_header(&runtime, &envelope, 1, genesis.header_hash().unwrap(), 1_800_000_001);
+        let header = candidate_header(&runtime, &envelope, &key, 1, genesis.header_hash().unwrap(), 1_800_000_001);
 
         let receipts = execute_block(
             &mut runtime, &header, &[envelope.clone()], 71, Some(&genesis),
@@ -176,7 +182,7 @@ mod tests {
 
         let next_envelope = signed_transfer(&key, 1, 25);
         let previous_hash = header.header_hash().unwrap();
-        let next_header = candidate_header(&runtime, &next_envelope, 2, previous_hash, 1_800_000_001);
+        let next_header = candidate_header(&runtime, &next_envelope, &key, 2, previous_hash, 1_800_000_001);
         assert!(execute_block(
             &mut runtime, &next_header, &[next_envelope], 71, Some(&header),
         ).is_ok());
@@ -192,6 +198,7 @@ mod tests {
         let envelope = signed_transfer(&key, 0, 125);
         let mut header = candidate_header(&runtime, &envelope, 1, genesis.header_hash().unwrap(), 1_800_000_001);
         header.state_root[0] ^= 1;
+        sign_header_as_proposer(&mut header, &key).unwrap();
 
         assert!(execute_block(&mut runtime, &header, &[envelope.clone()], 71, Some(&genesis)).is_err());
         assert_eq!(runtime.state_root(), original_root);
@@ -211,7 +218,7 @@ mod tests {
         let key = SigningKey::from_bytes(&[73; 32]);
         let runtime = funded_runtime(&key);
         let envelope = signed_transfer(&key, 0, 125);
-        let mut header = candidate_header(&runtime, &envelope, 1, [9; 32], 100);
+        let mut header = candidate_header(&runtime, &envelope, &key, 1, [9; 32], 100);
         header.chain_id = 72;
         assert!(execute_block(&mut runtime.clone(), &header, &[envelope.clone()], 71, None).is_err());
 
