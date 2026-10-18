@@ -1800,6 +1800,9 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let public_key = signing_key.verifying_key().to_bytes();
             let address = crate::chain_protocol::address_from_public_key(&public_key)?;
             let balance: i64 = balance.parse().map_err(|_| "genesis balance must be a valid 64-bit integer")?;
+            if balance <= 0 {
+                return Err("genesis validator balance must be positive".into());
+            }
             let mut runtime = chain_runtime::ChainRuntime::new();
             runtime.set_genesis_balance(&address, balance)?;
             let mut store = crate::block_store::BlockStore::new(chain_id, runtime.genesis_balances().clone())?;
