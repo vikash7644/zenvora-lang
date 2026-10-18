@@ -1494,12 +1494,43 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
         }
     }
 
-    // A call's static stack effect depends on whether its target can return a
-    // value. This first-generation format does not encode return types.
-    let returns_value: HashSet<usize> = entries.iter().copied().filter(|entry| {
-        let end = entries.iter().copied().find(|candidate| candidate > entry).unwrap_or(code.len());
-        code[*entry..end].iter().any(|op| matches!(op, Op::ReturnValue))
-    }).collect();
+    // Infer return behavior from control flow, not from the mere presence of a
+    // RETURN_VALUE opcode. Dead code after an unconditional return must not change a
+    // function's call-site stack effect. Mixed reachable void/value returns are rejected
+    // because bytecode v1 has no explicit return-type metadata.
+    let mut returns_value: HashSet<usize> = HashSet::new();
+    for (index, entry) in entries.iter().copied().enumerate() {
+        let end = entries.get(index + 1).copied().unwrap_or(code.len());
+        let mut visited = HashSet::new();
+        let mut pending = vec![entry];
+        let mut saw_void_return = false;
+        let mut saw_value_return = false;
+        while let Some(pc) = pending.pop() {
+            if pc < entry || pc >= end || !visited.insert(pc) {
+                continue;
+            }
+            match &code[pc] {
+                Op::Return => saw_void_return = true,
+                Op::ReturnValue => saw_value_return = true,
+                Op::Jump(target) => {
+                    if *target >= entry && *target < end { pending.push(*target); }
+                }
+                Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
+                    if *target >= entry && *target < end { pending.push(*target); }
+                    if pc + 1 < end { pending.push(pc + 1); }
+                }
+                _ => {
+                    if pc + 1 < end { pending.push(pc + 1); }
+                }
+            }
+        }
+        if saw_void_return && saw_value_return {
+            return Err(format!("bytecode verifier: function at entry {entry} has inconsistent reachable return kinds"));
+        }
+        if saw_value_return {
+            returns_value.insert(entry);
+        }
+    }
 
     let mut regions: Vec<(usize, usize, bool)> = vec![(0, main_exit + 1, true)];
     for (i, entry) in entries.iter().copied().enumerate() {
@@ -2709,6 +2740,23 @@ mod tests {
             let error = super::deserialize_bytecode(bytecode).unwrap_err();
             assert!(error.contains("verifier") || error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
         }
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_mixed_reachable_return_kinds() {
+        let bytecode = concat!(
+            "ZENVORA_BYTECODE 1\n",
+            "CALL_TARGET 3 0 -\n",
+            "PRINT\n",
+            "JUMP 8\n",
+            "PUSH_BOOL true\n",
+            "JUMP_IF_FALSE 7\n",
+            "PUSH 1\n",
+            "RETURN_VALUE\n",
+            "RETURN\n",
+        );
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("inconsistent reachable return kinds"), "unexpected error: {error}");
     }
 
     #[test]
