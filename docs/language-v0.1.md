@@ -46,7 +46,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `break` and `continue` outside a loop are rejected during compilation.
 - `fn name(a, b) { ... }` defines a function with parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
 - `return` exits the current function. Calls may occur before definitions and functions may call other functions.
-- Each function call has an isolated local variable environment; caller variables are restored on return. Function calls can appear inside expressions, and `return expression` returns an integer or boolean value to the caller. Access to caller/global variables from functions is not implemented yet.
+- Each function call has an isolated local variable environment; caller variables are restored on return. Function calls can appear inside expressions, and `return expression` returns an integer, boolean, or string value to the caller. Access to caller/global variables from functions is not implemented yet.
 - Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched block braces are reported as errors.
 
 ## Bytecode files
