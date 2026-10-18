@@ -1,6 +1,6 @@
-# Zenvora Lang v0.2 — current implementation
+# Zenvora Lang v0.3 — current implementation
 
-Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone adds numeric comparisons and conditional execution to the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
+Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone adds `repeat` loops with `break` and `continue` to the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
 
 ## Build and run
 
@@ -34,7 +34,10 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - Conditional blocks use `if condition {`, followed by statements and a closing `}`; an optional else branch uses the exact line ` } otherwise {` without the leading space (normally written as `} otherwise {`).
 - `#` starts a comment.
 - Nested if/otherwise blocks are supported.
-- Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched conditional braces are reported as errors.
+- `repeat condition { ... }` loops reevaluate their comparison condition before each iteration.
+- `break` exits the nearest enclosing loop; `continue` jumps back to reevaluate its condition.
+- `break` and `continue` outside a loop are rejected during compilation.
+- Division by zero, undefined variables, invalid syntax, integer overflow, and unmatched block braces are reported as errors.
 
 ## How execution works
 
@@ -44,7 +47,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 
 ## Not implemented yet
 
-Strings, native boolean values, loops, `break`/`continue`, functions, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. Do not use this prototype for funds or production contracts.
+Strings, native boolean values, functions, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. Loop execution limits and further runtime safety checks also remain to be added. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
