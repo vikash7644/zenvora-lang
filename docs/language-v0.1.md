@@ -1,4 +1,4 @@
-# Zenvora Lang v0.5 — current implementation
+# Zenvora Lang v0.6 — current implementation
 
 Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes `repeat` loops with `break` and `continue`, plus functions with value parameters, return values, recursion, and isolated local variable environments in the Rust compiler and stack-based bytecode virtual machine. It remains an early prototype, not a production smart-contract language.
 
