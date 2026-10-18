@@ -322,7 +322,7 @@ fn put_bytes(out: &mut Vec<u8>, value: &[u8]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BlockHeaderV1, TransactionV1};
+    use super::{BlockHeaderV1, TransactionV1, BLOCK_DOMAIN};
 
     fn tx() -> TransactionV1 {
         TransactionV1 {
