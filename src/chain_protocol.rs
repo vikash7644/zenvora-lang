@@ -1,7 +1,7 @@
 //! Versioned, deterministic wire-format building blocks for the Zenvora Chain prototype.
 //!
-//! This module provides canonical encoding and domain-separated SHA-256 hashing, but does not
-//! verify signatures, execute transactions, or implement consensus.
+//! This module provides canonical encoding, domain-separated SHA-256 hashing, and Ed25519
+//! signature verification. It does not execute transactions or implement consensus.
 
 const TX_DOMAIN: &[u8] = b"ZENVORA_TX_SIGNING_V1\0";
 const TX_WIRE_DOMAIN: &[u8] = b"ZENVORA_TX_WIRE_V1\0";
@@ -30,7 +30,7 @@ pub struct TransactionV1 {
     pub max_fee: u64,
     pub gas_limit: u64,
     pub valid_until_height: Option<u64>,
-    /// Opaque signature bytes. A future crypto layer must verify these bytes.
+    /// Ed25519 signature bytes; callers must invoke `verify_signature` to authenticate them.
     pub signature: Vec<u8>,
 }
 
