@@ -31,7 +31,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - `name := expression` updates or creates an integer variable.
 - `show expression` prints an integer; `print(expression)` is also accepted.
 - Integer arithmetic: unary minus, `+`, `-`, `*`, `/`, and parentheses.
-- Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons evaluate to `1` (true) or `0` (false).
+- Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons produce native boolean values `true` or `false`.
 - Conditional blocks use `if condition {`, followed by statements and a closing `}`; an optional else branch uses the exact line ` } otherwise {` without the leading space (normally written as `} otherwise {`).
 - `#` starts a comment.
 - Nested if/otherwise blocks are supported.
@@ -51,7 +51,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 
 ## Not implemented yet
 
-Strings, native boolean values, explicit global/module scope rules, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Comparison results are represented as integer `1` or `0` for now. The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Strings, explicit global/module scope rules, custom types, modules, bytecode file serialization, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
