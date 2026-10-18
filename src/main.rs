@@ -2014,9 +2014,11 @@ show to_int(17)
     #[test]
     fn text_normalization_and_integer_conversion_reject_invalid_values() {
         assert!(execute("show trim(12)\n").unwrap_err().contains("expects a string"));
-        assert!(execute("show to_int(\\"12x\\")\n").unwrap_err().contains("cannot convert"));
+        assert!(execute(r#"show to_int("12x")
+"#).unwrap_err().contains("cannot convert"));
         assert!(execute("show to_int(true)\n").unwrap_err().contains("integer or numeric string"));
-        assert!(execute("show to_int(\\"9223372036854775808\\")\n").unwrap_err().contains("cannot convert"));
+        assert!(execute(r#"show to_int("9223372036854775808")
+"#).unwrap_err().contains("cannot convert"));
     }
 
     #[test]
