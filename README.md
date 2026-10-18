@@ -52,7 +52,7 @@ This prints `1`. Change the age to `16` and it prints `0`.
 
 See [`examples/loops.zv`](examples/loops.zv) for a runnable `repeat`/`break`/`continue` example and [`examples/functions.zv`](examples/functions.zv) for functions.
 
-The current prototype supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Comparison results are represented as integer `1` (true) and `0` (false). `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Functions support integer parameters with `fn add(left, right) { ... }`, calls such as `call add(2 + 3, 4)`, and expression calls such as `show add(2, 3)`. `return expression` returns an integer value; plain `return` exits without a value. Calls can be made before a function definition, functions can call other functions recursively, and each call gets a separate local variable environment. Access to caller/global variables from inside a function is not implemented yet. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
+The current prototype supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Boolean values `true` and `false` are supported, and comparisons produce booleans. `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Functions support integer parameters with `fn add(left, right) { ... }`, calls such as `call add(2 + 3, 4)`, and expression calls such as `show add(2, 3)`. `return expression` returns an integer value; plain `return` exits without a value. Calls can be made before a function definition, functions can call other functions recursively, and each call gets a separate local variable environment. Access to caller/global variables from inside a function is not implemented yet. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
 
 ## Roadmap
 
@@ -64,7 +64,7 @@ The current prototype supports integer variables, assignment, arithmetic (`+`, `
 
 ## Status and safety
 
-This is an early work in progress. Strings, global/module scope rules, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Strings, global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
