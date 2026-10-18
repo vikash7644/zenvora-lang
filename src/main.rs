@@ -2269,6 +2269,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{compile, compile_core, read_chain_key, run_chain_command, run_with_output, Op};
+    use ed25519_dalek::Signer;
 
     #[test]
     fn local_signed_chain_cli_keygen_transfer_and_replay_work_end_to_end() {
