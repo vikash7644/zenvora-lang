@@ -1766,7 +1766,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let address = crate::chain_protocol::address_from_public_key(&public_key)?;
             let content = format!(
                 "ZENVORA_KEY_V1\nprivate={}\npublic={}\naddress={}\n",
-                hex_encode(&seed), hex_encode(&public_key), address
+                hex_encode_bytes(&seed), hex_encode_bytes(&public_key), address
             );
             let mut options = std::fs::OpenOptions::new();
             options.write(true).create_new(true);
@@ -1881,8 +1881,8 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let (store, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
             let tip = store.blocks().last().ok_or_else(|| "block store has no genesis block".to_string())?;
             println!("chain_id={chain_id} blocks={} height={}", store.blocks().len(), tip.header.height);
-            println!("state_root={}", hex_encode(&runtime.state_root()));
-            println!("tip_hash={}", hex_encode(&tip.header.header_hash()?));
+            println!("state_root={}", hex_encode_bytes(&runtime.state_root()));
+            println!("tip_hash={}", hex_encode_bytes(&tip.header.header_hash()?));
             println!("Replay verification: PASS (local file only; no consensus verification)");
             Ok(())
         }
@@ -1965,7 +1965,7 @@ fn decode_hex_bytes(value: &str) -> Result<Vec<u8>, String> {
     Ok(output)
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
+fn hex_encode_bytes(bytes: &[u8]) -> String {
     let mut output = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         use std::fmt::Write as _;
@@ -2010,7 +2010,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
