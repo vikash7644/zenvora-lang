@@ -5,6 +5,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 ## Repository contents
 
 - `Cargo.toml` — Rust package manifest for the `zv` command.
+- `CHANGELOG.md` — v0.6.0 release notes and verified feature status.
 - `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM and automated regression tests.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
