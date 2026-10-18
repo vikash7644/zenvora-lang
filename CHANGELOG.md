@@ -11,7 +11,7 @@ Notable changes to Zenvora Lang are recorded here.
 - Added CLI commands to emit and run bytecode files, plus `--version`.
 - Added loader checks for bytecode version, instruction shape, identifiers, jump bounds, and function-entry bounds.
 - Added regression coverage for strings, Unicode, malformed literals, short-circuit evaluation, bytecode round-trips, malformed bytecode, and CLI behavior.
-- GitHub Actions verification for the v0.6 code commit: `cargo check` passed; `cargo test` passed with 20 compiler/VM unit tests, 5 CLI tests, and 34 language integration tests (59 total); all four runnable examples passed.
+- GitHub Actions verification for the v0.6 code commit: `cargo check` passed; `cargo test` passed with 21 compiler/VM unit tests, 5 CLI tests, and 34 language integration tests (60 total); all four runnable examples passed.
 
 ### Known limitations
 
