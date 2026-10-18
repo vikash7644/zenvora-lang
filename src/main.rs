@@ -3,7 +3,7 @@ use std::{env, fs, process};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Number(i64), Ident(String), Plus, Minus, Star, Slash,
+    Number(i64), Bool(bool), Ident(String), Plus, Minus, Star, Slash,
     LParen, RParen, Comma, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
 }
 
@@ -25,7 +25,12 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
         if c.is_ascii_alphabetic() || c == '_' {
             let start = i;
             while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') { i += 1; }
-            out.push(Token::Ident(chars[start..i].iter().collect()));
+            let ident: String = chars[start..i].iter().collect();
+            match ident.as_str() {
+                "true" => out.push(Token::Bool(true)),
+                "false" => out.push(Token::Bool(false)),
+                _ => out.push(Token::Ident(ident)),
+            }
             continue;
         }
         let token = match c {
@@ -48,7 +53,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 
 #[derive(Debug, Clone)]
 enum Op {
-    Push(i64), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Print,
+    Push(i64), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Print,
     Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
@@ -84,6 +89,7 @@ impl Parser {
     fn factor(&mut self) -> Result<(), String> {
         match self.take() {
             Token::Number(n) => self.code.push(Op::Push(n)),
+            Token::Bool(value) => self.code.push(Op::PushBool(value)),
             Token::Ident(name) => {
                 if self.peek() == &Token::LParen {
                     self.take();
@@ -118,14 +124,15 @@ impl Parser {
 
     fn condition(&mut self) -> Result<(), String> {
         self.expression()?;
-        let op = match self.take() {
-            Token::EqEq => Op::Eq,
-            Token::NotEq => Op::Ne,
-            Token::Less => Op::Lt,
-            Token::LessEq => Op::Le,
-            Token::Greater => Op::Gt,
-            Token::GreaterEq => Op::Ge,
-            other => return Err(format!("expected comparison operator (==, !=, <, <=, >, >=), found {other:?}")),
+        let op = match self.peek().clone() {
+            Token::EqEq => { self.take(); Op::Eq },
+            Token::NotEq => { self.take(); Op::Ne },
+            Token::Less => { self.take(); Op::Lt },
+            Token::LessEq => { self.take(); Op::Le },
+            Token::Greater => { self.take(); Op::Gt },
+            Token::GreaterEq => { self.take(); Op::Ge },
+            Token::End => return Ok(()),
+            other => return Err(format!("expected comparison operator (==, !=, <, <=, >, >=) or a boolean condition, found {other:?}")),
         };
         self.expression()?;
         self.code.push(op);
@@ -403,11 +410,17 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
     Ok(code)
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum Value {
+    Int(i64),
+    Bool(bool),
+}
+
 fn run(code: &[Op]) -> Result<(), String> {
-    let mut stack: Vec<i64> = Vec::new();
-    let mut vars: HashMap<String, i64> = HashMap::new();
+    let mut stack: Vec<Value> = Vec::new();
+    let mut vars: HashMap<String, Value> = HashMap::new();
     let mut pc = 0usize;
-    let mut call_stack: Vec<(usize, HashMap<String, i64>)> = Vec::new();
+    let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
     let mut steps = 0usize;
     const MAX_STEPS: usize = 1_000_000;
     while pc < code.len() {
@@ -416,17 +429,28 @@ fn run(code: &[Op]) -> Result<(), String> {
             return Err("execution exceeded safety limit (1,000,000 instructions)".into());
         }
         match &code[pc] {
-            Op::Push(n) => stack.push(*n),
-            Op::Load(name) => stack.push(*vars.get(name).ok_or_else(|| format!("undefined variable '{name}'"))?),
-            Op::Store(name) => { let n = stack.pop().ok_or("VM stack underflow")?; vars.insert(name.clone(), n); }
-            Op::Print => println!("{}", stack.pop().ok_or("VM stack underflow")?),
+            Op::Push(n) => stack.push(Value::Int(*n)),
+            Op::PushBool(value) => stack.push(Value::Bool(*value)),
+            Op::Load(name) => stack.push(vars.get(name).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?),
+            Op::Store(name) => { let value = stack.pop().ok_or("VM stack underflow")?; vars.insert(name.clone(), value); }
+            Op::Print => match stack.pop().ok_or("VM stack underflow")? {
+                Value::Int(n) => println!("{n}"),
+                Value::Bool(value) => println!("{value}"),
+            },
             Op::Neg => {
-                let a = stack.pop().ok_or("VM stack underflow")?;
-                stack.push(a.checked_neg().ok_or("integer overflow")?);
+                let value = stack.pop().ok_or("VM stack underflow")?;
+                match value {
+                    Value::Int(n) => stack.push(Value::Int(n.checked_neg().ok_or("integer overflow")?)),
+                    Value::Bool(_) => return Err("type error: unary '-' expects an integer".into()),
+                }
             }
             Op::JumpIfFalse(target) => {
-                let condition = stack.pop().ok_or("VM stack underflow")?;
-                if condition == 0 { pc = *target; continue; }
+                let value = stack.pop().ok_or("VM stack underflow")?;
+                let is_false = match value {
+                    Value::Bool(value) => !value,
+                    Value::Int(n) => n == 0,
+                };
+                if is_false { pc = *target; continue; }
             }
             Op::Jump(target) => { pc = *target; continue; }
             Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
@@ -458,17 +482,23 @@ fn run(code: &[Op]) -> Result<(), String> {
             Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => {
                 let b = stack.pop().ok_or("VM stack underflow")?;
                 let a = stack.pop().ok_or("VM stack underflow")?;
-                let value = match &code[pc] {
-                    Op::Add => a.checked_add(b).ok_or("integer overflow")?,
-                    Op::Sub => a.checked_sub(b).ok_or("integer overflow")?,
-                    Op::Mul => a.checked_mul(b).ok_or("integer overflow")?,
-                    Op::Div => { if b == 0 { return Err("division by zero".into()); } a.checked_div(b).ok_or("integer overflow")? },
-                    Op::Eq => i64::from(a == b),
-                    Op::Ne => i64::from(a != b),
-                    Op::Lt => i64::from(a < b),
-                    Op::Le => i64::from(a <= b),
-                    Op::Gt => i64::from(a > b),
-                    Op::Ge => i64::from(a >= b),
+                let value = match (&code[pc], a, b) {
+                    (Op::Add, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_add(b).ok_or("integer overflow")?),
+                    (Op::Sub, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_sub(b).ok_or("integer overflow")?),
+                    (Op::Mul, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_mul(b).ok_or("integer overflow")?),
+                    (Op::Div, Value::Int(_), Value::Int(0)) => return Err("division by zero".into()),
+                    (Op::Div, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_div(b).ok_or("integer overflow")?),
+                    (Op::Eq, a, b) => Value::Bool(a == b),
+                    (Op::Ne, a, b) => Value::Bool(a != b),
+                    (Op::Lt, Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
+                    (Op::Le, Value::Int(a), Value::Int(b)) => Value::Bool(a <= b),
+                    (Op::Gt, Value::Int(a), Value::Int(b)) => Value::Bool(a > b),
+                    (Op::Ge, Value::Int(a), Value::Int(b)) => Value::Bool(a >= b),
+                    (Op::Add, _, _) => return Err("type error: '+' expects integers".into()),
+                    (Op::Sub, _, _) => return Err("type error: '-' expects integers".into()),
+                    (Op::Mul, _, _) => return Err("type error: '*' expects integers".into()),
+                    (Op::Div, _, _) => return Err("type error: '/' expects integers".into()),
+                    (Op::Lt | Op::Le | Op::Gt | Op::Ge, _, _) => return Err("type error: ordered comparisons expect integers".into()),
                     _ => unreachable!(),
                 };
                 stack.push(value);
