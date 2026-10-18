@@ -8,6 +8,7 @@ mod chain_runtime;
 mod chain_protocol;
 mod chain_block;
 mod block_store;
+mod chain_rpc;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -1886,6 +1887,15 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             println!("Replay verification: PASS (local file only; no consensus verification)");
             Ok(())
         }
+        [_, mode, store_path, chain_id] if mode == "--chain-rpc" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            crate::chain_rpc::serve(store_path.clone(), chain_id, 8545)
+        }
+        [_, mode, store_path, chain_id, port] if mode == "--chain-rpc" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
+            crate::chain_rpc::serve(store_path.clone(), chain_id, port)
+        }
         [_, mode, ledger_path, address, amount] if mode == "--chain-init" => {
             if Path::new(ledger_path).exists() {
                 return Err(format!("ledger already exists at {ledger_path}; refusing to overwrite it"));
@@ -2033,7 +2043,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id>");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port]");
             process::exit(2);
         }
     };
