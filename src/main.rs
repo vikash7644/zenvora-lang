@@ -11,6 +11,7 @@ mod chain_block;
 mod block_store;
 mod chain_rpc;
 mod chain_p2p;
+mod tx_pool;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
