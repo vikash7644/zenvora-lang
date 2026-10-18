@@ -4,7 +4,7 @@
 
 ## File framing
 
-The compiler runs the control-flow verifier on generated instructions before returning compiled code, and the loader repeats validation after decoding a file. A file begins with this exact first line:
+The source compiler checks reachable function return-kind consistency; the loader runs the full v1 control-flow and stack verifier after decoding a file. A file begins with this exact first line:
 
 ```text
 ZENVORA_BYTECODE 1
