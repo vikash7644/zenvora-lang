@@ -291,3 +291,19 @@ fn ordered_comparisons_reject_boolean_values() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("ordered comparisons expect integers"));
 }
+
+#[test]
+fn boolean_not_and_or_operators_work_with_expected_precedence() {
+    let output = run_program(
+        "show not false\nshow true and false\nshow true or false and false\nshow (true or false) and false\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "true\nfalse\ntrue\nfalse\n");
+}
+
+#[test]
+fn logical_operators_reject_integer_operands() {
+    let output = run_program("show true and 1\n");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("type error: 'and' expects booleans"));
+}
