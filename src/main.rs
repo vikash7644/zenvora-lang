@@ -1684,11 +1684,11 @@ mod tests {
     #[test]
     fn check_program_compiles_without_running_side_effects() {
         let path = std::env::temp_dir().join(format!("zenvora-check-{}.zv", std::process::id()));
-        std::fs::write(&path, "show 1 / 0\\n").unwrap();
+        std::fs::write(&path, concat!("show 1 / 0", "\n")).unwrap();
         let path_text = path.to_string_lossy().to_string();
         // Compilation succeeds even though executing this program would divide by zero.
         assert!(super::check_program(&path_text).is_ok());
-        std::fs::write(&path, "show (1 + )\\n").unwrap();
+        std::fs::write(&path, concat!("show (1 + )", "\n")).unwrap();
         assert!(super::check_program(&path_text).unwrap_err().contains("expected"));
         std::fs::remove_file(path).unwrap();
     }
