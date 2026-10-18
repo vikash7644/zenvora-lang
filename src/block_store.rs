@@ -27,6 +27,8 @@ pub struct BlockStore {
     chain_id: u64,
     genesis_balances: BTreeMap<String, i64>,
     blocks: Vec<StoredBlock>,
+    /// Verified runtime at the stored tip; updated only after durable append succeeds.
+    runtime: ChainRuntime,
 }
 
 impl BlockStore {
@@ -41,7 +43,7 @@ impl BlockStore {
         for (address, balance) in &genesis_balances {
             check.set_genesis_balance(address, *balance)?;
         }
-        Ok(Self { chain_id, genesis_balances, blocks: Vec::new() })
+        Ok(Self { chain_id, genesis_balances, blocks: Vec::new(), runtime: check })
     }
 
     pub fn chain_id(&self) -> u64 {
@@ -117,21 +119,11 @@ impl BlockStore {
         // transactions. Replay the stored prefix and independently execute the candidate
         // before persisting it; otherwise a correctly signed header could commit a state
         // produced by unrelated transactions and only fail on the next restart.
-        let mut replayed = ChainRuntime::new();
-        for (address, balance) in &self.genesis_balances {
-            replayed.set_genesis_balance(address, *balance)?;
-        }
-        let mut previous_header: Option<BlockHeaderV1> = None;
-        for stored in &self.blocks {
-            execute_block(
-                &mut replayed,
-                &stored.header,
-                &stored.transactions,
-                self.chain_id,
-                previous_header.as_ref(),
-            )?;
-            previous_header = Some(stored.header.clone());
-        }
+        // The cache is created from genesis, rebuilt by full replay on load, and only
+        // advanced after a successful durable append. This keeps appends O(block-size)
+        // instead of replaying the entire chain on every new block.
+        let mut replayed = self.runtime.clone();
+        let previous_header = self.blocks.last().map(|stored| stored.header.clone());
         let replayed_receipts = execute_block(
             &mut replayed,
             header,
@@ -153,6 +145,7 @@ impl BlockStore {
             self.blocks.pop();
             return Err(error);
         }
+        self.runtime = replayed;
         Ok(())
     }
 
@@ -292,6 +285,7 @@ impl BlockStore {
             )?;
             previous_header = Some(block.header.clone());
         }
+        store.runtime = runtime.clone();
         Ok((store, runtime))
     }
 }
