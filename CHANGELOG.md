@@ -4,6 +4,7 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Added DNA complement and GC-content helpers plus an integer atomic-mass summation helper, with input validation and regression tests.
 - Added checked integer mathematics helpers (`gcd`, `lcm`, `factorial`, `is_prime`, `fibonacci`, `pow_int`, `mean`) and introductory integer-only science formula helpers (`speed`, `force`, `kinetic_energy`, `density`, `molarity`, `bmi_x10`), with regression tests and `examples/science.zv`.
 
 - Added `zv --check <file.zv>` to compile source and relative imports without executing the program; added regression coverage for successful compile-only validation and syntax errors.
