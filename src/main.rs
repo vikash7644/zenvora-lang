@@ -1855,18 +1855,30 @@ mod tests {
 
     #[test]
     fn string_helpers_and_sum_cover_common_standard_library_operations() {
-        let output = execute("show starts_with(\\"zenvora-lang\\", \\"zen\\")\\nshow ends_with(\\"zenvora-lang\\", \\"lang\\")\\nshow replace(\\"a-b-a\\", \\"a\\", \\"x\\")\\nshow split(\\"red,green,blue\\", \\",\\")\\nshow join(array(\\"Zenvora\\", \\"Lang\\"), \\" \\")\\nshow sum(array(10, 20, 12))\\n").unwrap();
+        let output = execute(r#"show starts_with("zenvora-lang", "zen")
+show ends_with("zenvora-lang", "lang")
+show replace("a-b-a", "a", "x")
+show split("red,green,blue", ",")
+show join(array("Zenvora", "Lang"), " ")
+show sum(array(10, 20, 12))
+"#).unwrap();
         assert_eq!(output, vec!["true", "true", "x-b-x", "[red, green, blue]", "Zenvora Lang", "42"]);
     }
 
     #[test]
     fn string_helpers_and_sum_reject_invalid_inputs_and_overflow() {
-        assert!(execute("show starts_with(1, \\"x\\")\\n").unwrap_err().contains("two strings"));
-        assert!(execute("show split(\\"a\\", \\"\\")\\n").unwrap_err().contains("separator cannot be empty"));
-        assert!(execute("show replace(\\"abc\\", \\"\\", \\"x\\")\\n").unwrap_err().contains("search string cannot be empty"));
-        assert!(execute("show join(array(\\"ok\\", 2), \\" \\")\\n").unwrap_err().contains("array containing only strings"));
-        assert!(execute("show sum(array(1, \\"two\\"))\\n").unwrap_err().contains("only integers"));
-        assert!(execute("show sum(array(9223372036854775807, 1))\\n").unwrap_err().contains("integer overflow"));
+        assert!(execute(r#"show starts_with(1, "x")
+"#).unwrap_err().contains("two strings"));
+        assert!(execute(r#"show split("a", "")
+"#).unwrap_err().contains("separator cannot be empty"));
+        assert!(execute(r#"show replace("abc", "", "x")
+"#).unwrap_err().contains("search string cannot be empty"));
+        assert!(execute(r#"show join(array("ok", 2), " ")
+"#).unwrap_err().contains("array containing only strings"));
+        assert!(execute(r#"show sum(array(1, "two"))
+"#).unwrap_err().contains("only integers"));
+        assert!(execute(r#"show sum(array(9223372036854775807, 1))
+"#).unwrap_err().contains("integer overflow"));
     }
 
     #[test]
