@@ -7,7 +7,7 @@ mod module_loader;
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     Number(i64), String(String), Bool(bool), Ident(String), And, Or, Not, Plus, Minus, Star, Slash,
-    LParen, RParen, Comma, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
+    LParen, RParen, LBracket, RBracket, Comma, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
 }
 
 fn lex(input: &str) -> Result<Vec<Token>, String> {
@@ -70,7 +70,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
         }
         let token = match c {
             '+' => Token::Plus, '-' => Token::Minus, '*' => Token::Star, '/' => Token::Slash,
-            '(' => Token::LParen, ')' => Token::RParen, ',' => Token::Comma,
+            '(' => Token::LParen, ')' => Token::RParen, '[' => Token::LBracket, ']' => Token::RBracket, ',' => Token::Comma,
             '=' if i + 1 < chars.len() && chars[i + 1] == '=' => { i += 1; Token::EqEq }
             '!' if i + 1 < chars.len() && chars[i + 1] == '=' => { i += 1; Token::NotEq }
             '<' if i + 1 < chars.len() && chars[i + 1] == '=' => { i += 1; Token::LessEq }
@@ -89,7 +89,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone, PartialEq)]
 enum Op {
     Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
+    Eq, Ne, Lt, Le, Gt, Ge, Index, JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
 struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
@@ -196,6 +196,12 @@ impl Parser {
                     if is_builtin(&name) { self.code.push(Op::Builtin(name, arg_count)); } else { self.code.push(Op::Call(name, arg_count)); }
                 } else {
                     self.code.push(Op::Load(name));
+                }
+                while self.peek() == &Token::LBracket {
+                    self.take();
+                    self.expression()?;
+                    if self.take() != Token::RBracket { return Err("expected ']' after index expression".into()); }
+                    self.code.push(Op::Index);
                 }
             },
             Token::Minus => { self.factor()?; self.code.push(Op::Neg); }
@@ -663,6 +669,18 @@ where
                 Value::Bool(value) => output(format!("{value}")),
                 value @ (Value::Array(_) | Value::Map(_)) => output(value_to_string(&value)),
             },
+            Op::Index => {
+                let index = stack.pop().ok_or("VM stack underflow while reading collection index")?;
+                let collection = stack.pop().ok_or("VM stack underflow while reading collection")?;
+                match (collection, index) {
+                    (Value::Array(items), Value::Int(index)) if index >= 0 => stack.push(items.get(index as usize).cloned().ok_or_else(|| format!("array index {index} out of bounds"))?),
+                    (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
+                    (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
+                    (Value::Map(items), Value::Str(key)) => stack.push(items.get(&key).cloned().ok_or_else(|| format!("map key '{key}' not found"))?),
+                    (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
+                    _ => return Err("type error: indexing expects an array or map".into()),
+                }
+            }
             Op::Neg => {
                 let value = stack.pop().ok_or("VM stack underflow")?;
                 match value {
@@ -793,6 +811,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
             Op::Or => "OR".into(),
             Op::Print => "PRINT".into(),
             Op::Eq => "EQ".into(),
+            Op::Index => "INDEX".into(),
             Op::Ne => "NE".into(),
             Op::Lt => "LT".into(),
             Op::Le => "LE".into(),
@@ -848,6 +867,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "OR" if parts.len() == 1 => Op::Or,
             "PRINT" if parts.len() == 1 => Op::Print,
             "EQ" if parts.len() == 1 => Op::Eq,
+            "INDEX" if parts.len() == 1 => Op::Index,
             "NE" if parts.len() == 1 => Op::Ne,
             "LT" if parts.len() == 1 => Op::Lt,
             "LE" if parts.len() == 1 => Op::Le,
@@ -1036,7 +1056,7 @@ mod tests {
             Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Print,
             Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::JumpIfFalseKeep(27), Op::JumpIfTrueKeep(27), Op::Jump(24),
             Op::CallTarget { target: 0, params: vec!["arg".into()], arg_count: 1 },
-            Op::Return, Op::ReturnValue,
+            Op::Return, Op::ReturnValue, Op::Index,
         ];
         let encoded = super::serialize_bytecode(&code).unwrap();
         assert_eq!(super::deserialize_bytecode(&encoded).unwrap(), code);
@@ -1140,6 +1160,26 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn direct_array_and_map_indexing_supports_nested_expressions_and_bytecode() {
+        let source = "define numbers := array(10, 20, 30)\nshow numbers[0]\nshow numbers[1 + 1]\ndefine profile := map(\"name\", \"Zenvora\", \"level\", 6)\nshow profile[\"name\"]\nshow array(array(7, 8), array(9, 10))[1][0]\n";
+        let code = compile(source).unwrap();
+        let encoded = super::serialize_bytecode(&code).unwrap();
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["10", "30", "Zenvora", "9"]);
+    }
+
+    #[test]
+    fn direct_indexing_reports_invalid_indexes_and_types() {
+        assert!(execute("show array(1)[2]\n").unwrap_err().contains("out of bounds"));
+        assert!(execute("show array(1)[-1]\n").unwrap_err().contains("out of bounds"));
+        assert!(execute("show map(\"x\", 1)[\"missing\"]\n").unwrap_err().contains("not found"));
+        assert!(execute("show array(1)[\"zero\"]\n").unwrap_err().contains("must be an integer"));
+        assert!(execute("show 5[0]\n").unwrap_err().contains("indexing expects"));
     }
 
     #[test]
