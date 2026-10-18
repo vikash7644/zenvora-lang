@@ -78,8 +78,7 @@ impl<'v> ExprParser<'v> {
     }
     fn expr(&mut self, min_prec: u8) -> Result<Value, String> {
         let mut left = self.atom()?;
-        loop {
-            let op = match self.tokens.get(self.pos) { Some(Token::Op(op)) => op.clone(), _ => break };
+        while let Some(Token::Op(op)) = self.tokens.get(self.pos).cloned() {
             let prec = precedence(&op);
             if prec < min_prec || prec == 0 { break; }
             self.pos += 1;
@@ -170,16 +169,15 @@ fn run_lines(lines: &[String], vars: &mut HashMap<String, Value>, depth: usize) 
         if line == "}" { return Err(format!("unexpected '}}' on line {}", i + 1)); }
         if line == "break" { return Ok(Flow::Break); }
         if line == "continue" { return Ok(Flow::Continue); }
-        if line.starts_with("define ") {
-            let rest = &line[7..];
+        if let Some(rest) = line.strip_prefix("define ") {
             let (name, expr) = rest.split_once(":=").ok_or("expected: define name := expression")?;
             let name = name.trim();
             if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') { return Err("invalid variable name".into()); }
             let value = ExprParser::parse(expr.trim(), vars)?;
             vars.insert(name.to_string(), value); i += 1; continue;
         }
-        if line.starts_with("show ") {
-            let value = ExprParser::parse(line[5..].trim(), vars)?;
+        if let Some(expr) = line.strip_prefix("show ") {
+            let value = ExprParser::parse(expr.trim(), vars)?;
             println!("{}", value.display()); i += 1; continue;
         }
         if line.starts_with("if ") && line.ends_with('{') {
