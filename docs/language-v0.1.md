@@ -25,6 +25,8 @@ cargo run -- examples/modules.zv
 
 The Rust unit and integration suites exercise compiler/VM behavior, CLI flows, and runnable language examples. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
 
+Reserved syntax words such as `if`, `repeat`, `true`, `and`, and `return` cannot be used as variable, function, parameter, or contract-state identifiers. This avoids names that the lexer or statement parser would interpret as syntax rather than identifiers.
+
 ## Modules
 
 A source file can import another .zv file with a relative path, for example: use "modules/math.zv". Paths resolve relative to the importing file. A module is loaded only once per program. Cyclic imports and import nesting deeper than 64 files are rejected with an error. This is an early source-expansion module system: explicit namespaces, visibility rules, package resolution and module versioning are not implemented.

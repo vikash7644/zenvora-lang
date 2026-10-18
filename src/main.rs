@@ -315,7 +315,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             let (name, args_with_close) = call_text.split_once('(').ok_or_else(|| format!("line {}: expected 'call function_name(...)'", line_no + 1))?;
             let args_text = args_with_close.strip_suffix(')').ok_or_else(|| format!("line {}: expected ')' after function arguments", line_no + 1))?;
             let name = name.trim();
-            if name.is_empty() || !name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || !c.is_ascii_digit())) {
+            if !valid_identifier(name) {
                 return Err(format!("line {}: invalid function name", line_no + 1));
             }
             let args = split_arguments(args_text);
@@ -444,7 +444,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         let statement = if let Some(rest) = line.strip_prefix("define ") {
             let (name, expr) = rest.split_once(":=").ok_or_else(|| format!("line {}: expected 'define name := expression'", line_no + 1))?;
             let name = name.trim();
-            if name.is_empty() || !name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || !c.is_ascii_digit())) {
+            if !valid_identifier(name) {
                 return Err(format!("line {}: invalid variable name", line_no + 1));
             }
             (name.to_string(), expr.trim(), false)
@@ -643,12 +643,12 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             let (name, params_text) = header.split_once('(').ok_or_else(|| format!("line {}: expected 'fn name(parameters) {{'", i + 1))?;
             let params_text = params_text.strip_suffix(')').ok_or_else(|| format!("line {}: expected ')' in function declaration", i + 1))?;
             let name = name.trim();
-            if name.is_empty() || !name.chars().enumerate().all(|(j,c)| c == '_' || c.is_ascii_alphanumeric() && (j > 0 || !c.is_ascii_digit())) {
+            if !valid_identifier(name) {
                 return Err(format!("line {}: invalid function name", i + 1));
             }
             let params: Vec<String> = if params_text.trim().is_empty() { Vec::new() } else { params_text.split(',').map(|p| p.trim().to_string()).collect() };
             for param in &params {
-                if param.is_empty() || !param.chars().enumerate().all(|(j,c)| c == '_' || c.is_ascii_alphanumeric() && (j > 0 || !c.is_ascii_digit())) {
+                if !valid_identifier(param) {
                     return Err(format!("line {}: invalid parameter name in function '{name}'", i + 1));
                 }
             }
@@ -1546,9 +1546,20 @@ fn hex_decode(input: &str) -> Result<String, String> {
 }
 
 fn valid_identifier(name: &str) -> bool {
-    !name.is_empty() && name.chars().enumerate().all(|(index, ch)| {
+    if name.is_empty() || !name.chars().enumerate().all(|(index, ch)| {
         ch == '_' || ch.is_ascii_alphanumeric() && (index > 0 || !ch.is_ascii_digit())
-    })
+    }) {
+        return false;
+    }
+    // These words are recognized by the lexer or statement parser and cannot
+    // safely act as ordinary variable, function, parameter, or state names.
+    !matches!(
+        name,
+        "true" | "false" | "and" | "or" | "not" |
+        "define" | "show" | "print" | "if" | "otherwise" | "repeat" |
+        "break" | "continue" | "return" | "call" | "fn" | "use" |
+        "contract" | "state" | "action" | "view"
+    )
 }
 
 fn read_source(path: &str) -> Result<String, String> {
@@ -1863,6 +1874,21 @@ mod tests {
     fn recursive_calls_stop_at_the_call_depth_limit() {
         let error = execute("call recurse()\nfn recurse() {\ncall recurse()\n}\n").unwrap_err();
         assert!(error.contains("maximum function call depth exceeded"));
+    }
+
+    #[test]
+    fn reserved_keywords_are_rejected_as_identifiers() {
+        for source in [
+            "define if := 1\n",
+            "define true := 1\n",
+            "define otherwise := 1\n",
+            "fn repeat(value) {\nreturn value\n}\n",
+            "fn valid(and) {\nreturn 1\n}\n",
+        ] {
+            let error = compile(source).unwrap_err();
+            assert!(error.contains("invalid variable name") || error.contains("invalid function name") || error.contains("invalid parameter name"), "unexpected error: {error}");
+        }
+        assert_eq!(execute("define counter := 1\nshow counter\n").unwrap(), vec!["1"]);
     }
 
     #[test]

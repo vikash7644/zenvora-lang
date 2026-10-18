@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Rejected language keywords as variable, function, parameter, and contract-state identifiers, with regression coverage for declaration and function headers.
+
 - Added `unique(array)` with stable first-occurrence ordering and `assert_eq(actual, expected[, message])` for test and contract-invariant assertions.
 - Added regression tests for mixed-value deduplication, empty arrays, equality, arity errors, and custom assertion messages.
 
