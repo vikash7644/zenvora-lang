@@ -31,6 +31,9 @@ Requires Rust and Cargo (including on Android through Termux if the Rust toolcha
 ```sh
 cargo check
 cargo test
+cargo run -- --new my-first-project
+cargo run -- my-first-project/main.zv
+cargo run -- --check my-first-project/main.zv
 cargo run -- examples/hello.zv
 cargo run -- examples/loops.zv
 cargo run -- examples/functions.zv
@@ -58,6 +61,18 @@ Expected example output:
 20
 35
 ```
+
+## Create your first project
+
+The starter command creates a new folder with `main.zv` and a project `README.md`. It refuses to overwrite an existing path and validates the project name.
+
+```sh
+cargo run -- --new my-first-project
+cargo run -- my-first-project/main.zv
+cargo run -- --check my-first-project/main.zv
+```
+
+The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. When using a built release binary, the same commands are `zv --new my-first-project`, `zv my-first-project/main.zv`, and `zv --check my-first-project/main.zv`.
 
 ## Automated regression tests
 
