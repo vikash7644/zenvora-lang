@@ -87,6 +87,11 @@ impl ChainRuntime {
         *self.balances.get(address).unwrap_or(&0)
     }
 
+    /// Read-only genesis allocation set used to anchor deterministic block replay.
+    pub fn genesis_balances(&self) -> &BTreeMap<String, i64> {
+        &self.genesis_balances
+    }
+
     pub fn receipts(&self) -> &[TransferReceipt] {
         &self.receipts
     }
