@@ -49,7 +49,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone)]
 enum Op {
     Push(i64), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize),
+    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String), CallTarget(usize), Return,
 }
 
 struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
@@ -117,7 +117,7 @@ enum BlockFrame {
     Repeat { start: usize, exit_jump: usize, breaks: Vec<usize> },
 }
 
-fn compile(source: &str) -> Result<Vec<Op>, String> {
+fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     let mut code = Vec::new();
     let mut blocks: Vec<BlockFrame> = Vec::new();
 
@@ -153,6 +153,16 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             blocks.push(BlockFrame::Repeat { start, exit_jump, breaks: Vec::new() });
             continue;
         }
+
+        if let Some(rest) = line.strip_prefix("call ") {
+            let name = rest.strip_suffix("()").ok_or_else(|| format!("line {}: expected 'call function_name()'", line_no + 1))?.trim();
+            if name.is_empty() || !name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || !c.is_ascii_digit())) {
+                return Err(format!("line {}: invalid function name", line_no + 1));
+            }
+            code.push(Op::Call(name.to_string()));
+            continue;
+        }
+        if line == "return" { code.push(Op::Return); continue; }
 
         if line == "break" {
             let Some(index) = blocks.iter().rposition(|block| matches!(block, BlockFrame::Repeat { .. })) else {
@@ -231,7 +241,7 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
         } else if let Some((name, expr)) = line.split_once(":=") {
             (name.trim().to_string(), expr.trim(), false)
         } else {
-            return Err(format!("line {}: expected a declaration, assignment, show, if, repeat, break, continue, or closing brace", line_no + 1));
+            return Err(format!("line {}: expected a declaration, assignment, show, call, return, if, repeat, break, continue, or closing brace", line_no + 1));
         };
 
         if statement.1.is_empty() { return Err(format!("line {}: missing expression", line_no + 1)); }
@@ -252,10 +262,76 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
     Ok(code)
 }
 
+
+fn compile(source: &str) -> Result<Vec<Op>, String> {
+    let mut main_source = String::new();
+    let mut functions: Vec<(String, String)> = Vec::new();
+    let lines: Vec<&str> = source.lines().collect();
+    let mut i = 0usize;
+    while i < lines.len() {
+        let line = lines[i].trim();
+        if let Some(header) = line.strip_prefix("fn ").and_then(|s| s.strip_suffix('{')) {
+            let name = header.trim().strip_suffix("()").ok_or_else(|| format!("line {}: expected 'fn name() {{'", i + 1))?.trim();
+            if name.is_empty() || !name.chars().enumerate().all(|(j,c)| c == '_' || c.is_ascii_alphanumeric() && (j > 0 || !c.is_ascii_digit())) {
+                return Err(format!("line {}: invalid function name", i + 1));
+            }
+            if functions.iter().any(|(existing, _)| existing == name) {
+                return Err(format!("line {}: duplicate function '{name}'", i + 1));
+            }
+            i += 1;
+            let mut depth = 1i32;
+            let mut body = String::new();
+            while i < lines.len() && depth > 0 {
+                let current = lines[i];
+                let trimmed = current.trim();
+                let opens = current.chars().filter(|c| *c == '{').count() as i32;
+                let closes = current.chars().filter(|c| *c == '}').count() as i32;
+                depth += opens - closes;
+                if depth > 0 { body.push_str(current); body.push('\n'); }
+                i += 1;
+            }
+            if depth != 0 { return Err(format!("missing closing brace for function '{name}'")); }
+            functions.push((name.to_string(), body));
+        } else {
+            main_source.push_str(lines[i]);
+            main_source.push('\n');
+            i += 1;
+        }
+    }
+
+    let mut code = compile_core(&main_source)?;
+    let main_exit = code.len();
+    code.push(Op::Jump(usize::MAX));
+    let mut entries: HashMap<String, usize> = HashMap::new();
+    for (name, body) in &functions {
+        let entry = code.len();
+        entries.insert(name.clone(), entry);
+        let mut body_code = compile_core(body)?;
+        for op in &mut body_code {
+            match op {
+                Op::Jump(target) | Op::JumpIfFalse(target) if *target != usize::MAX => *target += entry,
+                _ => {}
+            }
+        }
+        code.extend(body_code);
+        code.push(Op::Return);
+    }
+    let end = code.len();
+    code[main_exit] = Op::Jump(end);
+    for op in &mut code {
+        if let Op::Call(name) = op {
+            let target = entries.get(name).copied().ok_or_else(|| format!("call to undefined function '{name}'"))?;
+            *op = Op::CallTarget(target);
+        }
+    }
+    Ok(code)
+}
+
 fn run(code: &[Op]) -> Result<(), String> {
     let mut stack: Vec<i64> = Vec::new();
     let mut vars: HashMap<String, i64> = HashMap::new();
     let mut pc = 0usize;
+    let mut call_stack: Vec<usize> = Vec::new();
     let mut steps = 0usize;
     const MAX_STEPS: usize = 1_000_000;
     while pc < code.len() {
@@ -277,6 +353,8 @@ fn run(code: &[Op]) -> Result<(), String> {
                 if condition == 0 { pc = *target; continue; }
             }
             Op::Jump(target) => { pc = *target; continue; }
+            Op::CallTarget(target) => { call_stack.push(pc + 1); pc = *target; continue; }
+            Op::Return => { pc = call_stack.pop().ok_or("return used outside a function call")?; continue; }
             Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => {
                 let b = stack.pop().ok_or("VM stack underflow")?;
                 let a = stack.pop().ok_or("VM stack underflow")?;
@@ -304,7 +382,7 @@ fn run(code: &[Op]) -> Result<(), String> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 || args[1] == "--help" || args[1] == "-h" {
-        println!("Zenvora Lang v0.2.0\nUsage: zv <file.zv>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.3.0\nUsage: zv <file.zv>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         if args.len() != 2 { process::exit(2); }
         return;
     }
