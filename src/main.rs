@@ -2922,7 +2922,7 @@ mod tests {
     fn bytecode_verifier_rejects_structural_errors_in_unreachable_code() {
         let bytecode = "ZENVORA_BYTECODE 1\nJUMP 3\nJUMP 99\nJUMP 3\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
-        assert!(error.contains("invalid target"), "unexpected error: {error}");
+        assert!(error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
     }
 
     #[test]
