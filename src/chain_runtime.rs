@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::chain_protocol::TransactionV1;
+use sha2::{Digest, Sha256};
 
 use super::{compile, run_with_output};
 
@@ -93,6 +94,72 @@ impl ChainRuntime {
     /// Next expected nonce for an account. Signed transactions start at nonce zero.
     pub fn account_nonce(&self, address: &str) -> u64 {
         *self.account_nonces.get(address).unwrap_or(&0)
+    }
+
+    /// Deterministic state commitment over sorted balances and account nonces.
+    pub fn state_root(&self) -> [u8; 32] {
+        let addresses: BTreeSet<&str> = self.balances.keys()
+            .chain(self.account_nonces.keys())
+            .map(String::as_str)
+            .collect();
+        let mut encoded = Vec::new();
+        encoded.extend_from_slice(&(addresses.len() as u32).to_be_bytes());
+        for address in addresses {
+            let bytes = address.as_bytes();
+            encoded.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+            encoded.extend_from_slice(bytes);
+            encoded.extend_from_slice(&self.balance(address).to_be_bytes());
+            encoded.extend_from_slice(&self.account_nonce(address).to_be_bytes());
+        }
+        hash_tagged(b"ZENVORA_STATE_ROOT_V1\\0", &encoded)
+    }
+
+    /// Deterministic Merkle commitment for an ordered set of execution receipts.
+    pub fn receipt_root_for(receipts: &[TransferReceipt]) -> Result<[u8; 32], String> {
+        let mut level = Vec::with_capacity(receipts.len());
+        for receipt in receipts {
+            if !valid_address(&receipt.from) || !valid_address(&receipt.to) || receipt.from == receipt.to {
+                return Err("receipt contains invalid addresses".into());
+            }
+            if receipt.nonce.is_some() != receipt.transaction_id.is_some() {
+                return Err("receipt has incomplete signed transaction metadata".into());
+            }
+            if receipt.transaction_id.as_ref().is_some_and(|id| !valid_transaction_id(id)) {
+                return Err("receipt contains an invalid transaction ID".into());
+            }
+            let mut encoded = Vec::new();
+            encoded.extend_from_slice(&receipt.sequence.to_be_bytes());
+            append_string(&mut encoded, &receipt.from)?;
+            append_string(&mut encoded, &receipt.to)?;
+            encoded.extend_from_slice(&receipt.amount.to_be_bytes());
+            encoded.push(u8::from(receipt.accepted));
+            encoded.extend_from_slice(&receipt.sender_balance.to_be_bytes());
+            encoded.extend_from_slice(&receipt.recipient_balance.to_be_bytes());
+            match receipt.nonce {
+                Some(nonce) => {
+                    encoded.push(1);
+                    encoded.extend_from_slice(&nonce.to_be_bytes());
+                    append_string(&mut encoded, receipt.transaction_id.as_deref().unwrap_or(""))?;
+                }
+                None => encoded.push(0),
+            }
+            level.push(hash_tagged(b"ZENVORA_RECEIPT_LEAF_V1\\0", &encoded));
+        }
+        if level.is_empty() {
+            return Ok(hash_tagged(b"ZENVORA_RECEIPT_EMPTY_V1\\0", &[]));
+        }
+        while level.len() > 1 {
+            let mut next = Vec::with_capacity((level.len() + 1) / 2);
+            for pair in level.chunks(2) {
+                let right = pair.get(1).unwrap_or(&pair[0]);
+                let mut encoded = Vec::with_capacity(64);
+                encoded.extend_from_slice(&pair[0]);
+                encoded.extend_from_slice(right);
+                next.push(hash_tagged(b"ZENVORA_RECEIPT_NODE_V1\\0", &encoded));
+            }
+            level = next;
+        }
+        Ok(level[0])
     }
 
     /// Saves genesis allocations and the receipt log. Current balances are derived by replay,
@@ -392,6 +459,20 @@ impl ChainRuntime {
     }
 }
 
+fn hash_tagged(domain: &[u8], payload: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(domain);
+    hasher.update(payload);
+    hasher.finalize().into()
+}
+
+fn append_string(output: &mut Vec<u8>, value: &str) -> Result<(), String> {
+    let length = u32::try_from(value.len()).map_err(|_| "receipt field is too large")?;
+    output.extend_from_slice(&length.to_be_bytes());
+    output.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
 fn valid_transaction_id(value: &str) -> bool {
     value.len() == 64
         && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
@@ -510,6 +591,29 @@ mod tests {
         std::fs::write(&path, "ZENVORA_LEDGER_V2\nG\talice\t10\nG\talice\t20\n").unwrap();
         assert!(ChainRuntime::load_from_file(&path).is_err());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn state_root_is_deterministic_and_changes_when_state_changes() {
+        let mut first = funded_runtime();
+        let second = funded_runtime();
+        assert_eq!(first.state_root(), second.state_root());
+        first.transfer("alice", "bob", 10).unwrap();
+        assert_ne!(first.state_root(), second.state_root());
+    }
+
+    #[test]
+    fn receipt_root_is_deterministic_order_sensitive_and_handles_empty_input() {
+        let mut runtime = funded_runtime();
+        let first = runtime.transfer("alice", "bob", 10).unwrap();
+        let second = runtime.transfer("bob", "alice", 3).unwrap();
+        let a = ChainRuntime::receipt_root_for(&[first.clone(), second.clone()]).unwrap();
+        let b = ChainRuntime::receipt_root_for(&[first.clone(), second.clone()]).unwrap();
+        let reversed = ChainRuntime::receipt_root_for(&[second, first]).unwrap();
+        let empty = ChainRuntime::receipt_root_for(&[]).unwrap();
+        assert_eq!(a, b);
+        assert_ne!(a, reversed);
+        assert_ne!(a, empty);
     }
 
     #[test]
