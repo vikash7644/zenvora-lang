@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Added signed-transaction admission regression coverage for wrong chain IDs, expired transactions, nonce gaps, and insufficient amount-plus-fee reserves; each rejection is checked for zero state, nonce, or receipt mutation.
+
 - The source compiler now checks reachable function return-kind consistency before returning compiled instructions, so mixed void/value return paths are rejected during source compilation instead of only when serialized bytecode is loaded. Added a source-level regression test for a value-returning function with a reachable void path.
 
 - Extended contract-view checks with conservative call-graph analysis: views now reject calls to helper functions that directly assign declared contract state or transitively call detected state-mutating functions. Regression coverage verifies a view cannot reach a mutating helper. This is not a complete effect system; complex dynamic or indirect behaviors remain outside the current language model.
