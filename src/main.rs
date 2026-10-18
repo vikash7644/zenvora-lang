@@ -434,6 +434,37 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
 }
 
 
+// Count block braces only in source code, ignoring quoted strings and comments.
+fn count_block_braces(line: &str) -> (i32, i32) {
+    let mut opens = 0i32;
+    let mut closes = 0i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    for ch in line.chars() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if ch == '#' {
+            break;
+        }
+        if ch == '"' {
+            in_string = true;
+        } else if ch == '{' {
+            opens += 1;
+        } else if ch == '}' {
+            closes += 1;
+        }
+    }
+    (opens, closes)
+}
+
 fn compile(source: &str) -> Result<Vec<Op>, String> {
     let mut main_source = String::new();
     let mut functions: Vec<(String, Vec<String>, String)> = Vec::new();
@@ -466,8 +497,7 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             let mut body = String::new();
             while i < lines.len() && depth > 0 {
                 let current = lines[i];
-                let opens = current.chars().filter(|c| *c == '{').count() as i32;
-                let closes = current.chars().filter(|c| *c == '}').count() as i32;
+                let (opens, closes) = count_block_braces(current);
                 depth += opens - closes;
                 if depth > 0 { body.push_str(current); body.push('\n'); }
                 i += 1;
@@ -1112,6 +1142,14 @@ mod tests {
         assert!(execute("show map(\"x\")\n").unwrap_err().contains("alternating string keys"));
         assert!(execute("show map(1, 2)\n").unwrap_err().contains("keys must be strings"));
         assert!(execute("show len(true)\n").unwrap_err().contains("len expects"));
+    }
+
+    #[test]
+    fn function_brace_count_ignores_braces_in_strings_and_comments() {
+        let output = execute(
+            "show render()\nfn render() {\n # these braces are only comment text: } {{{\n show \"left { brace\"\n show \"right } brace\"\n return \"done { }\"\n}\n"
+        ).unwrap();
+        assert_eq!(output, vec!["left { brace", "right } brace", "done { }"]);
     }
 
     #[test]
