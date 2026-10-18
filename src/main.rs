@@ -86,7 +86,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone, PartialEq)]
 enum Op {
     Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
+    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
 struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
@@ -102,8 +102,12 @@ impl Parser {
         self.logical_and()?;
         while self.peek() == &Token::Or {
             self.take();
+            let jump = self.code.len();
+            self.code.push(Op::JumpIfTrueKeep(usize::MAX));
             self.logical_and()?;
             self.code.push(Op::Or);
+            let target = self.code.len();
+            self.code[jump] = Op::JumpIfTrueKeep(target);
         }
         Ok(())
     }
@@ -112,8 +116,12 @@ impl Parser {
         self.comparison()?;
         while self.peek() == &Token::And {
             self.take();
+            let jump = self.code.len();
+            self.code.push(Op::JumpIfFalseKeep(usize::MAX));
             self.comparison()?;
             self.code.push(Op::And);
+            let target = self.code.len();
+            self.code[jump] = Op::JumpIfFalseKeep(target);
         }
         Ok(())
     }
@@ -237,6 +245,21 @@ fn split_arguments(input: &str) -> Vec<&str> {
     args
 }
 
+fn append_code(code: &mut Vec<Op>, mut appended: Vec<Op>) {
+    let offset = code.len();
+    for op in &mut appended {
+        match op {
+            Op::Jump(target)
+            | Op::JumpIfFalse(target)
+            | Op::JumpIfFalseKeep(target)
+            | Op::JumpIfTrueKeep(target)
+                if *target != usize::MAX => *target += offset,
+            _ => {}
+        }
+    }
+    code.extend(appended);
+}
+
 fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     let mut code = Vec::new();
     let mut blocks: Vec<BlockFrame> = Vec::new();
@@ -252,7 +275,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: unexpected token {:?}", line_no + 1, parser.peek()));
             }
-            code.extend(parser.code);
+            append_code(&mut code, parser.code);
             let jump = code.len();
             code.push(Op::JumpIfFalse(usize::MAX));
             blocks.push(BlockFrame::If { false_jump: Some(jump), end_jump: None });
@@ -468,7 +491,7 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
         let mut body_code = compile_core(body)?;
         for op in &mut body_code {
             match op {
-                Op::Jump(target) | Op::JumpIfFalse(target) if *target != usize::MAX => *target += entry,
+                Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) if *target != usize::MAX => *target += entry,
                 _ => {}
             }
         }
@@ -549,6 +572,18 @@ where
                 };
                 if is_false { pc = *target; continue; }
             }
+            Op::JumpIfFalseKeep(target) => match stack.last() {
+                Some(Value::Bool(false)) => { pc = *target; continue; }
+                Some(Value::Bool(true)) => {},
+                Some(_) => return Err("type error: 'and' expects booleans".into()),
+                None => return Err("VM stack underflow".into()),
+            },
+            Op::JumpIfTrueKeep(target) => match stack.last() {
+                Some(Value::Bool(true)) => { pc = *target; continue; }
+                Some(Value::Bool(false)) => {},
+                Some(_) => return Err("type error: 'or' expects booleans".into()),
+                None => return Err("VM stack underflow".into()),
+            },
             Op::Jump(target) => { pc = *target; continue; }
             Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
             Op::CallTarget { target, params, arg_count } => {
@@ -641,6 +676,8 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
             Op::Gt => "GT".into(),
             Op::Ge => "GE".into(),
             Op::JumpIfFalse(target) => format!("JUMP_IF_FALSE {target}"),
+            Op::JumpIfFalseKeep(target) => format!("JUMP_IF_FALSE_KEEP {target}"),
+            Op::JumpIfTrueKeep(target) => format!("JUMP_IF_TRUE_KEEP {target}"),
             Op::Jump(target) => format!("JUMP {target}"),
             Op::Call(name, _) => return Err(format!("cannot serialize unresolved function call '{name}'")),
             Op::CallTarget { target, params, arg_count } => {
@@ -693,6 +730,8 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "GT" if parts.len() == 1 => Op::Gt,
             "GE" if parts.len() == 1 => Op::Ge,
             "JUMP_IF_FALSE" if parts.len() == 2 => Op::JumpIfFalse(parts[1].parse().map_err(|_| invalid())?),
+            "JUMP_IF_FALSE_KEEP" if parts.len() == 2 => Op::JumpIfFalseKeep(parts[1].parse().map_err(|_| invalid())?),
+            "JUMP_IF_TRUE_KEEP" if parts.len() == 2 => Op::JumpIfTrueKeep(parts[1].parse().map_err(|_| invalid())?),
             "JUMP" if parts.len() == 2 => Op::Jump(parts[1].parse().map_err(|_| invalid())?),
             "CALL_TARGET" if parts.len() == 4 => {
                 let target: usize = parts[1].parse().map_err(|_| invalid())?;
@@ -711,7 +750,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
     }
     for (index, op) in code.iter().enumerate() {
         match op {
-            Op::Jump(target) | Op::JumpIfFalse(target) if *target > code.len() =>
+            Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) if *target > code.len() =>
                 return Err(format!("bytecode jump at instruction {index} targets invalid instruction {target}")),
             Op::CallTarget { target, .. } if *target >= code.len() =>
                 return Err(format!("bytecode call at instruction {index} targets invalid function entry {target}")),
@@ -802,6 +841,12 @@ mod tests {
     }
 
     #[test]
+    fn logical_and_or_short_circuit_the_right_operand() {
+        let output = execute("show false and (1 / 0 == 0)\nshow true or (1 / 0 == 0)\nshow true and true\nshow false or true\n").unwrap();
+        assert_eq!(output, vec!["false", "true", "true", "true"]);
+    }
+
+    #[test]
     fn strings_support_escapes_concatenation_and_bytecode_round_trip() {
         let source = "define message := \"hello\\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
         let code = compile(source).unwrap();
@@ -850,7 +895,7 @@ mod tests {
         let code = vec![
             Op::Push(-7), Op::PushString("text".into()), Op::PushBool(true), Op::Load("value".into()), Op::Store("value".into()),
             Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Print,
-            Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::Jump(24),
+            Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::JumpIfFalseKeep(27), Op::JumpIfTrueKeep(27), Op::Jump(24),
             Op::CallTarget { target: 0, params: vec!["arg".into()], arg_count: 1 },
             Op::Return, Op::ReturnValue,
         ];
