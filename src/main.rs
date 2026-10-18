@@ -4,7 +4,7 @@ use std::{env, fs, process};
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     Number(i64), Ident(String), Plus, Minus, Star, Slash,
-    LParen, RParen, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
+    LParen, RParen, Comma, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
 }
 
 fn lex(input: &str) -> Result<Vec<Token>, String> {
@@ -30,7 +30,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
         }
         let token = match c {
             '+' => Token::Plus, '-' => Token::Minus, '*' => Token::Star, '/' => Token::Slash,
-            '(' => Token::LParen, ')' => Token::RParen,
+            '(' => Token::LParen, ')' => Token::RParen, ',' => Token::Comma,
             '=' if i + 1 < chars.len() && chars[i + 1] == '=' => { i += 1; Token::EqEq }
             '!' if i + 1 < chars.len() && chars[i + 1] == '=' => { i += 1; Token::NotEq }
             '<' if i + 1 < chars.len() && chars[i + 1] == '=' => { i += 1; Token::LessEq }
@@ -49,7 +49,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone)]
 enum Op {
     Push(i64), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return,
+    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
 struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
@@ -84,7 +84,28 @@ impl Parser {
     fn factor(&mut self) -> Result<(), String> {
         match self.take() {
             Token::Number(n) => self.code.push(Op::Push(n)),
-            Token::Ident(name) => self.code.push(Op::Load(name)),
+            Token::Ident(name) => {
+                if self.peek() == &Token::LParen {
+                    self.take();
+                    let mut arg_count = 0usize;
+                    if self.peek() != &Token::RParen {
+                        loop {
+                            self.expression()?;
+                            arg_count += 1;
+                            match self.take() {
+                                Token::Comma => continue,
+                                Token::RParen => break,
+                                other => return Err(format!("expected ',' or ')' in function call, found {other:?}")),
+                            }
+                        }
+                    } else {
+                        self.take();
+                    }
+                    self.code.push(Op::Call(name, arg_count));
+                } else {
+                    self.code.push(Op::Load(name));
+                }
+            },
             Token::Minus => { self.factor()?; self.code.push(Op::Neg); }
             Token::LParen => {
                 self.expression()?;
@@ -193,6 +214,17 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             continue;
         }
         if line == "return" { code.push(Op::Return); continue; }
+        if let Some(expr) = line.strip_prefix("return ") {
+            let tokens = lex(expr.trim()).map_err(|e| format!("line {}: {e}", line_no + 1))?;
+            let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
+            parser.expression().map_err(|e| format!("line {}: invalid return expression: {e}", line_no + 1))?;
+            if parser.peek() != &Token::End {
+                return Err(format!("line {}: unexpected token in return expression {:?}", line_no + 1, parser.peek()));
+            }
+            code.extend(parser.code);
+            code.push(Op::ReturnValue);
+            continue;
+        }
 
         if line == "break" {
             let Some(index) = blocks.iter().rposition(|block| matches!(block, BlockFrame::Repeat { .. })) else {
@@ -412,6 +444,14 @@ fn run(code: &[Op]) -> Result<(), String> {
             Op::Return => {
                 let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
                 vars = caller_vars;
+                pc = return_pc;
+                continue;
+            }
+            Op::ReturnValue => {
+                let value = stack.pop().ok_or("VM stack underflow in return expression")?;
+                let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
+                vars = caller_vars;
+                stack.push(value);
                 pc = return_pc;
                 continue;
             }
