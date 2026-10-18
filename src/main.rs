@@ -717,7 +717,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp") }
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" | "to_int") }
 
 fn value_to_string(value: &Value) -> String {
     match value {
@@ -835,6 +835,37 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 current = current.checked_add(1).ok_or("integer overflow while building range")?;
             }
             Ok(Value::Array(items))
+        }
+        "trim" | "lower" | "upper" | "char_count" => {
+            arity(1)?;
+            let Value::Str(value) = &args[0] else {
+                return Err(format!("type error: {name} expects a string"));
+            };
+            match name {
+                "trim" => Ok(Value::Str(value.trim().to_string())),
+                "lower" => {
+                    let result = value.to_lowercase();
+                    if result.len() > MAX_BYTECODE_STRING_BYTES { return Err("lower result exceeds string safety limit".into()); }
+                    Ok(Value::Str(result))
+                }
+                "upper" => {
+                    let result = value.to_uppercase();
+                    if result.len() > MAX_BYTECODE_STRING_BYTES { return Err("upper result exceeds string safety limit".into()); }
+                    Ok(Value::Str(result))
+                }
+                "char_count" => Ok(Value::Int(i64::try_from(value.chars().count()).map_err(|_| "character count overflow")?)),
+                _ => unreachable!(),
+            }
+        }
+        "to_int" => {
+            arity(1)?;
+            match &args[0] {
+                Value::Int(value) => Ok(Value::Int(*value)),
+                Value::Str(value) => value.trim().parse::<i64>()
+                    .map(Value::Int)
+                    .map_err(|_| format!("cannot convert '{value}' to a 64-bit integer")),
+                _ => Err("type error: to_int expects an integer or numeric string".into()),
+            }
         }
         "first" | "last" => {
             arity(1)?;
@@ -1966,6 +1997,26 @@ show clamp(-3, 0, 10)
         assert!(execute("show is_empty(3)\n").unwrap_err().contains("array, map, or string"));
         assert!(execute("show clamp(1, 5, 2)\n").unwrap_err().contains("minimum must be less than or equal"));
         assert!(execute("show clamp(1, false, 2)\n").unwrap_err().contains("three integers"));
+    }
+
+    #[test]
+    fn text_normalization_character_count_and_integer_conversion_work() {
+        let output = execute(r#"show trim("  Zenvora Lang  ")
+show lower("ZENvora")
+show upper("Zenvora")
+show char_count("hé🙂")
+show to_int("  -42 ")
+show to_int(17)
+"#).unwrap();
+        assert_eq!(output, vec!["Zenvora Lang", "zenvora", "ZENVORA", "3", "-42", "17"]);
+    }
+
+    #[test]
+    fn text_normalization_and_integer_conversion_reject_invalid_values() {
+        assert!(execute("show trim(12)\n").unwrap_err().contains("expects a string"));
+        assert!(execute("show to_int(\\"12x\\")\n").unwrap_err().contains("cannot convert"));
+        assert!(execute("show to_int(true)\n").unwrap_err().contains("integer or numeric string"));
+        assert!(execute("show to_int(\\"9223372036854775808\\")\n").unwrap_err().contains("cannot convert"));
     }
 
     #[test]
