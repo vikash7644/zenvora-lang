@@ -1008,7 +1008,6 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                     Ok(Value::Int(index.and_then(|n| i64::try_from(n).ok()).unwrap_or(-1)))
                 }
                 (Value::Str(_), _) => Err("type error: index_of expects a string needle when searching a string".into()),
-                (Value::Array(_), _) => Err("type error: index_of expects an array and a value".into()),
                 _ => Err("type error: index_of expects a string or array as its first argument".into()),
             }
         }
