@@ -1,7 +1,7 @@
 //! Versioned, deterministic wire-format building blocks for the Zenvora Chain prototype.
 //!
-//! This module validates structure and canonical encoding only. It does not verify
-//! signatures, calculate cryptographic hashes, execute transactions, or implement consensus.
+//! This module provides canonical encoding and domain-separated SHA-256 hashing, but does not
+//! verify signatures, execute transactions, or implement consensus.
 
 const TX_DOMAIN: &[u8] = b"ZENVORA_TX_SIGNING_V1\0";
 const TX_WIRE_DOMAIN: &[u8] = b"ZENVORA_TX_WIRE_V1\0";
