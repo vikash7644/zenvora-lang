@@ -1,15 +1,17 @@
-# Zenvora Lang v0.6.1 — current implementation
+# Zenvora Lang v0.8.0 — current implementation
 
-Zenvora Lang is an independent language project for the Zenvora ecosystem. This milestone includes integer, boolean, string, array, and map values; short-circuit logical operators; `repeat` loops with `break` and `continue`; functions with value parameters, return values, recursion, and isolated local variable environments; and versioned bytecode serialization in the Rust compiler and stack-based virtual machine. It remains an early prototype, not a production smart-contract language.
+Zenvora Lang is an independent programming-language project for the Zenvora ecosystem. The current repository contains a Rust source compiler, stack-based bytecode VM, versioned bytecode loader, relative source-module loader, runnable examples, and automated regression tests. It is an early prototype, not a production smart-contract language.
 
 ## Build and run
 
-Requires Rust and Cargo (including in Termux where the Rust toolchain is installed).
+Requires Rust and Cargo (including in Termux when the Rust toolchain is installed).
 
 ```sh
-cargo check
-cargo test
+cargo check --all-targets
+cargo clippy --all-targets
+cargo test --all-targets
 cargo run -- examples/hello.zv
+cargo run -- examples/loops.zv
 cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
@@ -18,78 +20,66 @@ cargo run -- examples/indexing.zv
 cargo run -- examples/stdlib.zv
 cargo run -- examples/contracts.zv
 cargo run -- examples/modules.zv
+cargo run -- --emit-bytecode examples/functions.zv functions.zvb
+cargo run -- --run-bytecode functions.zvb
+cargo run -- --version
+cargo run -- --help
 ```
 
-## Automated tests
+## Automated tests and CI
 
-The Rust unit and integration suites run 78 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+The repository README currently documents 81 automated tests for the compiler/VM, CLI, module loader, bytecode validation, and language behavior. The exact test count can change as tests are added; use `cargo test --all-targets` for the authoritative count and result on the checked-out revision.
 
-## Modules
+GitHub Actions in `.github/workflows/rust.yml` checks compilation, runs Clippy and all-target tests, executes the runnable language examples, round-trips a bytecode program, checks CLI output, and tests the separate `compiler/` interpreter MVP. A green CI run is useful evidence, but is not a formal proof of correctness or security.
 
-A source file can import another .zv file with a relative path, for example: use "modules/math.zv". Paths resolve relative to the importing file. A module is loaded only once per program. Cyclic imports and import nesting deeper than 64 files are rejected with an error. This is an early source-expansion module system: explicit namespaces, visibility rules, package resolution and module versioning are not implemented.
-
-## Supported syntax
+## Supported language features
 
 ```zv
 define age := 20
 
 if age >= 18 {
-    show 1
+    show "adult"
 } otherwise {
-    show 0
+    show "minor"
 }
 ```
 
-The program prints `1`. Set `age := 16` and it prints `0`.
+The program prints `adult`.
 
-- `define name := expression` declares a variable whose value can be an integer, boolean, string, array, or map.
-- `name := expression` updates or creates a variable.
-- `show expression` prints an integer, boolean, string, array, or map; `print(expression)` is also accepted.
-- Integer arithmetic: unary minus, `+`, `-`, `*`, `/`, and parentheses.
-- Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons produce native boolean values `true` or `false`.
-- Logical operators: `not`, `and`, and `or`; `and` and `or` short-circuit, and logical operands must be booleans when evaluated.
-- Conditional blocks use `if condition {`, followed by statements and a closing `}`; an optional else branch uses the exact line ` } otherwise {` without the leading space (normally written as `} otherwise {`).
-- Double-quoted string literals support `\\`, `\"`, `\n`, `\r`, and `\t` escapes. `+` concatenates two strings; concatenating a string with an integer is a type error.
-- `#` starts a comment.
-- Nested if/otherwise blocks are supported.
-- `repeat condition { ... }` loops reevaluate their comparison condition before each iteration.
-- `break` exits the nearest enclosing loop; `continue` jumps back to reevaluate its condition.
-- `break` and `continue` outside a loop are rejected during compilation.
-- `fn name(a, b) { ... }` defines a function with parameters; `call name(2 + 3, 4)` invokes it with expressions as arguments.
-- `return` exits the current function. Calls may occur before definitions and functions may call other functions.
-- Each function call has an isolated local variable environment; caller locals are restored on return. Top-level declarations are global and readable inside functions. Assignment updates an existing local if present or an existing global otherwise; `define` inside a function creates a local that can shadow a global. Function calls can appear inside expressions, and `return expression` returns a value to the caller.
-- Collection built-ins: `array(...)`, `map("key", value, ...)`, `get(collection, key)`, `len(collection)`, `contains(collection, item_or_key)`, `push(array, value)`, `put(map, key, value)`, `keys(map)`, and `values(map)`. Map keys must be strings. Array indexes are zero-based. `push` and `put` return new collections and leave the original unchanged.
-- Division by zero, undefined variables, invalid syntax, integer overflow, invalid collection keys/indexes, and unmatched block braces are reported as errors.
+The current prototype supports:
 
-## Bytecode files
+- **Values:** signed 64-bit integers, booleans, strings, arrays, and maps.
+- **Variables:** `define name := expression` declares a value; `name := expression` updates an existing binding.
+- **Expressions:** integer arithmetic, unary minus, parentheses, comparisons, equality, and boolean `not`, `and`, and `or`. Logical operators short-circuit.
+- **Control flow:** nested `if`/`otherwise`, `repeat condition { ... }`, `break`, and `continue`.
+- **Functions:** parameters, expression calls, return values, recursion, global reads/updates, and local variables that can shadow globals.
+- **Strings:** double-quoted literals, common escapes, output, equality, concatenation with `+`, and string arguments/returns.
+- **Collections:** `array(...)`, `map(...)`, `get`, `len`, `contains`, `push`, `put`, `keys`, `values`, and postfix indexing such as `items[0]` or `profile["name"]`. `push` and `put` return updated collections; direct indexed assignment is also supported.
+- **Standard library:** `type_of`, `to_string`, checked `abs`, `min`, `max`, bounded end-exclusive `range`, and `assert`.
+- **Modules:** relative `use "path.zv"` imports resolve from the importing file. Duplicate imports are skipped, cycles are rejected, and import depth is limited.
+- **CLI and bytecode:** source execution, `--help`, `--version`, bytecode emission, and execution of versioned bytecode files.
 
-Compile a `.zv` program into a versioned bytecode file and run it later:
+See the `examples/` directory for runnable programs and the README for commands and more syntax details.
 
-```sh
-cargo run -- --emit-bytecode examples/functions.zv functions.zvb
-cargo run -- --run-bytecode functions.zvb
-```
+## Bytecode v1 and verifier
 
-Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The loader rejects unknown instructions, unsupported versions, malformed operands, invalid jump targets, and invalid function-entry targets. The format is an early public-facing prototype; compatibility guarantees and a formal verifier are future work.
+Bytecode v1 begins with the header `ZENVORA_BYTECODE 1`. The loader validates the header/version, instruction syntax, operand shapes, jump bounds, function-entry targets, and other structural constraints. A control-flow verifier checks reachable stack underflow, inconsistent stack depths at branch joins, invalid region transitions, stack limits, and main-program exit stack balance. The VM also has execution, call-depth, operand-stack, file-size, instruction-count, string-size, and call-argument limits.
 
-## How execution works
-
-1. Source text is parsed into stack-machine instructions.
-2. The compiler emits operations such as PUSH, LOAD, STORE, ADD, comparison operations and conditional jumps.
-3. The VM executes the bytecode and stores values in the active runtime environment.
+These checks are meaningful hardening, but **they do not make arbitrary bytecode production-safe**. The current format does not carry a complete explicit function table or return-type metadata; unreachable instructions and uncalled function bodies are not fully validated, and static type safety is not proven. Runtime checks remain necessary. See [Bytecode Format v1](bytecode-v1.md) for the instruction set, validation rules, and known limitations.
 
 ## Experimental contract DSL
 
-A single contract block can declare `state`, `action`, and `view` members. The compiler lowers these to global declarations and ordinary functions for a local VM run. See `examples/contracts.zv`. This is syntax scaffolding, not a secure smart-contract runtime: state is not persisted between runs, `view` purity and action authorization are not enforced, multiple contract blocks per file are rejected, and no blockchain execution is provided.
+A single `contract` block can declare `state`, `action`, and `view` members. The current implementation lowers this syntax to globals and ordinary functions for a local VM run. Direct assignments to declared contract state inside a `view` body are rejected by the source-lowering check.
 
-## Not implemented yet
+This is **not yet blockchain execution or a secure smart-contract runtime**. State is not persisted across program runs; authorization, complete view-purity enforcement, a stable contract ABI, deployment, consensus, and chain integration are not implemented by this compiler.
 
-A package/namespace model for modules, nested-path mutation (`matrix[0][1] := value`), a static type system, a formal bytecode verifier, frozen bytecode compatibility guarantees, native machine-code generation, persistent contract storage, enforced contract security rules, and production blockchain integration remain future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values; values of different types compare unequal. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions and limits nested function calls to 1,024 frames. These are basic safeguards; broader resource accounting and stronger runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+## Current limitations and next milestones
 
-## Roadmap
+1. **Verifier hardening:** validate all instruction regions, including unreachable code and uncalled functions; define explicit function metadata and return-kind checks in a future bytecode version; add adversarial tests and fuzzing.
+2. **Language correctness:** add a real parser/AST with source spans and clearer diagnostics, then introduce static type checking and a documented compatibility policy.
+3. **Modules and packages:** add namespaces, visibility rules, package metadata, deterministic import behavior, and tests for path edge cases.
+4. **Runtime safety:** account for memory and collection growth, define resource budgets, and test limits consistently across source and bytecode execution.
+5. **Contract model:** define a typed ABI, persistent state model, authorization rules, and enforceable action/view semantics before connecting contracts to a chain.
+6. **Ecosystem integration:** explore WebAssembly and chain integration only after language semantics, verifier behavior, and interfaces are stable.
 
-1. Add module namespaces/package resolution and static type checking.
-2. Stabilize bytecode v1, verify control flow/stack behavior, and define compatibility rules.
-3. Add resource-aware execution limits and collection mutation semantics.
-4. Evolve the contract DSL into a typed ABI with persistent state, authorization, and enforced view purity.
-5. Explore WebAssembly/native output after the core language is reliable.
+Native machine-code generation, a production blockchain, a wallet, a DEX, and a mainnet are not delivered by this language prototype. Do not use it to hold funds or deploy production contracts.
