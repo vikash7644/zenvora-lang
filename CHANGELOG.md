@@ -2,6 +2,12 @@
 
 Notable changes to Zenvora Lang are recorded here.
 
+## v0.8.0 — Contract DSL prototype
+
+- Added experimental `contract`, `state`, `action`, and `view` syntax lowered to global declarations and functions.
+- Added a runnable local Counter contract example and contract parser regression tests.
+- Contract state exists only for the current program run; persistence, authorization, enforced view purity, and blockchain execution are not implemented.
+
 ## v0.7.0 — Standard library and modules
 
 - Added relative `use "path.zv"` imports with duplicate-load prevention, cycle detection, and an import-depth limit.
