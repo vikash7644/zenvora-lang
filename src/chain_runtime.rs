@@ -417,6 +417,8 @@ fn valid_address(address: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::ChainRuntime;
+    use super::super::chain_protocol::{address_from_public_key, TransactionV1};
+    use ed25519_dalek::{Signer, SigningKey};
 
     fn funded_runtime() -> ChainRuntime {
         let mut runtime = ChainRuntime::new();
@@ -510,6 +512,71 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
 
+    #[test]
+    fn signed_transactions_consume_and_persist_nonces_and_reject_replay() {
+        let signing_key = SigningKey::from_bytes(&[61; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = address_from_public_key(&public_key).unwrap();
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&sender, 1_000).unwrap();
+        runtime.set_genesis_balance("bob", 0).unwrap();
+
+        let mut transaction = TransactionV1 {
+            chain_id: 71,
+            sender: sender.clone(),
+            nonce: 0,
+            recipient: "bob".into(),
+            amount: 125,
+            max_fee: 3,
+            gas_limit: 21_000,
+            valid_until_height: Some(100),
+            signature: Vec::new(),
+        };
+        transaction.signature = signing_key
+            .sign(&transaction.signing_bytes().unwrap())
+            .to_bytes()
+            .to_vec();
+
+        let receipt = runtime.apply_signed_transaction(&transaction, &public_key, 71, 1).unwrap();
+        assert!(receipt.accepted);
+        assert_eq!(receipt.nonce, Some(0));
+        assert!(receipt.transaction_id.is_some());
+        assert_eq!(runtime.account_nonce(&sender), 1);
+        assert_eq!(runtime.balance(&sender), 875);
+        assert_eq!(runtime.balance("bob"), 125);
+
+        let path = std::env::temp_dir().join(format!("zenvora-signed-ledger-{}.zvr", std::process::id()));
+        runtime.save_to_file(&path).unwrap();
+        let mut restored = ChainRuntime::load_from_file(&path).unwrap();
+        assert_eq!(restored.account_nonce(&sender), 1);
+        assert_eq!(restored.balance(&sender), 875);
+        assert!(restored.apply_signed_transaction(&transaction, &public_key, 71, 1).is_err());
+        assert_eq!(restored.balance(&sender), 875);
+        assert_eq!(restored.receipts().len(), 1);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn signed_transaction_with_tampered_amount_does_not_mutate_ledger() {
+        let signing_key = SigningKey::from_bytes(&[62; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = address_from_public_key(&public_key).unwrap();
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&sender, 1_000).unwrap();
+        runtime.set_genesis_balance("bob", 0).unwrap();
+        let mut transaction = TransactionV1 {
+            chain_id: 71, sender: sender.clone(), nonce: 0, recipient: "bob".into(),
+            amount: 125, max_fee: 3, gas_limit: 21_000, valid_until_height: Some(100),
+            signature: Vec::new(),
+        };
+        transaction.signature = signing_key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        transaction.amount += 1;
+        assert!(runtime.apply_signed_transaction(&transaction, &public_key, 71, 1).is_err());
+        assert_eq!(runtime.account_nonce(&sender), 0);
+        assert_eq!(runtime.balance(&sender), 1_000);
+        assert_eq!(runtime.balance("bob"), 0);
+        assert!(runtime.receipts().is_empty());
+    }
     #[test]
     fn loader_rejects_legacy_or_unknown_versions_explicitly() {
         let path = std::env::temp_dir().join(format!("zenvora-ledger-version-{}.zvr", std::process::id()));
