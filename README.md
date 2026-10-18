@@ -90,15 +90,14 @@ The current prototype supports integer, boolean, string, array, and map values, 
 
 ## Roadmap
 
-1. Expand regression coverage and stabilize syntax and diagnostics.
-2. Add global/module scope rules, types and better diagnostics.
-3. Stabilize the versioned bytecode format and add a formal verifier.
-4. Strengthen runtime safety checks and add resource-aware execution limits.
-5. Explore WebAssembly output and smart-contract integration after the core language is reliable.
+1. Add a real module namespace/package model and static type checking.
+2. Strengthen bytecode verification, compatibility guarantees, and resource accounting.
+3. Turn the experimental contract DSL into a typed contract ABI with enforced view/action rules and persistent state.
+4. Explore WebAssembly output and native code generation only after the language and VM are stable.
 
 ## Status and safety
 
-This is an early work in progress. Direct collection mutation, advanced static type checking, native machine-code generation, production smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. The `contract/state/action/view` syntax is an experimental source-lowering prototype: state exists only for one program run, and authorization, enforced view purity, persistent storage, and blockchain execution are not implemented. Direct collection mutation, advanced static type checking, native machine-code generation, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
