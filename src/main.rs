@@ -1765,7 +1765,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let public_key = signing_key.verifying_key().to_bytes();
             let address = crate::chain_protocol::address_from_public_key(&public_key)?;
             let content = format!(
-                "ZENVORA_KEY_V1\\nprivate={}\\npublic={}\\naddress={}\\n",
+                "ZENVORA_KEY_V1\nprivate={}\npublic={}\naddress={}\n",
                 hex_encode(&seed), hex_encode(&public_key), address
             );
             let mut options = std::fs::OpenOptions::new();
@@ -2033,7 +2033,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr>");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id>");
             process::exit(2);
         }
     };
@@ -2045,7 +2045,41 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{compile, compile_core, run_with_output, Op};
+    use super::{compile, compile_core, read_chain_key, run_chain_command, run_with_output, Op};
+
+    #[test]
+    fn local_signed_chain_cli_keygen_transfer_and_replay_work_end_to_end() {
+        let base = std::env::temp_dir();
+        let key_path = base.join(format!("zenvora-cli-key-{}.zvk", std::process::id()));
+        let store_path = base.join(format!("zenvora-cli-store-{}.zvb", std::process::id()));
+        let _ = std::fs::remove_file(&key_path);
+        let _ = std::fs::remove_file(&store_path);
+        let key_text = key_path.to_string_lossy().to_string();
+        let store_text = store_path.to_string_lossy().to_string();
+
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
+        assert!(run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).is_err());
+        let key = read_chain_key(&key_text).unwrap();
+        let address = crate::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
+            key_text.clone(), "1000".into(),
+        ]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-transfer".into(), store_text.clone(), "71".into(),
+            key_text.clone(), "bob".into(), "100".into(), "1".into(),
+        ]).unwrap();
+
+        let (store, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(store.blocks().len(), 2);
+        assert_eq!(runtime.balance(&address), 900);
+        assert_eq!(runtime.account_nonce(&address), 1);
+        assert_eq!(runtime.balance("bob"), 100);
+
+        let _ = std::fs::remove_file(key_path);
+        let _ = std::fs::remove_file(store_path);
+    }
 
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
@@ -2137,7 +2171,7 @@ mod tests {
 
     #[test]
     fn strings_support_escapes_concatenation_and_bytecode_round_trip() {
-        let source = "define message := \"hello\\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
+        let source = "define message := \"hello\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
         let code = compile(source).unwrap();
         let encoded = super::serialize_bytecode(&code).unwrap();
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
