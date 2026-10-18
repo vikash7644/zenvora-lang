@@ -8,7 +8,8 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 - `src/main.rs` — lexer, expression parser, bytecode compiler and stack VM.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
-- `examples/functions.zv` — basic function definitions, calls, and loops inside a function.
+- `examples/functions.zv` — function parameters, local variables, return values, and loops.
+- `examples/booleans.zv` — native booleans and logical operators.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
 - `examples/token.zvl` — illustrative smart-contract DSL draft; not executable by the current compiler.
@@ -24,6 +25,7 @@ cargo test
 cargo run -- examples/hello.zv
 cargo run -- examples/loops.zv
 cargo run -- examples/functions.zv
+cargo run -- examples/booleans.zv
 cargo run -- --help
 ```
 
@@ -52,7 +54,7 @@ This prints `1`. Change the age to `16` and it prints `0`.
 
 See [`examples/loops.zv`](examples/loops.zv) for a runnable `repeat`/`break`/`continue` example and [`examples/functions.zv`](examples/functions.zv) for functions.
 
-The current prototype supports integer and boolean variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Boolean values `true` and `false` are supported, and comparisons produce booleans. `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Functions support integer parameters with `fn add(left, right) { ... }`, calls such as `call add(2 + 3, 4)`, and expression calls such as `show add(2, 3)`. `return expression` returns an integer value; plain `return` exits without a value. Calls can be made before a function definition, functions can call other functions recursively, and each call gets a separate local variable environment. Access to caller/global variables from inside a function is not implemented yet. Arithmetic operators require integers; ordered comparisons require integers; equality compares values. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
+The current prototype supports integer and boolean variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Boolean values `true` and `false` are supported, comparisons produce booleans, and `not`, `and`, and `or` are available. Logical operators currently evaluate both operands (they are not short-circuiting). `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Functions support integer parameters with `fn add(left, right) { ... }`, calls such as `call add(2 + 3, 4)`, and expression calls such as `show add(2, 3)`. `return expression` returns an integer value; plain `return` exits without a value. Calls can be made before a function definition, functions can call other functions recursively, and each call gets a separate local variable environment. Access to caller/global variables from inside a function is not implemented yet. Arithmetic operators require integers; ordered comparisons require integers; equality compares values. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
 
 ## Roadmap
 
@@ -64,7 +66,7 @@ The current prototype supports integer and boolean variables, assignment, arithm
 
 ## Status and safety
 
-This is an early work in progress. Strings, global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Strings, short-circuit logical evaluation, global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
