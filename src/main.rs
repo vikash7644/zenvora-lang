@@ -475,7 +475,111 @@ fn count_block_braces(line: &str) -> (i32, i32) {
     (opens, closes)
 }
 
+
+// Lowers the first-generation contract DSL into the existing compiler's
+// global declarations and functions. This is a local language prototype,
+// not a persistent blockchain contract runtime.
+fn lower_contracts(source: &str) -> Result<String, String> {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut output = String::new();
+    let mut index = 0usize;
+    let mut contract: Option<(String, usize)> = None;
+    let mut saw_contract = false;
+
+    while index < lines.len() {
+        let line = lines[index].trim();
+        if contract.is_none() {
+            if let Some(name) = line.strip_prefix("contract ").and_then(|s| s.strip_suffix('{')) {
+                let name = name.trim();
+                if !valid_identifier(name) {
+                    return Err(format!("line {}: invalid contract name", index + 1));
+                }
+                if saw_contract {
+                    return Err(format!("line {}: only one contract block per source file is currently supported", index + 1));
+                }
+                saw_contract = true;
+                contract = Some((name.to_string(), index + 1));
+                index += 1;
+                continue;
+            }
+            output.push_str(lines[index]);
+            output.push('\n');
+            index += 1;
+            continue;
+        }
+
+        if line.is_empty() || line.starts_with('#') {
+            output.push_str(lines[index]);
+            output.push('\n');
+            index += 1;
+            continue;
+        }
+
+        if line == "}" {
+            contract = None;
+            index += 1;
+            continue;
+        }
+
+        if let Some(rest) = line.strip_prefix("state ") {
+            let (name, expression) = rest.split_once(":=").ok_or_else(|| {
+                format!("line {}: expected 'state name := expression'", index + 1)
+            })?;
+            let name = name.trim();
+            let expression = expression.trim().trim_end_matches(';').trim();
+            if !valid_identifier(name) {
+                return Err(format!("line {}: invalid state name", index + 1));
+            }
+            if expression.is_empty() {
+                return Err(format!("line {}: missing state initializer", index + 1));
+            }
+            output.push_str(&format!("define {name} := {expression}\n"));
+            index += 1;
+            continue;
+        }
+
+        let member = line.strip_prefix("action ").map(|s| ("action", s))
+            .or_else(|| line.strip_prefix("view ").map(|s| ("view", s)));
+        if let Some((kind, header)) = member.and_then(|(kind, text)| text.strip_suffix('{').map(|h| (kind, h.trim()))) {
+            if !header.contains('(') || !header.ends_with(')') {
+                return Err(format!("line {}: expected '{kind} function_name(parameters) {{'", index + 1));
+            }
+            output.push_str(&format!("fn {header} {{\n"));
+            index += 1;
+            let mut depth = 1i32;
+            while index < lines.len() && depth > 0 {
+                let current = lines[index];
+                let (opens, closes) = count_block_braces(current);
+                depth += opens - closes;
+                if depth > 0 {
+                    output.push_str(current);
+                    output.push('\n');
+                } else {
+                    output.push_str("}\n");
+                }
+                index += 1;
+            }
+            if depth != 0 {
+                return Err(format!("line {}: missing closing brace for {kind} '{header}'", index));
+            }
+            continue;
+        }
+
+        return Err(format!(
+            "line {}: expected state declaration, action, view, or closing contract brace",
+            index + 1
+        ));
+    }
+
+    if let Some((name, line)) = contract {
+        return Err(format!("line {line}: contract '{name}' is missing its closing brace"));
+    }
+    Ok(output)
+}
+
 fn compile(source: &str) -> Result<Vec<Op>, String> {
+    let lowered_source = lower_contracts(source)?;
+    let source = lowered_source.as_str();
     let mut main_source = String::new();
     let mut functions: Vec<(String, Vec<String>, String)> = Vec::new();
     let lines: Vec<&str> = source.lines().collect();
@@ -1233,6 +1337,22 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn contract_state_actions_and_views_execute_in_local_vm() {
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\ncall increment(3)\ncall increment(4)\nshow current()\n";
+        let output = execute(source).unwrap();
+        assert_eq!(output, vec!["7"]);
+    }
+
+    #[test]
+    fn contract_dsl_reports_malformed_declarations() {
+        assert!(compile("contract 123 {\nstate count := 0\n}\n").unwrap_err().contains("invalid contract name"));
+        assert!(compile("contract Counter {\nstate count\n}\n").unwrap_err().contains("expected 'state name := expression'"));
+        assert!(compile("contract Counter {\nunknown value\n}\n").unwrap_err().contains("expected state declaration"));
+        assert!(compile("contract Counter {\nstate count := 0\n").unwrap_err().contains("missing its closing brace"));
+        assert!(compile("contract A {\n}\ncontract B {\n}\n").unwrap_err().contains("only one contract block"));
     }
 
     #[test]
