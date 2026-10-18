@@ -56,7 +56,7 @@ The loader checks the header/version, opcode names, operand counts and types, id
 - Rejects stack underflow in checked paths, stack growth beyond the configured limit, control-flow joins where incoming stack depths disagree, and function returns with leftover or missing operand values.
 - Checks that the main program exits with an empty operand stack and that reachable function paths do not fall through into another region.
 
-The v1 format does not encode a function table or return types. Function regions are inferred from call targets, and call stack effects infer value returns from the target's instructions. Consequently, the verifier is an important hardening layer, not a proof that arbitrary bytecode is safe: function regions and return-value effects are inferred rather than declared in metadata, type safety is not proven, and static analysis of disconnected code starts with an assumed empty stack. Runtime checks remain necessary.
+The v1 format does not encode a function table or return types. Function regions are inferred from call targets; return behavior is inferred from reachable control flow, and mixed reachable void/value return paths are rejected. Consequently, the verifier is an important hardening layer, not a proof that arbitrary bytecode is safe: function regions and return-value effects are inferred rather than declared in metadata, type safety is not proven, and static analysis of disconnected code starts with an assumed empty stack. Runtime checks remain necessary.
 
 The loader enforces a 16 MiB bytecode-file limit, a 1,000,000-instruction limit, a 1 MiB decoded-string limit, and a 1,024-argument limit for calls and built-ins. The VM also enforces instruction-count, function-call-depth, and operand-stack limits.
 
