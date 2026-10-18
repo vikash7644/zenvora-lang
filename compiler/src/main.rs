@@ -148,6 +148,7 @@ fn collect_block(lines: &[String], start: usize) -> Result<(Vec<String>, usize),
         if line == "}" {
             depth -= 1;
             if depth == 0 { return Ok((body, i + 1)); }
+            body.push(lines[i].clone());
         } else {
             if line.ends_with('{') { depth += 1; }
             body.push(lines[i].clone());
