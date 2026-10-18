@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Ledger loading now caps bytes read from the open file itself, in addition to checking metadata, preventing a file that grows or is replaced during the read from bypassing the configured 64 MiB allocation limit.
+
 - Added signed-transaction admission regression coverage for wrong chain IDs, expired transactions, nonce gaps, and insufficient amount-plus-fee reserves; each rejection is checked for zero state, nonce, or receipt mutation.
 
 - The source compiler now checks reachable function return-kind consistency before returning compiled instructions, so mixed void/value return paths are rejected during source compilation instead of only when serialized bytecode is loaded. Added a source-level regression test for a value-returning function with a reachable void path.
