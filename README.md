@@ -11,6 +11,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 - `examples/functions.zv` — function parameters, local variables, return values, and loops.
 - `examples/booleans.zv` — native booleans and logical operators.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
+- `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
 - `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
 - `examples/token.zvl` — illustrative smart-contract DSL draft; not executable by the current compiler.
 - `website/` — static responsive ecosystem landing page.
