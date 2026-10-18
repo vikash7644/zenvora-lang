@@ -2,6 +2,15 @@
 
 Notable changes to Zenvora Lang are recorded here.
 
+## v0.6.1 — 2026-10-18
+
+- Added first-class runtime array and map values.
+- Added collection built-ins: `array`, `map`, `get`, `len`, `contains`, `push`, `put`, `keys`, and `values`.
+- Added stable map display order, collection display output, and bytecode serialization support for built-in instructions.
+- Added regression tests for collection operations, bytecode round-trips, invalid indexes/keys, and type errors.
+- Collection updates are immutable-style: `push` and `put` return a new collection; index syntax and direct mutation are not implemented yet.
+- CI verification is pending for this commit; do not treat the milestone as verified until the workflow passes.
+
 ## v0.6.0 — 2026-10-18
 
 - Added string literals with `\\`, `\"`, `\n`, `\r`, and `\t` escapes.
