@@ -196,7 +196,7 @@ mod tests {
         let original_root = runtime.state_root();
         let genesis = genesis_header(&runtime);
         let envelope = signed_transfer(&key, 0, 125);
-        let mut header = candidate_header(&runtime, &envelope, 1, genesis.header_hash().unwrap(), 1_800_000_001);
+        let mut header = candidate_header(&runtime, &envelope, &key, 1, genesis.header_hash().unwrap(), 1_800_000_001);
         header.state_root[0] ^= 1;
         sign_header_as_proposer(&mut header, &key).unwrap();
 
