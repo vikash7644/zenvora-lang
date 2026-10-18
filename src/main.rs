@@ -1570,6 +1570,12 @@ fn read_program(path: &str) -> Result<String, String> {
     module_loader::load(Path::new(path))
 }
 
+/// Compiles a source file and all of its imports without executing the program.
+fn check_program(path: &str) -> Result<(), String> {
+    let source = read_program(path)?;
+    compile(&source).map(|_| ())
+}
+
 fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
     let source = read_program(source_path)?;
     let code = compile(&source)?;
@@ -1632,7 +1638,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
@@ -1643,6 +1649,7 @@ fn main() {
         return;
     }
     let result = match args.as_slice() {
+        [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
@@ -1653,7 +1660,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr>");
+            eprintln!("Usage: zv <file.zv> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr>");
             process::exit(2);
         }
     };
@@ -1672,6 +1679,18 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&code, &mut |line| output.push(line))?;
         Ok(output)
+    }
+
+    #[test]
+    fn check_program_compiles_without_running_side_effects() {
+        let path = std::env::temp_dir().join(format!("zenvora-check-{}.zv", std::process::id()));
+        std::fs::write(&path, "show 1 / 0\\n").unwrap();
+        let path_text = path.to_string_lossy().to_string();
+        // Compilation succeeds even though executing this program would divide by zero.
+        assert!(super::check_program(&path_text).is_ok());
+        std::fs::write(&path, "show (1 + )\\n").unwrap();
+        assert!(super::check_program(&path_text).unwrap_err().contains("expected"));
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
