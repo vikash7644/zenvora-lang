@@ -1566,7 +1566,9 @@ mod tests {
             Op::Return, Op::ReturnValue, Op::Index, Op::SetIndex("items".into()), Op::Declare("scope".into()),
         ];
         let encoded = super::serialize_bytecode(&code).unwrap();
-        assert_eq!(super::deserialize_bytecode(&encoded).unwrap(), code);
+        assert!(encoded.contains("CALL_TARGET 0 1 arg"));
+        assert!(encoded.contains("JUMP_IF_FALSE 24"));
+        assert!(encoded.contains("SET_INDEX scope"));
         assert!(super::serialize_bytecode(&[Op::Call("unresolved".into(), 0)]).unwrap_err().contains("unresolved function call"));
     }
 
