@@ -73,7 +73,7 @@ cargo run -- --check examples/functions.zv
 
 ## Scientific computing (early integer-only helpers)
 
-The runtime now includes checked integer helpers: `gcd`, `lcm`, `factorial` (0–20), `is_prime`, `fibonacci` (0–92), `pow_int`, and integer-array `mean`. Introductory formula helpers include `speed`, `force`, `kinetic_energy`, `density`, `molarity`, and `bmi_x10` (BMI multiplied by 10). See [`examples/science.zv`](examples/science.zv).
+The runtime now includes checked integer helpers: `gcd`, `lcm`, `factorial` (0–20), `is_prime`, `fibonacci` (0–92), `pow_int`, and integer-array `mean`. Introductory formula helpers include `speed`, `force`, `kinetic_energy`, `density`, `molarity`, and `bmi_x10` (BMI multiplied by 10), `molar_mass` (sum of caller-supplied integer atomic masses), `dna_complement`, and `gc_content_percent` (integer DNA GC percentage). See [`examples/science.zv`](examples/science.zv).
 
 **Important limits:** the language currently uses signed 64-bit integers only; division truncates, and the science helpers do not track physical units or provide floating-point precision. These are starter utilities, not validated scientific, medical, chemistry-lab, or engineering software. Next steps include floating-point/decimal support, dimensions and units, and domain libraries with independent tests.
 
