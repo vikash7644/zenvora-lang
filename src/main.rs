@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::{env, fs, process};
 use std::path::Path;
+use ed25519_dalek::{Signer, SigningKey};
 
 mod module_loader;
 mod chain_runtime;
@@ -1754,6 +1755,137 @@ fn run_bytecode(path: &str) -> Result<(), String> {
 fn run_chain_command(args: &[String]) -> Result<(), String> {
     use std::path::Path;
     match args {
+        [_, mode, key_path] if mode == "--chain-keygen" => {
+            if Path::new(key_path).exists() {
+                return Err(format!("key file already exists at {key_path}; refusing to overwrite it"));
+            }
+            let mut seed = [0_u8; 32];
+            getrandom::getrandom(&mut seed).map_err(|error| format!("secure random key generation failed: {error}"))?;
+            let signing_key = SigningKey::from_bytes(&seed);
+            let public_key = signing_key.verifying_key().to_bytes();
+            let address = crate::chain_protocol::address_from_public_key(&public_key)?;
+            let content = format!(
+                "ZENVORA_KEY_V1\\nprivate={}\\npublic={}\\naddress={}\\n",
+                hex_encode(&seed), hex_encode(&public_key), address
+            );
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(key_path)
+                .map_err(|error| format!("cannot create key file: {error}"))?;
+            use std::io::Write;
+            if let Err(error) = file.write_all(content.as_bytes()).and_then(|_| file.sync_all()) {
+                let _ = std::fs::remove_file(key_path);
+                return Err(format!("cannot safely write key file: {error}"));
+            }
+            println!("Zenvora development key created: {key_path}");
+            println!("Address: {address}");
+            println!("WARNING: private key is unencrypted; keep this file private and do not use it for real funds.");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id, key_path, balance] if mode == "--chain-store-init" => {
+            if Path::new(store_path).exists() {
+                return Err(format!("block store already exists at {store_path}; refusing to overwrite it"));
+            }
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            if chain_id == 0 { return Err("chain ID must be nonzero".into()); }
+            let signing_key = read_chain_key(key_path)?;
+            let public_key = signing_key.verifying_key().to_bytes();
+            let address = crate::chain_protocol::address_from_public_key(&public_key)?;
+            let balance: i64 = balance.parse().map_err(|_| "genesis balance must be a valid 64-bit integer")?;
+            let mut runtime = chain_runtime::ChainRuntime::new();
+            runtime.set_genesis_balance(&address, balance)?;
+            let mut store = crate::block_store::BlockStore::new(chain_id, runtime.genesis_balances().clone())?;
+            let header = crate::chain_protocol::BlockHeaderV1 {
+                chain_id,
+                height: 0,
+                timestamp_secs: current_unix_seconds()?,
+                parent_hash: [0; 32],
+                transaction_root: crate::chain_protocol::transaction_merkle_root(&[])?,
+                receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[])?,
+                state_root: runtime.state_root(),
+                proposer: address.clone(),
+                consensus_proof: Vec::new(),
+            };
+            crate::chain_block::execute_block(&mut runtime, &header, &[], chain_id, None)?;
+            store.append_executed_block(store_path, &runtime, &header, &[], &[])?;
+            println!("Zenvora local chain initialized: chain_id={chain_id} height=0");
+            println!("Genesis account: {address} balance={balance}");
+            println!("Block store: {store_path}");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id, key_path, recipient, amount, max_fee] if mode == "--chain-store-transfer" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let signing_key = read_chain_key(key_path)?;
+            let public_key = signing_key.verifying_key().to_bytes();
+            let sender = crate::chain_protocol::address_from_public_key(&public_key)?;
+            let amount: u64 = amount.parse().map_err(|_| "amount must be a positive integer")?;
+            let max_fee: u64 = max_fee.parse().map_err(|_| "maximum fee reserve must be a nonnegative integer")?;
+            let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+            let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+            let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+            let mut transaction = crate::chain_protocol::TransactionV1 {
+                chain_id,
+                sender: sender.clone(),
+                nonce: runtime.account_nonce(&sender),
+                recipient: recipient.clone(),
+                amount,
+                max_fee,
+                gas_limit: 21_000,
+                valid_until_height: None,
+                signature: Vec::new(),
+            };
+            transaction.signature = signing_key.sign(&transaction.signing_bytes()?).to_bytes().to_vec();
+            let envelope = crate::chain_block::SignedTransactionEnvelope {
+                transaction: transaction.clone(),
+                public_key: public_key.to_vec(),
+            };
+            let mut candidate = runtime.clone();
+            let receipt = candidate.apply_signed_transaction(&transaction, &public_key, chain_id, height)?;
+            let header = crate::chain_protocol::BlockHeaderV1 {
+                chain_id,
+                height,
+                timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+                parent_hash: previous.header.header_hash()?,
+                transaction_root: crate::chain_protocol::transaction_merkle_root(&[transaction])?,
+                receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[receipt])?,
+                state_root: candidate.state_root(),
+                proposer: sender,
+                consensus_proof: Vec::new(),
+            };
+            let receipts = crate::chain_block::execute_block(
+                &mut runtime, &header, &[envelope.clone()], chain_id, Some(&previous.header),
+            )?;
+            store.append_executed_block(store_path, &runtime, &header, &[envelope], &receipts)?;
+            println!("Block committed locally: height={height} chain_id={chain_id}");
+            println!("Transaction: {}", receipts[0].transaction_id.as_deref().unwrap_or("unknown"));
+            println!("Status: {} | {} balance={} | {} balance={}",
+                if receipts[0].accepted { "ACCEPTED" } else { "REJECTED" },
+                receipts[0].from, receipts[0].sender_balance,
+                receipts[0].to, receipts[0].recipient_balance);
+            println!("WARNING: local single-node prototype; fees are reserved but not charged, consensus/networking are not implemented.");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id, address] if mode == "--chain-store-balance" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let (_, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+            println!("address={address} balance={} nonce={}", runtime.balance(address), runtime.account_nonce(address));
+            Ok(())
+        }
+        [_, mode, store_path, chain_id] if mode == "--chain-store-info" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let (store, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+            let tip = store.blocks().last().ok_or_else(|| "block store has no genesis block".to_string())?;
+            println!("chain_id={chain_id} blocks={} height={}", store.blocks().len(), tip.header.height);
+            println!("state_root={}", hex_encode(&runtime.state_root()));
+            println!("tip_hash={}", hex_encode(&tip.header.header_hash()?));
+            println!("Replay verification: PASS (local file only; no consensus verification)");
+            Ok(())
+        }
         [_, mode, ledger_path, address, amount] if mode == "--chain-init" => {
             if Path::new(ledger_path).exists() {
                 return Err(format!("ledger already exists at {ledger_path}; refusing to overwrite it"));
@@ -1791,6 +1923,62 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
         }
         _ => Err("invalid chain command arguments".into()),
     }
+}
+
+fn read_chain_key(path: &str) -> Result<SigningKey, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| format!("cannot read key file: {error}"))?;
+    let mut lines = content.lines();
+    if lines.next() != Some("ZENVORA_KEY_V1") {
+        return Err("unsupported or malformed Zenvora key file".into());
+    }
+    let private_line = lines.next().ok_or_else(|| "key file is missing private seed".to_string())?;
+    let public_line = lines.next().ok_or_else(|| "key file is missing public key".to_string())?;
+    let address_line = lines.next().ok_or_else(|| "key file is missing address".to_string())?;
+    if lines.next().is_some() {
+        return Err("key file contains unexpected extra lines".into());
+    }
+    let seed: [u8; 32] = decode_hex_bytes(private_line.strip_prefix("private=").ok_or_else(|| "invalid private-key field".to_string())?)?
+        .try_into().map_err(|_| "private seed must be 32 bytes")?;
+    let signing_key = SigningKey::from_bytes(&seed);
+    let public_key = signing_key.verifying_key().to_bytes();
+    if hex_encode(&public_key) != public_line.strip_prefix("public=").unwrap_or("") {
+        return Err("key file public key does not match private seed".into());
+    }
+    let address = crate::chain_protocol::address_from_public_key(&public_key)?;
+    if address != address_line.strip_prefix("address=").unwrap_or("") {
+        return Err("key file address does not match public key".into());
+    }
+    Ok(signing_key)
+}
+
+fn decode_hex_bytes(value: &str) -> Result<Vec<u8>, String> {
+    if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return Err("invalid lowercase hexadecimal value".into());
+    }
+    let mut output = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        let high = (pair[0] as char).to_digit(16).ok_or_else(|| "invalid hex digit".to_string())?;
+        let low = (pair[1] as char).to_digit(16).ok_or_else(|| "invalid hex digit".to_string())?;
+        output.push(((high << 4) | low) as u8);
+    }
+    Ok(output)
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(&mut output, "{byte:02x}");
+    }
+    output
+}
+
+fn current_unix_seconds() -> Result<u64, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    Ok(SystemTime::now().duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("system clock is before Unix epoch: {error}"))?
+        .as_secs())
 }
 
 fn create_project(name: &str) -> Result<(), String> {
