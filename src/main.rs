@@ -803,14 +803,20 @@ mod tests {
 
     #[test]
     fn strings_support_escapes_concatenation_and_bytecode_round_trip() {
-        let source = "define message := \"hello\\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\n";
+        let source = "define message := \"hello\\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
         let code = compile(source).unwrap();
         let encoded = super::serialize_bytecode(&code).unwrap();
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
         assert_eq!(decoded, code);
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
-        assert_eq!(output, vec!["hello\nworld", "Zenvora Lang", ""]);
+        assert_eq!(output, vec!["hello\nworld", "Zenvora Lang", "", "नमस्ते 🌍"]);
+    }
+
+    #[test]
+    fn malformed_string_literals_are_reported() {
+        assert!(compile_core("show \"unterminated\n").unwrap_err().contains("unterminated string literal"));
+        assert!(compile_core("show \"bad\\q\"\n").unwrap_err().contains("unsupported string escape"));
     }
 
     #[test]
