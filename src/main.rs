@@ -1580,6 +1580,12 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                     if is_main {
                         return Err(format!("bytecode verifier: return instruction outside a function at {pc}"));
                     }
+                    let expected_depth = if matches!(op, Op::ReturnValue) { 1 } else { 0 };
+                    if incoming_depth != expected_depth {
+                        return Err(format!(
+                            "bytecode verifier: function return at instruction {pc} has {incoming_depth} operand value(s); expected {expected_depth}"
+                        ));
+                    }
                 }
                 Op::CallTarget { .. } => {
                     if pc + 1 < end { pending.push((pc + 1, outgoing_depth)); }
@@ -2703,6 +2709,24 @@ mod tests {
             let error = super::deserialize_bytecode(bytecode).unwrap_err();
             assert!(error.contains("verifier") || error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
         }
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_function_returns_with_stack_residue() {
+        let bytecode = concat!(
+            "ZENVORA_BYTECODE 1\n",
+            "CALL_TARGET 6 0 -\n",
+            "PUSH 10\n",
+            "ADD\n",
+            "PRINT\n",
+            "PRINT\n",
+            "JUMP 9\n",
+            "PUSH 1\n",
+            "PUSH 2\n",
+            "RETURN_VALUE\n",
+        );
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("function return") && error.contains("expected 1"), "unexpected error: {error}");
     }
 
     #[test]
