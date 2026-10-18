@@ -1,0 +1,11 @@
+# Native boolean values and logical operators.
+define alive := true
+define ready := false
+
+show not ready
+if alive and not ready {
+    show 1
+} otherwise {
+    show 0
+}
+show 2 < 3 or 5 < 4
