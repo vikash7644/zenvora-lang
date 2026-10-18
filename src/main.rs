@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{env, fs, process};
 use std::path::Path;
 
@@ -513,6 +513,11 @@ fn count_block_braces(line: &str) -> (i32, i32) {
 // not a persistent blockchain contract runtime.
 fn lower_contracts(source: &str) -> Result<String, String> {
     let lines: Vec<&str> = source.lines().collect();
+    let state_names: HashSet<String> = lines.iter().filter_map(|raw| {
+        let rest = raw.trim().strip_prefix("state ")?;
+        let name = rest.split_once(":=")?.0.trim();
+        if valid_identifier(name) { Some(name.to_string()) } else { None }
+    }).collect();
     let mut output = String::new();
     let mut index = 0usize;
     let mut contract: Option<(String, usize)> = None;
@@ -581,6 +586,17 @@ fn lower_contracts(source: &str) -> Result<String, String> {
             let mut depth = 1i32;
             while index < lines.len() && depth > 0 {
                 let current = lines[index];
+                if kind == "view" {
+                    let statement = current.trim();
+                    if !statement.starts_with('#') {
+                        if let Some((left, _)) = statement.split_once(":=") {
+                            let base = left.trim().split('[').next().unwrap_or(left.trim()).trim();
+                            if state_names.contains(base) {
+                                return Err(format!("line {}: view '{header}' cannot directly assign to contract state '{base}'", index + 1));
+                            }
+                        }
+                    }
+                }
                 let (opens, closes) = count_block_braces(current);
                 depth += opens - closes;
                 if depth > 0 {
@@ -1420,6 +1436,14 @@ mod tests {
         let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\ncall increment(3)\ncall increment(4)\nshow current()\n";
         let output = execute(source).unwrap();
         assert_eq!(output, vec!["7"]);
+    }
+
+    #[test]
+    fn contract_views_reject_direct_state_mutation() {
+        let source = "contract Counter {\nstate count := 0\nview bad() {\ncount := count + 1\nreturn count\n}\n}\n";
+        assert!(compile(source).unwrap_err().contains("cannot directly assign to contract state 'count'"));
+        let good = "contract Counter {\nstate count := 0\nview current() {\nreturn count\n}\n}\nshow current()\n";
+        assert_eq!(execute(good).unwrap(), vec!["0"]);
     }
 
     #[test]
