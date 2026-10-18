@@ -1,20 +1,9 @@
-# Zenvora Lang first runnable example
-define name := "Zenvora"
-define count := 1
-
-show "Hello from " + name
-
-repeat count <= 10 {
-    if count == 5 {
-        show "Reached five; stopping the loop."
-        break
-    }
-    show count
-    count := count + 1
-}
-
-if count == 5 {
-    show "Break works."
-} otherwise {
-    show "Unexpected result."
-}
+# Zenvora Lang v0.1 — runnable integer bytecode VM demo
+define a := 10
+define b := 20
+define total := a + b
+show total
+show total * 2
+show (100 - 40) / 3
+total := total + 5
+show total
