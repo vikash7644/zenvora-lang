@@ -12,18 +12,40 @@ use serde_json::{json, Value};
 use super::block_store::BlockStore;
 use super::chain_block::{execute_block, SignedTransactionEnvelope};
 use super::chain_protocol::{BlockHeaderV1, TransactionV1};
+use super::tx_pool::TransactionPool;
 
 const PROTOCOL_VERSION: u64 = 1;
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 const PEER_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn serve(store_path: String, chain_id: u64, bind_ip: &str, port: u16) -> Result<(), String> {
+    serve_inner(store_path, chain_id, None, bind_ip, port)
+}
+
+pub fn serve_with_pool(
+    store_path: String,
+    chain_id: u64,
+    pool_path: String,
+    bind_ip: &str,
+    port: u16,
+) -> Result<(), String> {
+    serve_inner(store_path, chain_id, Some(pool_path), bind_ip, port)
+}
+
+fn serve_inner(
+    store_path: String,
+    chain_id: u64,
+    pool_path: Option<String>,
+    bind_ip: &str,
+    port: u16,
+) -> Result<(), String> {
     let ip: IpAddr = bind_ip.parse().map_err(|_| "bind IP must be a valid IPv4 or IPv6 address")?;
     let address = SocketAddr::from((ip, port));
     let listener = TcpListener::bind(address)
         .map_err(|error| format!("cannot bind P2P listener at {address}: {error}"))?;
-    println!("Zenvora block-sync peer listening at {address}");
-    println!("This prototype has no peer authentication or consensus. Bind only on a trusted network.");
+    println!("Zenvora peer service listening at {address}");
+    println!("Block sync{} enabled. No peer authentication or full consensus; use only on a trusted network.",
+        if pool_path.is_some() { " and transaction gossip" } else { "" });
     for incoming in listener.incoming() {
         match incoming {
             Ok(mut stream) => {
@@ -32,7 +54,9 @@ pub fn serve(store_path: String, chain_id: u64, bind_ip: &str, port: u16) -> Res
                 let result = read_frame(&mut stream)
                     .and_then(|bytes| serde_json::from_slice::<Value>(&bytes)
                         .map_err(|error| format!("invalid peer message JSON: {error}")))
-                    .map(|request| handle_message(&request, &store_path, chain_id));
+                    .map(|request| handle_message_with_pool(
+                        &request, &store_path, chain_id, pool_path.as_deref(),
+                    ));
                 let response = match result {
                     Ok(value) => value,
                     Err(error) => json!({"ok": false, "error": error}),
@@ -118,6 +142,33 @@ pub fn sync_from_peer(store_path: &str, chain_id: u64, peer: &str) -> Result<usi
     Ok(synced)
 }
 
+/// Send every pending local transaction to a peer that has pool mode enabled.
+pub fn gossip_pool_to_peer(store_path: &str, chain_id: u64, pool_path: &str, peer: &str) -> Result<usize, String> {
+    let peer_address: SocketAddr = peer.parse()
+        .map_err(|_| "peer must be an IP:port socket address")?;
+    let (_, runtime) = BlockStore::load_from_file(store_path, chain_id)?;
+    let next_height = runtime.receipts().last()
+        .map(|_| 0_u64)
+        .unwrap_or(0);
+    let (store, _) = BlockStore::load_from_file(store_path, chain_id)?;
+    let height = store.blocks().last().and_then(|block| block.header.height.checked_add(1))
+        .ok_or_else(|| "cannot determine next block height".to_string())?;
+    let pool = TransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
+    let _ = next_height;
+    let mut accepted = 0_usize;
+    for envelope in pool.pending() {
+        let response = request_peer(peer_address, &json!({
+            "method":"submit_transaction",
+            "publicKey":hex_encode(&envelope.public_key),
+            "transaction":hex_encode(&envelope.transaction.canonical_bytes()?)
+        }))?;
+        if response.get("accepted").and_then(Value::as_bool) == Some(true) {
+            accepted += 1;
+        }
+    }
+    Ok(accepted)
+}
+
 fn request_peer(peer: SocketAddr, request: &Value) -> Result<Value, String> {
     let mut stream = TcpStream::connect_timeout(&peer, PEER_TIMEOUT)
         .map_err(|error| format!("cannot connect to peer {peer}: {error}"))?;
@@ -133,6 +184,15 @@ fn request_peer(peer: SocketAddr, request: &Value) -> Result<Value, String> {
 }
 
 fn handle_message(request: &Value, store_path: &str, expected_chain_id: u64) -> Value {
+    handle_message_with_pool(request, store_path, expected_chain_id, None)
+}
+
+fn handle_message_with_pool(
+    request: &Value,
+    store_path: &str,
+    expected_chain_id: u64,
+    pool_path: Option<&str>,
+) -> Value {
     match request.get("method").and_then(Value::as_str) {
         Some("status") => {
             let (store, _) = match BlockStore::load_from_file(store_path, expected_chain_id) {
@@ -175,6 +235,73 @@ fn handle_message(request: &Value, store_path: &str, expected_chain_id: u64) -> 
                 "transaction":envelope.transaction.canonical_bytes().map(|bytes|hex_encode(&bytes)).unwrap_or_default()
             })).collect();
             json!({"ok":true,"result":{"header":hex_encode(&header),"transactions":transactions}})
+        }
+        Some("get_pending_transactions") => {
+            let pool_path = match pool_path {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"transaction pool is disabled on this peer"}),
+            };
+            let (store, runtime) = match BlockStore::load_from_file(store_path, expected_chain_id) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":format!("local block store failed verification: {error}")}),
+            };
+            let height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"cannot determine next block height"}),
+            };
+            let pool = match TransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, height) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":error}),
+            };
+            let transactions: Vec<Value> = pool.pending().iter().map(|envelope| json!({
+                "publicKey":hex_encode(&envelope.public_key),
+                "transaction":envelope.transaction.canonical_bytes().map(|bytes|hex_encode(&bytes)).unwrap_or_default()
+            })).collect();
+            json!({"ok":true,"result":{"transactions":transactions,"count":transactions.len()}})
+        }
+        Some("submit_transaction") => {
+            let pool_path = match pool_path {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"transaction pool is disabled on this peer"}),
+            };
+            let public_key = match request.get("publicKey").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"submit_transaction requires publicKey hex"}),
+            };
+            let transaction_bytes = match request.get("transaction").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"submit_transaction requires canonical transaction hex"}),
+            };
+            let transaction = match TransactionV1::from_canonical_bytes(&transaction_bytes) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":error}),
+            };
+            let (store, runtime) = match BlockStore::load_from_file(store_path, expected_chain_id) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":format!("local block store failed verification: {error}")}),
+            };
+            let height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value,
+                None => return json!({"ok":false,"error":"cannot determine next block height"}),
+            };
+            let mut pool = match TransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, height) {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":error}),
+            };
+            let transaction_id = match transaction.transaction_id() {
+                Ok(value) => value,
+                Err(error) => return json!({"ok":false,"error":error}),
+            };
+            if pool.pending().iter().any(|entry| entry.transaction.transaction_id().ok() == Some(transaction_id)) {
+                return json!({"ok":true,"result":{"accepted":false,"duplicate":true,"transactionId":hex_encode(&transaction_id)}});
+            }
+            if let Err(error) = pool.submit(&runtime, SignedTransactionEnvelope { transaction, public_key }) {
+                return json!({"ok":false,"error":error});
+            }
+            if let Err(error) = pool.save_to_file(pool_path) {
+                return json!({"ok":false,"error":error});
+            }
+            json!({"ok":true,"result":{"accepted":true,"duplicate":false,"transactionId":hex_encode(&transaction_id),"poolSize":pool.len()}})
         }
         _ => json!({"ok":false,"error":"unsupported peer method"}),
     }
