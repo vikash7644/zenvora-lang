@@ -533,6 +533,7 @@ where
     let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
     let mut steps = 0usize;
     const MAX_STEPS: usize = 1_000_000;
+    const MAX_CALL_DEPTH: usize = 1_024;
     while pc < code.len() {
         steps += 1;
         if steps > MAX_STEPS {
@@ -587,6 +588,9 @@ where
             Op::Jump(target) => { pc = *target; continue; }
             Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
             Op::CallTarget { target, params, arg_count } => {
+                if call_stack.len() >= MAX_CALL_DEPTH {
+                    return Err(format!("maximum function call depth exceeded ({MAX_CALL_DEPTH})"));
+                }
                 let mut values = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count { values.push(stack.pop().ok_or("VM stack underflow while reading function arguments")?); }
                 values.reverse();
@@ -968,6 +972,12 @@ mod tests {
             "show factorial(5)\nfn factorial(n) {\n if n <= 1 {\n return 1\n } otherwise {\n return n * factorial(n - 1)\n }\n}\n"
         ).unwrap();
         assert_eq!(output, vec!["120"]);
+    }
+
+    #[test]
+    fn recursive_calls_stop_at_the_call_depth_limit() {
+        let error = execute("call recurse()\nfn recurse() {\ncall recurse()\n}\n").unwrap_err();
+        assert!(error.contains("maximum function call depth exceeded"));
     }
 
     #[test]
