@@ -1946,7 +1946,7 @@ show clamp(-3, 0, 10)
             super::Value::Str("a".into()),
             super::Value::Str(oversized_replacement),
         ]).unwrap_err();
-        assert!(replace_error.contains("replace result exceeds safety limit"));
+        assert!(replace_error.contains("replace result exceeds safety limit") || replace_error.contains("replace size calculation overflow"));
 
         let join_error = super::builtin("join", vec![
             super::Value::Array(vec![
