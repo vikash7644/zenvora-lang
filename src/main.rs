@@ -1518,9 +1518,9 @@ mod tests {
     #[test]
     fn bytecode_verifier_rejects_stack_underflow_and_bad_control_flow() {
         for bytecode in [
-            "ZENVORA_BYTECODE 1\nPRINT\n",
-            "ZENVORA_BYTECODE 1\nPUSH 1\nADD\n",
-            "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE_KEEP 3\nJUMP 3\n",
+            "ZENVORA_BYTECODE 1\nPRINT\nJUMP 2\n",
+            "ZENVORA_BYTECODE 1\nPUSH 1\nADD\nJUMP 3\n",
+            "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 99\nJUMP 3\n",
         ] {
             let error = super::deserialize_bytecode(bytecode).unwrap_err();
             assert!(error.contains("verifier"), "unexpected error: {error}");
@@ -1529,7 +1529,7 @@ mod tests {
 
     #[test]
     fn bytecode_verifier_rejects_inconsistent_stack_depth_at_merge() {
-        let bytecode = "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 4\nPUSH 1\nJUMP 5\nPUSH 2\nPRINT\nJUMP 8\n";
+        let bytecode = "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 4\nPUSH 1\nJUMP 5\nJUMP 5\nPRINT\nJUMP 7\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
         assert!(error.contains("inconsistent stack depth") || error.contains("invalid"), "unexpected error: {error}");
     }
@@ -1568,7 +1568,7 @@ mod tests {
         let encoded = super::serialize_bytecode(&code).unwrap();
         assert!(encoded.contains("CALL_TARGET 0 1 arg"));
         assert!(encoded.contains("JUMP_IF_FALSE 24"));
-        assert!(encoded.contains("SET_INDEX scope"));
+        assert!(encoded.contains("SET_INDEX items"));
         assert!(super::serialize_bytecode(&[Op::Call("unresolved".into(), 0)]).unwrap_err().contains("unresolved function call"));
     }
 
