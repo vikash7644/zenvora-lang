@@ -23,9 +23,9 @@ zv --chain-store-balance dev.zvb 71 bob
 zv --chain-store-info dev.zvb 71
 ```
 
-`--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The CLI currently supports one genesis account per new store; multi-account genesis configuration is a later milestone.
+`--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The CLI currently supports one genesis validator per new store; multi-account genesis configuration and a multi-validator CLI workflow remain unfinished. Genesis headers use a deterministic timestamp so stores initialized from the same key, chain ID, and balance share the same genesis hash.
 
-**Key warning:** `owner.zvk` contains an unencrypted private seed. On Unix-like systems the CLI requests owner-only file permissions, but this is a development key format, not a production wallet or secure key-management system. Fees are checked as a reserve but are not charged. The block store is a single local file: this is not yet a networked testnet, consensus is not implemented, and no real funds should be used.
+**Key warning:** `owner.zvk` contains an unencrypted private seed. On Unix-like systems the CLI requests owner-only file permissions, but this is a development key format, not a production wallet or secure key-management system. Fees are checked as a reserve but are not charged. The block store is a local file and the CLI currently runs a single validator. A quorum-signature prototype exists, but full BFT consensus/finality and production key management are not implemented. No real funds should be used.
 
 Automated tests cover:
 - a valid transfer and subsequent transfer using the committed state;
@@ -77,7 +77,15 @@ zv --chain-store-info node-b.zvb 71
 
 The protocol supports peer status and fetching a block by height. Sync verifies the chain ID, exact genesis header hash and state root, header linkage, canonical transaction encodings, signatures, nonce/balance rules, and transaction/receipt/state roots by replaying blocks before persisting them. Sync is append-only: it refuses a peer that is behind or has a different tip at the same height; fork choice and reorganization are not implemented.
 
-**Network warning:** the peer service has no authentication or consensus/finality. Binding to `0.0.0.0` exposes it on reachable interfaces; use only on a trusted private network and never on the public internet. Peers can exchange data, but without consensus the protocol cannot decide which competing chain is authoritative. This is a block-sync prototype, not a secure public testnet.
+**Network warning:** the peer service has no peer authentication, fork choice, or full consensus/finality. Block headers now require genesis-authorized validator quorum signatures, but the CLI currently supports only one genesis validator and does not implement a BFT round protocol. Binding to `0.0.0.0` exposes it on reachable interfaces; use only on a trusted private network and never on the public internet. This is a block-sync prototype, not a secure public testnet.
+
+## Validator signatures and quorum prototype
+
+`src/chain_consensus.rs` defines a domain-separated block-header signing payload that excludes the proof itself, avoiding a circular signature/hash dependency. Each proof record contains a 32-byte Ed25519 public key and 64-byte signature; records are sorted by the derived validator address and duplicates are rejected. Validators are derived from positive-balance genesis allocations whose addresses match the public-key-derived `zv...` address format. The proposer must sign, and the prototype requires a `floor(2n/3)+1` quorum, with a maximum of 42 validators under the current header-size limit. Genesis is trusted and has no consensus proof.
+
+Block execution and block-store replay now verify this proof before accepting non-genesis blocks. Tests cover single-validator verification, a 3-of-4 quorum, duplicate signatures, unsigned blocks, non-validator signers, and signature invalidation after header mutation. CI passed: [GitHub Actions run 39148065358](https://github.com/vikash7644/zenvora-lang/actions/runs/39148065358).
+
+**Important limitation:** this is validator authorization and quorum-signature verification, not a complete BFT consensus protocol. There is no leader election, round/view changes, timeout recovery, equivocation handling, slashing, fork choice, or finality protocol. The current CLI genesis flow supports one validator, so multi-validator genesis setup and signing are still pending.
 
 ## Canonical protocol-format and hashing prototype
 
@@ -89,7 +97,7 @@ The runtime exposes deterministic state roots over sorted balances/nonces and a 
 
 `src/block_store.rs` adds an append-only local block store for genesis allocations, canonical headers, signed transaction envelopes, and public keys. Loading replays every stored block through the atomic execution path, so broken linkage, altered signatures/transactions, or mismatched transaction/receipt/state roots reject the store. The replay/tamper tests passed in [GitHub Actions run 39146669677](https://github.com/vikash7644/zenvora-lang/actions/runs/39146669677).
 
-This is **not yet a complete transaction protocol or chain**. The V3 VM-backed ledger persists signed transaction IDs and per-account nonces and reconstructs them by replaying the receipt log; the earlier V2 format remains readable for local unsigned transfer history. The block store is local-file persistence, not a networked node or consensus engine; consensus proofs and proposer authorization remain opaque and unverified. The runtime does not yet charge fees or enforce a full gas schedule. P2P, fork choice, finality, snapshots, RPC, and production security review remain separate milestones. Hashing, signature verification, nonce persistence, root calculation, atomic block execution, and replay-verified local persistence are building blocks, not proof of consensus or production security.
+This is **not yet a complete transaction protocol or chain**. The V3 VM-backed ledger persists signed transaction IDs and per-account nonces and reconstructs them by replaying the receipt log; the earlier V2 format remains readable for local unsigned transfer history. The block store is local-file persistence, not a production node. Validator quorum signatures are verified, but full BFT consensus, peer authentication, fork choice, reorganization, finality, snapshots, fee charging, a full gas schedule, multi-validator genesis tooling, and production security review remain unfinished. Hashing, signature verification, nonce persistence, root calculation, atomic block execution, quorum verification, and replay-verified local persistence are building blocks, not proof of production security.
 
 ## Intended architecture
 
@@ -101,13 +109,14 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 
 ## Next implementation gates
 
-- Replace generated transfer-rule source with compiled contract artifacts and a typed contract ABI.
-- Add transaction context and explicit state read/write host interfaces to the VM.
-- Add persistent state storage and replay/recovery tests.
-- Add signed transaction validation, nonce/replay protection, fee accounting and block/receipt encoding.
-- Define and implement consensus only after deterministic execution and state transitions are stable.
-- Add fuzzing, verifier tests, resource accounting, reproducible builds, and an external security review before any public testnet with value.
+- Add a validated multi-account genesis configuration and CLI workflow for multiple validator keys.
+- Implement a full consensus round protocol: validator-set configuration, proposal/vote messages, timeouts, equivocation handling, fork choice, and explicit finality rules.
+- Add transaction fee charging, gas metering, per-operation cost schedule, and deterministic execution limits.
+- Add transaction submission over authenticated RPC, transaction pool policy, peer authentication, rate limits, and abuse controls.
+- Add indexed block/receipt storage, snapshots, recovery tests, and state/receipt proof APIs.
+- Replace the illustrative transfer rule with compiled Zenvora contract artifacts and a typed contract ABI/state host interface.
+- Add fuzzing, property tests, multi-node adversarial tests, reproducible builds, and an external security review before any public testnet with value.
 
 ## Safety/status
 
-The runtime has a replay-validated V2 local ledger format, but does not yet implement a block database, consensus, cryptographic signatures, a deployable ABI, production wallet security, or a public testnet. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing Zenvora Lang contracts.
+The repository now has a local signed-transfer workflow, deterministic block commitments, atomic block execution, replay-verified local block storage, read-only loopback JSON-RPC, a TCP block-sync prototype, and genesis-authorized validator quorum-signature checks. It still does not have a secure decentralized consensus protocol, public-testnet readiness, production wallet/key management, or a deployable audited contract ABI. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing Zenvora Lang contracts.
