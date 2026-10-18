@@ -155,7 +155,8 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         }
 
         if let Some(rest) = line.strip_prefix("call ") {
-            let name = rest.strip_suffix("()").ok_or_else(|| format!("line {}: expected 'call function_name()'", line_no + 1))?.trim();
+            let call_text = rest.trim();
+            let name = call_text.strip_suffix(')').and_then(|s| s.strip_suffix('(')).ok_or_else(|| format!("line {}: expected 'call function_name()'", line_no + 1))?.trim();
             if name.is_empty() || !name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || !c.is_ascii_digit())) {
                 return Err(format!("line {}: invalid function name", line_no + 1));
             }
@@ -283,7 +284,6 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             let mut body = String::new();
             while i < lines.len() && depth > 0 {
                 let current = lines[i];
-                let trimmed = current.trim();
                 let opens = current.chars().filter(|c| *c == '{').count() as i32;
                 let closes = current.chars().filter(|c| *c == '}').count() as i32;
                 depth += opens - closes;
