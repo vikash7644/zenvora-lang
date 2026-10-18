@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- The loopback JSON-RPC listener now logs per-client response write failures and continues serving instead of terminating the entire service when a client disconnects mid-response.
+
 - Block-store and transaction-pool loaders now cap the bytes read from the opened file itself, not only its earlier metadata size, so concurrent file growth/replacement cannot bypass their configured input limits.
 
 - Ledger loading now caps bytes read from the open file itself, in addition to checking metadata, preventing a file that grows or is replaced during the read from bypassing the configured 64 MiB allocation limit.
