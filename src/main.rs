@@ -1353,7 +1353,7 @@ mod tests {
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nMAGIC\n").unwrap_err().contains("invalid bytecode instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nJUMP 99\n").unwrap_err().contains("invalid instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nCALL_TARGET 9 0 -\n").unwrap_err().contains("invalid function entry"));
-        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", "PUSH 1\n".repeat(super::MAX_BYTECODE_INSTRUCTIONS))).unwrap_err().contains("instruction count exceeds safety limit"));
+        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", "PUSH 1\n".repeat(super::MAX_BYTECODE_INSTRUCTIONS + 1))).unwrap_err().contains("instruction count exceeds safety limit"));
         assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\nPUSH_STRING_HEX {}", "61".repeat(super::MAX_BYTECODE_STRING_BYTES + 1))).unwrap_err().contains("string exceeds safety limit"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nBUILTIN array 1025\n").unwrap_err().contains("argument count exceeds safety limit"));
         assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", " ".repeat(super::MAX_BYTECODE_BYTES))).unwrap_err().contains("file exceeds safety limit"));
