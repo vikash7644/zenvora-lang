@@ -117,8 +117,18 @@ impl TransactionPool {
         if metadata.len() > MAX_POOL_BYTES {
             return Err("transaction pool exceeds maximum file size".into());
         }
-        let content = std::fs::read_to_string(path)
+        // Read at most the configured limit plus one byte so a concurrent file
+        // replacement/growth cannot bypass the metadata size check.
+        use std::io::Read;
+        let mut content = String::new();
+        std::fs::File::open(path)
+            .map_err(|error| format!("cannot open transaction pool: {error}"))?
+            .take(MAX_POOL_BYTES + 1)
+            .read_to_string(&mut content)
             .map_err(|error| format!("cannot read transaction pool: {error}"))?;
+        if content.len() as u64 > MAX_POOL_BYTES {
+            return Err("transaction pool exceeds maximum file size".into());
+        }
         let mut lines = content.lines();
         if lines.next() != Some(POOL_VERSION) {
             return Err("unsupported or missing transaction-pool version".into());
