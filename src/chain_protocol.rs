@@ -66,6 +66,54 @@ impl TransactionV1 {
         Ok(out)
     }
 
+    /// Decode the canonical version-1 envelope and reject non-canonical or trailing data.
+    pub fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > MAX_BLOCK_BYTES {
+            return Err("transaction exceeds maximum encoded size".into());
+        }
+        let mut envelope = Reader::new(bytes);
+        envelope.expect(TX_WIRE_DOMAIN)?;
+        let signing = envelope.read_bytes(MAX_BLOCK_BYTES)?;
+        let signature = envelope.read_bytes(MAX_SIGNATURE_BYTES)?;
+        envelope.finish()?;
+
+        let mut payload = Reader::new(signing);
+        payload.expect(TX_DOMAIN)?;
+        if payload.read_u16()? != 1 {
+            return Err("unsupported transaction signing version".into());
+        }
+        let chain_id = payload.read_u64()?;
+        let sender = payload.read_string(MAX_ADDRESS_BYTES)?;
+        let nonce = payload.read_u64()?;
+        let recipient = payload.read_string(MAX_ADDRESS_BYTES)?;
+        let amount = payload.read_u64()?;
+        let max_fee = payload.read_u64()?;
+        let gas_limit = payload.read_u64()?;
+        let valid_until_height = match payload.read_u8()? {
+            0 => None,
+            1 => Some(payload.read_u64()?),
+            _ => return Err("invalid transaction expiry option tag".into()),
+        };
+        payload.finish()?;
+
+        let transaction = Self {
+            chain_id,
+            sender,
+            nonce,
+            recipient,
+            amount,
+            max_fee,
+            gas_limit,
+            valid_until_height,
+            signature: signature.to_vec(),
+        };
+        let reencoded = transaction.canonical_bytes()?;
+        if reencoded != bytes {
+            return Err("transaction bytes are not canonical".into());
+        }
+        Ok(transaction)
+    }
+
     /// Checks structural fields for a specific network and block height.
     /// Cryptographic signature verification and account nonce/balance checks are separate steps.
     pub fn validate_for(&self, expected_chain_id: u64, current_height: u64) -> Result<(), String> {
@@ -152,6 +200,70 @@ impl BlockHeaderV1 {
     }
 }
 
+struct Reader<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> Reader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn read_exact(&mut self, length: usize) -> Result<&'a [u8], String> {
+        let end = self.offset.checked_add(length).ok_or("encoded length overflow")?;
+        if end > self.bytes.len() {
+            return Err("truncated canonical transaction".into());
+        }
+        let value = &self.bytes[self.offset..end];
+        self.offset = end;
+        Ok(value)
+    }
+
+    fn expect(&mut self, expected: &[u8]) -> Result<(), String> {
+        if self.read_exact(expected.len())? != expected {
+            return Err("invalid canonical transaction domain tag".into());
+        }
+        Ok(())
+    }
+
+    fn read_u8(&mut self) -> Result<u8, String> {
+        Ok(self.read_exact(1)?[0])
+    }
+
+    fn read_u16(&mut self) -> Result<u16, String> {
+        Ok(u16::from_be_bytes(self.read_exact(2)?.try_into().map_err(|_| "invalid u16")?))
+    }
+
+    fn read_u32(&mut self) -> Result<u32, String> {
+        Ok(u32::from_be_bytes(self.read_exact(4)?.try_into().map_err(|_| "invalid u32")?))
+    }
+
+    fn read_u64(&mut self) -> Result<u64, String> {
+        Ok(u64::from_be_bytes(self.read_exact(8)?.try_into().map_err(|_| "invalid u64")?))
+    }
+
+    fn read_bytes(&mut self, maximum: usize) -> Result<&'a [u8], String> {
+        let length = self.read_u32()? as usize;
+        if length > maximum {
+            return Err("encoded field exceeds maximum permitted size".into());
+        }
+        self.read_exact(length)
+    }
+
+    fn read_string(&mut self, maximum: usize) -> Result<String, String> {
+        String::from_utf8(self.read_bytes(maximum)?.to_vec())
+            .map_err(|_| "encoded string is not valid UTF-8".into())
+    }
+
+    fn finish(&self) -> Result<(), String> {
+        if self.offset != self.bytes.len() {
+            return Err("trailing bytes in canonical transaction".into());
+        }
+        Ok(())
+    }
+}
+
 fn valid_address(address: &str) -> bool {
     !address.is_empty()
         && address.len() <= MAX_ADDRESS_BYTES
@@ -194,6 +306,28 @@ mod tests {
         second.signature = vec![9; 64];
         assert_eq!(first.signing_bytes().unwrap(), second.signing_bytes().unwrap());
         assert_ne!(first.canonical_bytes().unwrap(), second.canonical_bytes().unwrap());
+    }
+
+    #[test]
+    fn canonical_transaction_round_trips_and_rejects_truncation_or_trailing_data() {
+        let original = tx();
+        let bytes = original.canonical_bytes().unwrap();
+        assert_eq!(TransactionV1::from_canonical_bytes(&bytes).unwrap(), original);
+
+        for end in 0..bytes.len() {
+            assert!(TransactionV1::from_canonical_bytes(&bytes[..end]).is_err());
+        }
+        let mut trailing = bytes.clone();
+        trailing.push(0);
+        assert!(TransactionV1::from_canonical_bytes(&trailing).is_err());
+    }
+
+    #[test]
+    fn canonical_transaction_decoder_rejects_invalid_domain_and_oversized_input() {
+        let mut bytes = tx().canonical_bytes().unwrap();
+        bytes[0] ^= 1;
+        assert!(TransactionV1::from_canonical_bytes(&bytes).is_err());
+        assert!(TransactionV1::from_canonical_bytes(&vec![0; 4 * 1024 * 1024 + 1]).is_err());
     }
 
     #[test]
