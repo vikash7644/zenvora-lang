@@ -1868,6 +1868,20 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             run_signed_transfer_cli(store_path, chain_id, key_path, recipient, amount, max_fee, validator_paths)
         }
+        [_, mode, store_path, chain_id, pool_path, validator_paths @ ..]
+            if mode == "--chain-store-produce" && !validator_paths.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_pool_block_cli(store_path, chain_id, pool_path, validator_paths)
+        }
+        [_, mode, store_path, chain_id, pool_path] if mode == "--chain-rpc-pool" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            crate::chain_rpc::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), 8545)
+        }
+        [_, mode, store_path, chain_id, pool_path, port] if mode == "--chain-rpc-pool" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
+            crate::chain_rpc::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), port)
+        }
         [_, mode, store_path, chain_id, address] if mode == "--chain-store-balance" => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             let (_, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
@@ -1941,6 +1955,69 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
         }
         _ => Err("invalid chain command arguments".into()),
     }
+}
+
+fn run_pool_block_cli(
+    store_path: &str,
+    chain_id: u64,
+    pool_path: &str,
+    validator_key_paths: &[String],
+) -> Result<(), String> {
+    if validator_key_paths.is_empty() || validator_key_paths.len() > 42 {
+        return Err("supply between 1 and 42 validator key files".into());
+    }
+    let validator_keys: Vec<SigningKey> = validator_key_paths.iter()
+        .map(|path| read_chain_key(path))
+        .collect::<Result<_, _>>()?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let pool = crate::tx_pool::TransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
+    if pool.is_empty() {
+        return Err("transaction pool is empty".into());
+    }
+    let envelopes = pool.pending().to_vec();
+    let mut candidate = runtime.clone();
+    let mut candidate_receipts = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        candidate_receipts.push(candidate.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, chain_id, height,
+        )?);
+    }
+    let transactions: Vec<crate::chain_protocol::TransactionV1> = envelopes.iter()
+        .map(|envelope| envelope.transaction.clone()).collect();
+    let proposer = crate::chain_protocol::address_from_public_key(
+        &validator_keys[0].verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id,
+        height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root: crate::chain_protocol::transaction_merkle_root(&transactions)?,
+        receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&candidate_receipts)?,
+        state_root: candidate.state_root(),
+        proposer,
+        consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &validator_keys[0])?;
+    for key in validator_keys.iter().skip(1) {
+        crate::chain_consensus::add_validator_signature(&mut header, key)?;
+    }
+    let receipts = crate::chain_block::execute_block(
+        &mut runtime, &header, &envelopes, chain_id, Some(&previous.header),
+    )?;
+    if receipts != candidate_receipts {
+        return Err("executed receipts differ from candidate block receipts".into());
+    }
+    store.append_executed_block(store_path, &runtime, &header, &envelopes, &receipts)?;
+    let next_height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    crate::tx_pool::TransactionPool::new(chain_id, next_height)?.save_to_file(pool_path)
+        .map_err(|error| format!("block committed at height {height}, but transaction pool reset failed: {error}"))?;
+    println!("Block committed from transaction pool: height={height} transactions={}", receipts.len());
+    println!("Validator signatures: {}", validator_keys.len());
+    println!("State root: {}", hex_encode_bytes(&runtime.state_root()));
+    Ok(())
 }
 
 fn is_validator_address(address: &str) -> bool {
