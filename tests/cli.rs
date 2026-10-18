@@ -83,3 +83,14 @@ fn bytecode_cli_rejects_malformed_files() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid bytecode header"));
 }
+
+
+#[test]
+fn version_flag_reports_current_language_version() {
+    let output = Command::new(env!("CARGO_BIN_EXE_zv"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "Zenvora Lang v0.6.0");
+}
