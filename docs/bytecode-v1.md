@@ -27,7 +27,7 @@ cargo run -- --run-bytecode functions.zvb
 | `PUSH_STRING_HEX hex` | `→ String` | Push UTF-8 string bytes encoded as hex; `-` represents an empty string |
 | `PUSH_BOOL true/false` | `→ Bool` | Push boolean |
 | `LOAD name` | `→ Value` | Push a variable's current value; undefined names fail at runtime |
-| `STORE name` | `Value →` | Store the top value in the active local environment |
+| `STORE name` | `Value →` | Update an existing local or global binding; undefined names fail |\n| `DECLARE name` | `Value →` | Declare a global at top level or a local inside a function |\n| `INDEX` | `Collection Index → Value` | Read an array by integer index or a map by string key; invalid indexes fail |
 | `ADD`, `SUB`, `MUL`, `DIV` | `a b → Value` | Integer arithmetic with overflow and divide-by-zero checks; `ADD` also concatenates two strings |
 | `NEG` | `Int → Int` | Negate an integer |
 | `NOT` | `Bool → Bool` | Boolean negation |
@@ -39,7 +39,7 @@ cargo run -- --run-bytecode functions.zvb
 | `JUMP_IF_FALSE_KEEP target` | `Bool → Bool` | Jump when the top value is false without popping it; used to implement short-circuit `and` |
 | `JUMP_IF_TRUE_KEEP target` | `Bool → Bool` | Jump when the top value is true without popping it; used to implement short-circuit `or` |
 | `JUMP target` | no change | Continue at the absolute instruction index |
-| `CALL_TARGET target argc params` | `argc args →` | Pop arguments, create an isolated local frame, and enter the function at the absolute instruction index |
+| `CALL_TARGET target argc params` | `argc args →` | Pop arguments, create a local frame, and enter the function; global bindings remain accessible |
 | `RETURN` | no change | Return from the current function without a value |
 | `RETURN_VALUE` | `Value →` | Return a value to the caller's operand stack |
 
