@@ -92,5 +92,5 @@ fn version_flag_reports_current_language_version() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "Zenvora Lang v0.6.0");
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "Zenvora Lang v0.6.1");
 }
