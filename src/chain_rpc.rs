@@ -349,12 +349,13 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::handle_json_rpc;
+    use super::{handle_json_rpc, handle_json_rpc_with_pool, hex_encode};
     use super::super::block_store::BlockStore;
     use super::super::chain_block::execute_block;
-    use super::super::chain_protocol::{transaction_merkle_root, BlockHeaderV1};
+    use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
     use super::super::chain_runtime::ChainRuntime;
     use serde_json::json;
+    use ed25519_dalek::{Signer, SigningKey};
     use std::collections::BTreeMap;
 
     fn test_store() -> (String, String) {
@@ -374,6 +375,64 @@ mod tests {
         let mut store = BlockStore::new(71, allocations).unwrap();
         store.append_executed_block(&path_text, &runtime, &header, &[], &[]).unwrap();
         (path_text, path.to_string_lossy().to_string())
+    }
+
+    #[test]
+    fn writable_rpc_admits_signed_transactions_to_persisted_pool() {
+        let key = SigningKey::from_bytes(&[151; 32]);
+        let public_key = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public_key).unwrap();
+        let store_path = std::env::temp_dir().join(format!("zenvora-rpc-pool-store-{}.zvb", std::process::id()));
+        let pool_path = std::env::temp_dir().join(format!("zenvora-rpc-pool-{}.zvp", std::process::id()));
+        let _ = std::fs::remove_file(&store_path);
+        let _ = std::fs::remove_file(&pool_path);
+        let store_text = store_path.to_string_lossy().to_string();
+        let pool_text = pool_path.to_string_lossy().to_string();
+
+        let mut allocations = BTreeMap::new();
+        allocations.insert(address.clone(), 1_000);
+        allocations.insert("bob".to_string(), 0);
+        let mut runtime = ChainRuntime::new();
+        for (account, balance) in &allocations {
+            runtime.set_genesis_balance(account, *balance).unwrap();
+        }
+        let genesis = BlockHeaderV1 {
+            chain_id: 71, height: 0, timestamp_secs: 0, parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(), proposer: address.clone(), consensus_proof: Vec::new(),
+        };
+        super::super::chain_block::execute_block(&mut runtime, &genesis, &[], 71, None).unwrap();
+        let mut store = BlockStore::new(71, allocations).unwrap();
+        store.append_executed_block(&store_text, &runtime, &genesis, &[], &[]).unwrap();
+
+        let mut transaction = TransactionV1 {
+            chain_id: 71, sender: address, nonce: 0, recipient: "bob".into(),
+            amount: 100, max_fee: 1, gas_limit: 21_000, valid_until_height: Some(20),
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let request = json!({
+            "jsonrpc":"2.0", "id":4, "method":"chain_submitTransaction",
+            "params":{
+                "publicKey":hex_encode(&public_key),
+                "transaction":hex_encode(&transaction.canonical_bytes().unwrap())
+            }
+        });
+        let response = handle_json_rpc_with_pool(
+            request.to_string().as_bytes(), &store_text, 71, Some(&pool_text),
+        );
+        assert_eq!(response["result"]["poolSize"], 1);
+        let pending = handle_json_rpc_with_pool(
+            br#"{"jsonrpc":"2.0","id":5,"method":"chain_getPendingTransactions","params":[]}"#,
+            &store_text, 71, Some(&pool_text),
+        );
+        assert_eq!(pending["result"]["count"], 1);
+        let pool = super::super::tx_pool::TransactionPool::load_from_file(&pool_text, &runtime, 71, 1).unwrap();
+        assert_eq!(pool.len(), 1);
+        assert_eq!(runtime.balance("bob"), 0);
+        std::fs::remove_file(store_path).unwrap();
+        std::fs::remove_file(pool_path).unwrap();
     }
 
     #[test]
