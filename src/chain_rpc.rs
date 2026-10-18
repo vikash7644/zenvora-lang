@@ -55,7 +55,10 @@ fn serve_inner(
                         let response = handle_json_rpc_with_pool(
                             &body, &store_path, chain_id, pool_path.as_deref(),
                         ).to_string();
-                        write_http_response(&mut stream, "200 OK", &response)?;
+                        if let Err(error) = write_http_response(&mut stream, "200 OK", &response) {
+                            // A client that disconnects while reading must not stop the RPC listener.
+                            eprintln!("RPC response write failed: {error}");
+                        }
                     }
                     Err(error) => {
                         let response = json!({
@@ -63,7 +66,9 @@ fn serve_inner(
                             "id": Value::Null,
                             "error": { "code": -32600, "message": error }
                         }).to_string();
-                        write_http_response(&mut stream, "400 Bad Request", &response)?;
+                        if let Err(write_error) = write_http_response(&mut stream, "400 Bad Request", &response) {
+                            eprintln!("RPC error-response write failed: {write_error}");
+                        }
                     }
                 }
             }
