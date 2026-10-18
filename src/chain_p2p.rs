@@ -57,12 +57,16 @@ pub fn sync_from_peer(store_path: &str, chain_id: u64, peer: &str) -> Result<usi
     if remote_chain_id != chain_id {
         return Err("peer belongs to a different chain ID".into());
     }
+    let local_genesis = store.blocks().first()
+        .ok_or_else(|| "local store has no genesis block".to_string())?;
+    let remote_genesis_hash = status.get("genesisHash").and_then(Value::as_str)
+        .ok_or_else(|| "peer status has no genesis header hash".to_string())?;
+    if remote_genesis_hash != hex_encode(&local_genesis.header.header_hash()?) {
+        return Err("peer genesis header does not match local genesis".into());
+    }
     let remote_genesis_root = status.get("genesisStateRoot").and_then(Value::as_str)
-        .ok_or_else(|| "peer status has no genesis fingerprint".to_string())?;
-    let local_genesis_root = store.blocks().first()
-        .ok_or_else(|| "local store has no genesis block".to_string())?
-        .header.state_root;
-    if remote_genesis_root != hex_encode(&local_genesis_root) {
+        .ok_or_else(|| "peer status has no genesis state fingerprint".to_string())?;
+    if remote_genesis_root != hex_encode(&local_genesis.header.state_root) {
         return Err("peer genesis state does not match local genesis".into());
     }
     let remote_height = status.get("height").and_then(Value::as_u64)
@@ -145,6 +149,7 @@ fn handle_message(request: &Value, store_path: &str, expected_chain_id: u64) -> 
                 "blockCount":store.blocks().len(),
                 "height":tip.header.height,
                 "tipHash":tip.header.header_hash().map(|hash|hex_encode(&hash)).unwrap_or_default(),
+                "genesisHash":genesis.header.header_hash().map(|hash|hex_encode(&hash)).unwrap_or_default(),
                 "genesisStateRoot":hex_encode(&genesis.header.state_root)
             }})
         }
