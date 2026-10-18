@@ -163,3 +163,51 @@ fn infinite_repeat_is_stopped_by_the_vm_instruction_limit() {
     );
 }
 
+
+#[test]
+fn functions_can_be_called_before_their_definition() {
+    let output = run_program("call greet()\\nfn greet() {\\nshow 42\\n}\\n");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "42\\n");
+}
+
+#[test]
+fn functions_can_be_called_multiple_times_and_call_other_functions() {
+    let output = run_program(
+        "call first()\\ncall first()\\nfn first() {\\nshow 1\\ncall second()\\n}\\nfn second() {\\nshow 2\\n}\\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\\n2\\n1\\n2\\n");
+}
+
+#[test]
+fn function_return_exits_only_the_current_function() {
+    let output = run_program(
+        "call stop_early()\\nshow 9\\nfn stop_early() {\\nshow 1\\nreturn\\nshow 2\\n}\\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\\n9\\n");
+}
+
+#[test]
+fn function_calls_support_loops_and_conditionals() {
+    let output = run_program(
+        "call work()\\nfn work() {\\ndefine count := 0\\nrepeat count < 3 {\\ncount := count + 1\\nif count == 2 {\\ncontinue\\n}\\nshow count\\n}\\n}\\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\\n3\\n");
+}
+
+#[test]
+fn undefined_function_calls_are_compile_errors() {
+    let output = run_program("call missing()\\n");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("undefined function 'missing'"));
+}
+
+#[test]
+fn return_outside_a_function_call_is_an_error() {
+    let output = run_program("return\\n");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("return used outside a function call"));
+}
