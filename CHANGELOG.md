@@ -26,7 +26,7 @@ Notable changes to Zenvora Lang are recorded here.
 - Hardened bytecode loading with file-size, instruction-count, decoded-string, and call-argument limits.
 - Added a VM operand-stack limit alongside existing instruction and call-depth limits.
 - Added regression assertions for oversized bytecode payloads and excessive argument counts.
-- Added a control-flow bytecode verifier for stack underflow, inconsistent stack depths at branch joins, invalid region jumps, function return stack balance, and main-program exit stack balance; disconnected instruction islands are checked too.
+- Added a control-flow bytecode verifier for stack underflow, inconsistent stack depths at branch joins, invalid region jumps, function return stack balance and reachable return-kind consistency, and main-program exit stack balance; disconnected instruction islands are checked too.
 - Documented the verifier's current v1 format limitations; arbitrary bytecode is still not considered production-safe or audited.
 
 ## v0.8.0 — Contract DSL prototype
