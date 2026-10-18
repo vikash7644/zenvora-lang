@@ -119,15 +119,18 @@ zv --chain-store-transfer dev.zvb 71 owner.zvk bob 125 3
 zv --chain-store-balance dev.zvb 71 bob
 zv --chain-store-info dev.zvb 71
 zv --chain-rpc dev.zvb 71 8545
+# Signed transaction pool + manual validator block production:
+zv --chain-rpc-pool dev.zvb 71 pending.zvp 8545
+zv --chain-store-produce dev.zvb 71 pending.zvp owner.zvk
 # On a trusted private network only:
 zv --chain-p2p-serve dev.zvb 71 0.0.0.0 9000
 # On another node initialized from the exact same genesis:
 zv --chain-p2p-sync node-b.zvb 71 192.168.1.10:9000
 ```
 
-The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store, replays stored blocks to verify the resulting state, and exposes read-only loopback JSON-RPC plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
+The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
 
-**Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; the TCP peer prototype only syncs blocks and has no peer authentication, automated voting, full BFT consensus/finality, or production wallet/security review. Quorum signatures alone do not provide decentralized consensus. Never expose it to the public internet. Do not use real funds or treat the local file as a decentralized blockchain.
+**Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; the TCP peer prototype only syncs blocks and has no transaction gossip, peer authentication, automated voting, full BFT consensus/finality, or production wallet/security review. Quorum signatures alone do not provide decentralized consensus. Never expose it to the public internet. Do not use real funds or treat the local file as a decentralized blockchain.
 
 ## Scientific computing (early integer-only helpers)
 
