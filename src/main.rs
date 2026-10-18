@@ -63,6 +63,24 @@ impl Parser {
     fn take(&mut self) -> Token { let t = self.tokens[self.pos].clone(); self.pos += 1; t }
 
     fn expression(&mut self) -> Result<(), String> {
+        self.additive()?;
+        let op = match self.peek().clone() {
+            Token::EqEq => { self.take(); Some(Op::Eq) },
+            Token::NotEq => { self.take(); Some(Op::Ne) },
+            Token::Less => { self.take(); Some(Op::Lt) },
+            Token::LessEq => { self.take(); Some(Op::Le) },
+            Token::Greater => { self.take(); Some(Op::Gt) },
+            Token::GreaterEq => { self.take(); Some(Op::Ge) },
+            _ => None,
+        };
+        if let Some(op) = op {
+            self.additive()?;
+            self.code.push(op);
+        }
+        Ok(())
+    }
+
+    fn additive(&mut self) -> Result<(), String> {
         self.term()?;
         loop {
             match self.peek().clone() {
@@ -123,20 +141,7 @@ impl Parser {
     }
 
     fn condition(&mut self) -> Result<(), String> {
-        self.expression()?;
-        let op = match self.peek().clone() {
-            Token::EqEq => { self.take(); Op::Eq },
-            Token::NotEq => { self.take(); Op::Ne },
-            Token::Less => { self.take(); Op::Lt },
-            Token::LessEq => { self.take(); Op::Le },
-            Token::Greater => { self.take(); Op::Gt },
-            Token::GreaterEq => { self.take(); Op::Ge },
-            Token::End => return Ok(()),
-            other => return Err(format!("expected comparison operator (==, !=, <, <=, >, >=) or a boolean condition, found {other:?}")),
-        };
-        self.expression()?;
-        self.code.push(op);
-        Ok(())
+        self.expression()
     }
 }
 
