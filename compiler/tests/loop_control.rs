@@ -138,7 +138,7 @@ fn inner_continue_does_not_skip_outer_loop_body() {
 #[test]
 fn loop_control_does_not_hide_runtime_errors() {
     let output = run_program(
-        "define count := 0\nrepeat count < 3 {\n    count := count + 1\n    if count == 2 {\n        continue\n    }\n    show 10 / (count - 1)\n}\n",
+        "define count := 0\nrepeat count < 3 {\n    count := count + 1\n    if count == 1 {\n        continue\n    }\n    show 10 / (count - 2)\n}\n",
     );
     assert!(!output.status.success());
     assert!(
