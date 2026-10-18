@@ -261,3 +261,33 @@ fn recursive_functions_use_independent_local_frames() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "15\n");
 }
+
+#[test]
+fn native_booleans_can_be_stored_printed_and_used_as_conditions() {
+    let output = run_program(
+        "define alive := true\nshow alive\ndefine dead := false\nshow dead\nif alive {\nshow 7\n} otherwise {\nshow 0\n}\nif dead {\nshow 8\n} otherwise {\nshow 9\n}\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "true\nfalse\n7\n9\n");
+}
+
+#[test]
+fn comparisons_produce_native_boolean_values() {
+    let output = run_program("show 2 == 2\nshow 3 < 1\nshow true != false\n");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "true\nfalse\ntrue\n");
+}
+
+#[test]
+fn arithmetic_rejects_boolean_values_with_a_type_error() {
+    let output = run_program("show true + 1\n");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("type error: '+' expects integers"));
+}
+
+#[test]
+fn ordered_comparisons_reject_boolean_values() {
+    let output = run_program("show true < false\n");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("ordered comparisons expect integers"));
+}
