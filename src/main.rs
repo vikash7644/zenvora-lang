@@ -717,7 +717,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" | "to_int") }
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" | "to_int" | "index_of") }
 
 fn value_to_string(value: &Value) -> String {
     match value {
@@ -835,6 +835,22 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 current = current.checked_add(1).ok_or("integer overflow while building range")?;
             }
             Ok(Value::Array(items))
+        }
+        "index_of" => {
+            arity(2)?;
+            match (&args[0], &args[1]) {
+                (Value::Str(text), Value::Str(needle)) => {
+                    let index = text.find(needle).map(|byte_index| text[..byte_index].chars().count());
+                    Ok(Value::Int(index.and_then(|n| i64::try_from(n).ok()).unwrap_or(-1)))
+                }
+                (Value::Array(items), needle) => {
+                    let index = items.iter().position(|item| item == needle);
+                    Ok(Value::Int(index.and_then(|n| i64::try_from(n).ok()).unwrap_or(-1)))
+                }
+                (Value::Str(_), _) => Err("type error: index_of expects a string needle when searching a string".into()),
+                (Value::Array(_), _) => Err("type error: index_of expects an array and a value".into()),
+                _ => Err("type error: index_of expects a string or array as its first argument".into()),
+            }
         }
         "trim" | "lower" | "upper" | "char_count" => {
             arity(1)?;
@@ -2019,6 +2035,23 @@ show to_int(17)
         assert!(execute("show to_int(true)\n").unwrap_err().contains("integer or numeric string"));
         assert!(execute(r#"show to_int("9223372036854775808")
 "#).unwrap_err().contains("cannot convert"));
+    }
+
+    #[test]
+    fn index_of_supports_unicode_strings_and_arrays() {
+        let output = execute(r#"show index_of("héllo🙂", "🙂")
+show index_of("zenvora", "nope")
+show index_of(array(7, "x", true), "x")
+show index_of(array(7, "x", true), false)
+"#).unwrap();
+        assert_eq!(output, vec!["5", "-1", "1", "-1"]);
+    }
+
+    #[test]
+    fn index_of_rejects_invalid_argument_types() {
+        assert!(execute(r#"show index_of("abc", 1)
+"#).unwrap_err().contains("string needle"));
+        assert!(execute("show index_of(1, 1)\n").unwrap_err().contains("string or array"));
     }
 
     #[test]
