@@ -1,0 +1,12 @@
+# Zenvora Lang v0.7 standard-library preview
+show type_of(42)
+show type_of("Zenvora")
+show to_string(true)
+show abs(-15)
+show min(7, 3)
+show max(7, 3)
+
+define values := range(1, 6)
+show values
+show len(values)
+show assert(len(values) == 5)
