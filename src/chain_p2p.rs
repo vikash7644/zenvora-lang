@@ -230,6 +230,7 @@ mod tests {
     use super::super::block_store::BlockStore;
     use super::super::chain_block::{execute_block, SignedTransactionEnvelope};
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
+    use super::super::chain_consensus::sign_header_as_proposer;
     use super::super::chain_runtime::ChainRuntime;
     use ed25519_dalek::{Signer, SigningKey};
     use serde_json::json;
@@ -269,7 +270,7 @@ mod tests {
             let envelope = SignedTransactionEnvelope { transaction: transaction.clone(), public_key: public_key.to_vec() };
             let mut candidate = runtime.clone();
             let receipt = candidate.apply_signed_transaction(&transaction, &public_key, 71, 1).unwrap();
-            let header = BlockHeaderV1 {
+            let mut header = BlockHeaderV1 {
                 chain_id: 71, height: 1, timestamp_secs: 1_800_000_001,
                 parent_hash: genesis.header_hash().unwrap(),
                 transaction_root: transaction_merkle_root(&[transaction]).unwrap(),
@@ -277,6 +278,7 @@ mod tests {
                 state_root: candidate.state_root(), proposer: address_from_public_key(&public_key).unwrap(),
                 consensus_proof: Vec::new(),
             };
+            sign_header_as_proposer(&mut header, &key).unwrap();
             let receipts = execute_block(&mut runtime, &header, &[envelope.clone()], 71, Some(&genesis)).unwrap();
             store.append_executed_block(path, &runtime, &header, &[envelope], &receipts).unwrap();
         }
