@@ -9,3 +9,9 @@ show profile["level"]
 
 define matrix := array(array(1, 2), array(3, 4))
 show matrix[1][0]
+
+# Indexed assignment updates an array or map binding.
+numbers[1] := 99
+profile["level"] := 8
+show numbers[1]
+show profile["level"]
