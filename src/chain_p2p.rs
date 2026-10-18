@@ -647,7 +647,7 @@ mod tests {
             stream.read_exact(&mut bytes).unwrap();
             let request: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
             let response = handle_message_with_pool(
-                &request, &peer_text_for_thread, 71, Some(&peer_pool_for_thread),
+                &request, &peer_text_for_thread, 71, Some(&peer_pool_for_thread), None,
             ).to_string();
             stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
             stream.write_all(response.as_bytes()).unwrap();
