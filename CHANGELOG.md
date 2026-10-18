@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- The source compiler now runs the bytecode control-flow verifier before returning compiled instructions, so reachable mixed return-kind paths are rejected during source compilation instead of only when the serialized bytecode is loaded. Added a source-level regression test for a value-returning function with a reachable void path.
+
 - Extended contract-view checks with conservative call-graph analysis: views now reject calls to helper functions that directly assign declared contract state or transitively call detected state-mutating functions. Regression coverage verifies a view cannot reach a mutating helper. This is not a complete effect system; complex dynamic or indirect behaviors remain outside the current language model.
 
 - Contract view lowering now rejects direct calls to declared `action` functions, including calls used in expressions, while ignoring matching text inside string literals and comments. Added regression tests for both call forms and the string-literal case; indirect mutation through arbitrary helper functions remains a known limitation.
