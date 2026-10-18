@@ -1942,7 +1942,7 @@ fn read_chain_key(path: &str) -> Result<SigningKey, String> {
         .try_into().map_err(|_| "private seed must be 32 bytes")?;
     let signing_key = SigningKey::from_bytes(&seed);
     let public_key = signing_key.verifying_key().to_bytes();
-    if hex_encode(&public_key) != public_line.strip_prefix("public=").unwrap_or("") {
+    if hex_encode_bytes(&public_key) != public_line.strip_prefix("public=").unwrap_or("") {
         return Err("key file public key does not match private seed".into());
     }
     let address = crate::chain_protocol::address_from_public_key(&public_key)?;
