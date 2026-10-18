@@ -1663,8 +1663,23 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
     }
     for (index, op) in code.iter().enumerate() {
         match op {
-            Op::CallTarget { target, .. } if entries.binary_search(target).is_err() =>
-                return Err(format!("bytecode verifier: call at instruction {index} does not target a function entry")),
+            Op::CallTarget { target, params, arg_count } => {
+                if entries.binary_search(target).is_err() {
+                    return Err(format!("bytecode verifier: call at instruction {index} does not target a function entry"));
+                }
+                if params.len() != *arg_count {
+                    return Err(format!("bytecode verifier: function entry {target} declares {} parameter(s), but CALL_TARGET records {arg_count}", params.len()));
+                }
+                let mut seen_params = HashSet::new();
+                for name in params {
+                    if !valid_identifier(name) {
+                        return Err(format!("bytecode verifier: function entry {target} has invalid parameter name"));
+                    }
+                    if !seen_params.insert(name) {
+                        return Err(format!("bytecode verifier: function entry {target} has duplicate parameter"));
+                    }
+                }
+            },
             Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target)
                 if *target > code.len() =>
                 return Err(format!("bytecode verifier: jump at instruction {index} has invalid target {target}")),
@@ -2861,6 +2876,13 @@ mod tests {
         assert!(execute("show \"text\" - 1\n").unwrap_err().contains("expects integers"));
         assert!(execute("if \"text\" {\nshow 1\n}\n").unwrap_err().contains("condition expects"));
         assert!(super::hex_decode("0g").unwrap_err().contains("invalid hex"));
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_inconsistent_function_parameter_metadata() {
+        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 -\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("declares 0 parameter(s)") && error.contains("records 1"), "unexpected error: {error}");
     }
 
     #[test]
