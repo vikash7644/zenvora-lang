@@ -24,11 +24,36 @@ pub fn execute_block(
     expected_chain_id: u64,
     previous_header: Option<&BlockHeaderV1>,
 ) -> Result<Vec<TransferReceipt>, String> {
+    execute_block_inner(runtime, header, transactions, expected_chain_id, previous_header, true)
+}
+
+/// Validate and execute a candidate without requiring quorum yet. Callers must use a cloned
+/// runtime and must not persist it until the final proof passes through `execute_block`.
+pub fn execute_block_candidate(
+    runtime: &mut ChainRuntime,
+    header: &BlockHeaderV1,
+    transactions: &[SignedTransactionEnvelope],
+    expected_chain_id: u64,
+    previous_header: Option<&BlockHeaderV1>,
+) -> Result<Vec<TransferReceipt>, String> {
+    execute_block_inner(runtime, header, transactions, expected_chain_id, previous_header, false)
+}
+
+fn execute_block_inner(
+    runtime: &mut ChainRuntime,
+    header: &BlockHeaderV1,
+    transactions: &[SignedTransactionEnvelope],
+    expected_chain_id: u64,
+    previous_header: Option<&BlockHeaderV1>,
+    require_consensus: bool,
+) -> Result<Vec<TransferReceipt>, String> {
     header.canonical_bytes()?;
     if header.chain_id != expected_chain_id {
         return Err("block chain ID does not match this network".into());
     }
-    verify_consensus_proof(header, runtime.genesis_balances())?;
+    if require_consensus {
+        verify_consensus_proof(header, runtime.genesis_balances())?;
+    }
 
     match previous_header {
         Some(previous) => {
