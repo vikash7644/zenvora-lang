@@ -6,6 +6,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 
 - [Zenvora Technical Specification v1 — working draft](docs/zenvora-technical-spec-v1.md): ecosystem scope, proposed differentiator, measurable goals, phase gates, and unresolved decisions.
 - [Chain protocol specification draft](docs/chain-protocol-specification-draft.md): consensus-critical protocol, networking, tokenomics, security, and test requirements.
+- [Chain implementation roadmap](docs/chain-implementation-roadmap.md): 12 staged phases, engineering order, explicit exit gates, and security release criteria.
 
 These are design drafts, not proof that listed features are implemented. Consensus and tokenomics are not locked, and Zenvora Chain remains a prototype/local-development project.
 
