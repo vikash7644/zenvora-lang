@@ -1808,16 +1808,16 @@ mod tests {
 
     #[test]
     fn advanced_math_and_science_builtins_are_checked() {
-        let output = execute("show gcd(48, 18)\\nshow lcm(12, 18)\\nshow factorial(5)\\nshow is_prime(97)\\nshow fibonacci(10)\\nshow pow_int(3, 4)\\nshow mean([2, 4, 9])\\nshow speed(100, 5)\\nshow force(10, 9)\\nshow kinetic_energy(2, 5)\\nshow density(12, 3)\\nshow molarity(6, 2)\\nshow bmi_x10(70, 175)\\n").unwrap();
+        let output = execute("show gcd(48, 18)\nshow lcm(12, 18)\nshow factorial(5)\nshow is_prime(97)\nshow fibonacci(10)\nshow pow_int(3, 4)\nshow mean([2, 4, 9])\nshow speed(100, 5)\nshow force(10, 9)\nshow kinetic_energy(2, 5)\nshow density(12, 3)\nshow molarity(6, 2)\nshow bmi_x10(70, 175)\n").unwrap();
         assert_eq!(output, vec!["6", "36", "120", "true", "55", "81", "5", "20", "90", "25", "4", "3", "22"]);
     }
 
     #[test]
     fn advanced_math_builtins_reject_invalid_inputs_and_overflow() {
-        assert!(execute("show factorial(21)\\n").unwrap_err().contains("0 through 20"));
-        assert!(execute("show pow_int(9223372036854775807, 2)\\n").unwrap_err().contains("integer overflow"));
-        assert!(execute("show speed(10, 0)\\n").unwrap_err().contains("denominator must be positive"));
-        assert!(execute("show bmi_x10(70, 0)\\n").unwrap_err().contains("must be positive"));
+        assert!(execute("show factorial(21)\n").unwrap_err().contains("0 through 20"));
+        assert!(execute("show pow_int(9223372036854775807, 2)\n").unwrap_err().contains("integer overflow"));
+        assert!(execute("show speed(10, 0)\n").unwrap_err().contains("denominator must be positive"));
+        assert!(execute("show bmi_x10(70, 0)\n").unwrap_err().contains("must be positive"));
     }
 
     #[test]
