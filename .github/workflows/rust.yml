@@ -27,3 +27,6 @@ jobs:
 
       - name: Run string example
         run: cargo run -- examples/strings.zv
+
+      - name: Run collection example
+        run: cargo run -- examples/collections.zv
