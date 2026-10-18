@@ -58,3 +58,41 @@ fn break_inside_nested_if_exits_the_enclosing_loop() {
     );
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n");
 }
+
+#[test]
+fn break_outside_loop_is_a_clear_error() {
+    let output = run_program("break\n");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("'break' used outside a repeat loop"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn continue_outside_loop_is_a_clear_error() {
+    let output = run_program("continue\n");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("'continue' used outside a repeat loop"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn break_in_inner_loop_does_not_exit_outer_loop() {
+    let output = run_program(
+        "define outer := 0\nrepeat outer < 3 {\n    outer := outer + 1\n    define inner := 0\n    repeat inner < 5 {\n        inner := inner + 1\n        if inner == 2 {\n            break\n        }\n        show outer * 10 + inner\n    }\n}\n",
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "11\n21\n31\n"
+    );
+}
