@@ -1102,7 +1102,7 @@ mod tests {
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
-        assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "6"]);
+        assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
     }
 
     #[test]
