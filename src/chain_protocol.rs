@@ -11,6 +11,13 @@ const MAX_SIGNATURE_BYTES: usize = 512;
 const MAX_CONSENSUS_PROOF_BYTES: usize = 4096;
 const MAX_BLOCK_TRANSACTIONS: usize = 10_000;
 const MAX_BLOCK_BYTES: usize = 4 * 1024 * 1024;
+const TX_ID_DOMAIN: &[u8] = b"ZENVORA_TX_ID_V1\\0";
+const BLOCK_HASH_DOMAIN: &[u8] = b"ZENVORA_BLOCK_HASH_V1\\0";
+const MERKLE_LEAF_DOMAIN: &[u8] = b"ZENVORA_MERKLE_LEAF_V1\\0";
+const MERKLE_NODE_DOMAIN: &[u8] = b"ZENVORA_MERKLE_NODE_V1\\0";
+const MERKLE_EMPTY_DOMAIN: &[u8] = b"ZENVORA_MERKLE_EMPTY_V1\\0";
+
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransactionV1 {
@@ -64,6 +71,12 @@ impl TransactionV1 {
             return Err("transaction exceeds maximum encoded size".into());
         }
         Ok(out)
+    }
+
+    /// SHA-256 transaction identifier over the canonical signed envelope, with domain separation.
+    pub fn transaction_id(&self) -> Result<[u8; 32], String> {
+        let bytes = self.canonical_bytes()?;
+        Ok(hash_parts(&[TX_ID_DOMAIN, &bytes]))
     }
 
     /// Decode the canonical version-1 envelope and reject non-canonical or trailing data.
@@ -199,6 +212,12 @@ impl BlockHeaderV1 {
         Ok(out)
     }
 
+    /// SHA-256 block-header hash over canonical header bytes, with domain separation.
+    pub fn header_hash(&self) -> Result<[u8; 32], String> {
+        let bytes = self.canonical_bytes()?;
+        Ok(hash_parts(&[BLOCK_HASH_DOMAIN, &bytes]))
+    }
+
     /// Decode the canonical version-1 block header, rejecting truncation and trailing data.
     pub fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, String> {
         if bytes.len() > MAX_BLOCK_BYTES {
@@ -237,6 +256,39 @@ impl BlockHeaderV1 {
         Ok(header)
     }
 
+}
+
+/// Compute the transaction Merkle root. Leaves and internal nodes use distinct domain tags;
+/// an odd final node is paired with itself. This function does not execute or validate signatures.
+pub fn transaction_merkle_root(transactions: &[TransactionV1]) -> Result<[u8; 32], String> {
+    if transactions.len() > MAX_BLOCK_TRANSACTIONS {
+        return Err("block transaction limit exceeded".into());
+    }
+    if transactions.is_empty() {
+        return Ok(hash_parts(&[MERKLE_EMPTY_DOMAIN]));
+    }
+    let mut level = Vec::with_capacity(transactions.len());
+    for transaction in transactions {
+        let bytes = transaction.canonical_bytes()?;
+        level.push(hash_parts(&[MERKLE_LEAF_DOMAIN, &bytes]));
+    }
+    while level.len() > 1 {
+        let mut next = Vec::with_capacity((level.len() + 1) / 2);
+        for pair in level.chunks(2) {
+            let right = pair.get(1).unwrap_or(&pair[0]);
+            next.push(hash_parts(&[MERKLE_NODE_DOMAIN, &pair[0], right]));
+        }
+        level = next;
+    }
+    Ok(level[0])
+}
+
+fn hash_parts(parts: &[&[u8]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    for part in parts {
+        hasher.update(part);
+    }
+    hasher.finalize().into()
 }
 
 struct Reader<'a> {
@@ -322,7 +374,7 @@ fn put_bytes(out: &mut Vec<u8>, value: &[u8]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BlockHeaderV1, TransactionV1, BLOCK_DOMAIN};
+    use super::{transaction_merkle_root, BlockHeaderV1, TransactionV1, BLOCK_DOMAIN};
 
     fn tx() -> TransactionV1 {
         TransactionV1 {
@@ -336,6 +388,43 @@ mod tests {
             valid_until_height: Some(100),
             signature: vec![7; 64],
         }
+    }
+
+    #[test]
+    fn transaction_ids_and_block_hashes_are_deterministic_and_change_with_content() {
+        let original = tx();
+        assert_eq!(original.transaction_id().unwrap(), original.transaction_id().unwrap());
+        let mut changed = original.clone();
+        changed.amount += 1;
+        assert_ne!(original.transaction_id().unwrap(), changed.transaction_id().unwrap());
+
+        let header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: [4; 32],
+            transaction_root: [1; 32],
+            receipt_root: [2; 32],
+            state_root: [3; 32],
+            proposer: "validator_1".into(),
+            consensus_proof: vec![8, 9, 10],
+        };
+        assert_eq!(header.header_hash().unwrap(), header.header_hash().unwrap());
+        let mut changed_header = header.clone();
+        changed_header.timestamp_secs += 1;
+        assert_ne!(header.header_hash().unwrap(), changed_header.header_hash().unwrap());
+    }
+
+    #[test]
+    fn transaction_merkle_root_is_deterministic_order_sensitive_and_handles_empty() {
+        let a = tx();
+        let mut b = tx();
+        b.nonce += 1;
+        assert_eq!(transaction_merkle_root(&[]).unwrap(), transaction_merkle_root(&[]).unwrap());
+        assert_ne!(transaction_merkle_root(&[]).unwrap(), transaction_merkle_root(&[a.clone()]).unwrap());
+        assert_eq!(transaction_merkle_root(&[a.clone(), b.clone()]).unwrap(), transaction_merkle_root(&[a.clone(), b.clone()]).unwrap());
+        assert_ne!(transaction_merkle_root(&[a.clone(), b.clone()]).unwrap(), transaction_merkle_root(&[b, a]).unwrap());
+        assert_ne!(transaction_merkle_root(&[a.clone()]).unwrap(), transaction_merkle_root(&[a.clone(), a]).unwrap());
     }
 
     #[test]
