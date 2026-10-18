@@ -2715,12 +2715,13 @@ mod tests {
     fn bytecode_verifier_rejects_function_returns_with_stack_residue() {
         let bytecode = concat!(
             "ZENVORA_BYTECODE 1\n",
-            "CALL_TARGET 6 0 -\n",
+            "CALL_TARGET 7 0 -\n",
             "PUSH 10\n",
             "ADD\n",
+            "PUSH 20\n",
             "PRINT\n",
             "PRINT\n",
-            "JUMP 9\n",
+            "JUMP 10\n",
             "PUSH 1\n",
             "PUSH 2\n",
             "RETURN_VALUE\n",
