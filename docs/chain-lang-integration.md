@@ -10,7 +10,6 @@ After building the `zv` binary, the current prototype supports:
 
 ```text
 zv --chain-init ledger.zvr alice 1000
-zv --chain-init ledger.zvr bob 0
 zv --chain-transfer ledger.zvr alice bob 125
 zv --chain-balance ledger.zvr alice
 zv --chain-receipts ledger.zvr
