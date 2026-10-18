@@ -18,3 +18,5 @@ jobs:
         run: cargo test
       - name: Run loop-control example
         run: cargo run -- examples/loops.zv
+      - name: Run functions example
+        run: cargo run -- examples/functions.zv
