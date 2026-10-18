@@ -67,9 +67,9 @@ fn tokenize(src: &str) -> Result<Vec<Token>, String> {
     Ok(out)
 }
 
-struct ExprParser<'a> { tokens: &'a [Token], pos: usize, vars: &'a HashMap<String, Value> }
-impl<'a> ExprParser<'a> {
-    fn parse(src: &str, vars: &'a HashMap<String, Value>) -> Result<Value, String> {
+struct ExprParser<'t, 'v> { tokens: &'t [Token], pos: usize, vars: &'v HashMap<String, Value> }
+impl<'t, 'v> ExprParser<'t, 'v> {
+    fn parse(src: &str, vars: &'v HashMap<String, Value>) -> Result<Value, String> {
         let tokens = tokenize(src)?;
         let mut p = Self { tokens: &tokens, pos: 0, vars };
         let value = p.expr(0)?;
