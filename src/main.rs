@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 use std::{env, fs, process};
+use std::path::Path;
+
+mod module_loader;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -911,8 +914,12 @@ fn read_source(path: &str) -> Result<String, String> {
     fs::read_to_string(path).map_err(|error| format!("cannot read {path}: {error}"))
 }
 
+fn read_program(path: &str) -> Result<String, String> {
+    module_loader::load(Path::new(path))
+}
+
 fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
-    let source = read_source(source_path)?;
+    let source = read_program(source_path)?;
     let code = compile(&source)?;
     let serialized = serialize_bytecode(&code)?;
     fs::write(output_path, serialized).map_err(|error| format!("cannot write {output_path}: {error}"))
@@ -938,7 +945,7 @@ fn main() {
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
-            let source = read_source(path).unwrap_or_else(|error| {
+            let source = read_program(path).unwrap_or_else(|error| {
                 eprintln!("Zenvora error: {error}");
                 process::exit(1)
             });
