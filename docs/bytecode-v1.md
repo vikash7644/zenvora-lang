@@ -47,10 +47,17 @@ String bytes are encoded as lowercase hexadecimal so strings may contain spaces,
 
 All jump and function targets are zero-based instruction indices, not source line numbers. The compiler emits a jump past the function bodies so normal program execution does not fall through into function definitions.
 
-## Loader validation
+## Loader validation and control-flow verification
 
-The current loader checks the header/version, opcode names, operand counts and types, identifiers, function parameter counts, jump bounds, and function-entry bounds. Unknown instructions and malformed files return an error rather than being executed.
+The loader checks the header/version, opcode names, operand counts and types, identifiers, function parameter counts, jump bounds, and function-entry bounds. It then runs a control-flow verifier before returning the decoded program:
+
+- Rejects unresolved calls, out-of-region jumps, invalid function-entry locations, and returns reached from the main-program region.
+- Performs a work-list traversal of reachable instructions and calculates each instruction's required operand depth and stack effect.
+- Rejects reachable stack underflow, stack growth beyond the configured limit, and control-flow joins where incoming stack depths disagree.
+- Checks that the main program exits with an empty operand stack and that reachable function paths do not fall through into another region.
+
+The v1 format does not encode a function table or return types. Function regions are inferred from call targets, and call stack effects infer value returns from the target's instructions. Consequently, the verifier is an important hardening layer, not a proof that arbitrary bytecode is safe: unreachable instructions and uncalled function bodies are not fully validated, type safety is not proven, and malformed control flow may still expose gaps. Runtime checks remain necessary.
 
 The loader enforces a 16 MiB bytecode-file limit, a 1,000,000-instruction limit, a 1 MiB decoded-string limit, and a 1,024-argument limit for calls and built-ins. The VM also enforces instruction-count, function-call-depth, and operand-stack limits.
 
-This is not yet a complete bytecode verifier: it does not prove stack types or stack depth for every possible control-flow path, and an in-range call target is not yet proven to be a compiler-generated function boundary. Runtime checks remain necessary. Future work includes a formally specified verifier, stronger resource accounting, and a compatibility policy before the format is considered stable.
+This prototype is not formally verified or production-audited. Next steps include explicit function metadata in a future bytecode version, return-kind/type validation, validation of all instruction regions including unreachable code, fuzzing, and an independent security review.
