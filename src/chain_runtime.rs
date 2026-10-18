@@ -78,11 +78,11 @@ impl ChainRuntime {
                 .map_err(|e| format!("cannot create ledger temp file: {e}"))?;
             writeln!(file, "ZENVORA_LEDGER_V1").map_err(|e| format!("cannot write ledger: {e}"))?;
             for (address, balance) in &self.balances {
-                writeln!(file, "B\\t{address}\\t{balance}")
+                writeln!(file, "B\t{address}\t{balance}")
                     .map_err(|e| format!("cannot write ledger balance: {e}"))?;
             }
             for receipt in &self.receipts {
-                writeln!(file, "R\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}",
+                writeln!(file, "R\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                     receipt.sequence, receipt.from, receipt.to, receipt.amount,
                     receipt.accepted, receipt.sender_balance, receipt.recipient_balance)
                     .map_err(|e| format!("cannot write ledger receipt: {e}"))?;
@@ -300,9 +300,9 @@ mod tests {
     #[test]
     fn ledger_loader_rejects_tampered_or_duplicate_records() {
         let path = std::env::temp_dir().join(format!("zenvora-ledger-bad-{}.zvr", std::process::id()));
-        std::fs::write(&path, "ZENVORA_LEDGER_V1\\nB\\talice\\t10\\nB\\talice\\t20\\n").unwrap();
+        std::fs::write(&path, "ZENVORA_LEDGER_V1\nB\talice\t10\nB\talice\t20\n").unwrap();
         assert!(ChainRuntime::load_from_file(&path).is_err());
-        std::fs::write(&path, "NOT_A_LEDGER\\n").unwrap();
+        std::fs::write(&path, "NOT_A_LEDGER\n").unwrap();
         assert!(ChainRuntime::load_from_file(&path).is_err());
         std::fs::remove_file(path).unwrap();
     }
