@@ -1,0 +1,6 @@
+# Example #35: basic function definitions, calls, and returns.
+fn multiply(left, right) {
+    return left * right
+}
+
+show multiply(6, 7)
