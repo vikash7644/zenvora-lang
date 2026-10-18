@@ -347,6 +347,9 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         };
 
         if statement.1.is_empty() { return Err(format!("line {}: missing expression", line_no + 1)); }
+        if !statement.2 && !valid_identifier(&statement.0) {
+            return Err(format!("line {}: invalid variable name", line_no + 1));
+        }
         let tokens = lex(statement.1).map_err(|e| format!("line {}: {e}", line_no + 1))?;
         let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
         parser.expression().map_err(|e| format!("line {}: {e}", line_no + 1))?;
@@ -809,6 +812,13 @@ mod tests {
             "show factorial(5)\nfn factorial(n) {\n if n <= 1 {\n return 1\n } otherwise {\n return n * factorial(n - 1)\n }\n}\n"
         ).unwrap();
         assert_eq!(output, vec!["120"]);
+    }
+
+    #[test]
+    fn invalid_assignment_names_are_rejected() {
+        for source in [" := 5\n", "1bad := 5\n", "bad-name := 5\n"] {
+            assert!(compile_core(source).unwrap_err().contains("invalid variable name"));
+        }
     }
 
     #[test]
