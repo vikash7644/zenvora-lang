@@ -232,8 +232,8 @@ pub struct BlockHeaderV1 {
 }
 
 impl BlockHeaderV1 {
-    /// Canonical version-1 header bytes. Hashing, timestamp policy, and proof verification
-    /// are intentionally not implemented in this structural-format milestone.
+    /// Canonical version-1 header bytes. Consensus signature verification is implemented in
+    /// the separate genesis-authorized consensus module.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, String> {
         if self.chain_id == 0 {
             return Err("chain ID must be nonzero".into());
@@ -264,6 +264,17 @@ impl BlockHeaderV1 {
         put_string(&mut out, &self.proposer)?;
         put_bytes(&mut out, &self.consensus_proof)?;
         Ok(out)
+    }
+
+    /// Canonical signing payload for validator signatures; consensus proof bytes are excluded.
+    pub fn consensus_signing_bytes(&self) -> Result<Vec<u8>, String> {
+        let mut unsigned = self.clone();
+        unsigned.consensus_proof.clear();
+        let canonical = unsigned.canonical_bytes()?;
+        let mut output = Vec::with_capacity(CONSENSUS_SIGN_DOMAIN.len() + canonical.len());
+        output.extend_from_slice(CONSENSUS_SIGN_DOMAIN);
+        output.extend_from_slice(&canonical);
+        Ok(output)
     }
 
     /// SHA-256 block-header hash over canonical header bytes, with domain separation.
