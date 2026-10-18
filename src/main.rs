@@ -2906,7 +2906,7 @@ mod tests {
         let error = super::deserialize_bytecode(duplicate).unwrap_err();
         assert!(error.contains("duplicate parameter"), "unexpected error: {error}");
 
-        let invalid = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 bad-name\nPUSH 1\nJUMP 5\nRETURN\n";
+        let invalid = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 bad-name\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
         let error = super::deserialize_bytecode(invalid).unwrap_err();
         assert!(error.contains("invalid parameter name"), "unexpected error: {error}");
     }
