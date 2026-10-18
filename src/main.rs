@@ -2902,7 +2902,7 @@ mod tests {
 
     #[test]
     fn bytecode_verifier_rejects_duplicate_and_invalid_function_parameter_names() {
-        let duplicate = "ZENVORA_BYTECODE 1\nCALL_TARGET 5 2 value,value\nPUSH 1\nPUSH 2\nJUMP 6\nRETURN\n";
+        let duplicate = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 2 value,value\nPUSH 1\nPUSH 2\nJUMP 5\nRETURN\n";
         let error = super::deserialize_bytecode(duplicate).unwrap_err();
         assert!(error.contains("duplicate parameter"), "unexpected error: {error}");
 
