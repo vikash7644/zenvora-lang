@@ -51,7 +51,7 @@ All jump and function targets are zero-based instruction indices, not source lin
 
 The loader checks the header/version, opcode names, operand counts and types, identifiers, function parameter counts, jump bounds, and function-entry bounds. It then runs a control-flow verifier before returning the decoded program:
 
-- Rejects unresolved calls, out-of-region jumps, invalid function-entry locations, and returns reached from the main-program region.
+- Rejects unresolved calls, out-of-region jumps, invalid function-entry locations, and returns reached from the main-program region. Each `CALL_TARGET` must declare the same number of parameter names as its argument count; names must be valid and unique, and every call site referring to one entry must agree on the parameter list.
 - Performs a work-list traversal from each inferred region entry and checks stack effects along reachable control-flow paths.
 - Rejects reachable stack underflow, stack growth beyond the configured limit, control-flow joins where incoming stack depths disagree, and function returns with leftover or missing operand values. Structural operand and jump checks still scan every instruction, including unreachable code.
 - Checks that the main program exits with an empty operand stack and that reachable function paths do not fall through into another region.
