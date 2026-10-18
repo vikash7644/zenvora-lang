@@ -1,4 +1,4 @@
-# Basic functions are currently no-argument and return no value.
+# Demonstrates no-argument calls, parameters, local variables, and return values.
 call greet()
 call count_to_three(3)
 show add(20, 22)
