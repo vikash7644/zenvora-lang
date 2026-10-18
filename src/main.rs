@@ -256,7 +256,13 @@ fn run(code: &[Op]) -> Result<(), String> {
     let mut stack: Vec<i64> = Vec::new();
     let mut vars: HashMap<String, i64> = HashMap::new();
     let mut pc = 0usize;
+    let mut steps = 0usize;
+    const MAX_STEPS: usize = 1_000_000;
     while pc < code.len() {
+        steps += 1;
+        if steps > MAX_STEPS {
+            return Err("execution exceeded safety limit (1,000,000 instructions)".into());
+        }
         match &code[pc] {
             Op::Push(n) => stack.push(*n),
             Op::Load(name) => stack.push(*vars.get(name).ok_or_else(|| format!("undefined variable '{name}'"))?),
