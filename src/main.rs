@@ -290,7 +290,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                 return Err(format!("line {}: unexpected token {:?}", line_no + 1, parser.peek()));
             }
             let start = code.len();
-            code.extend(parser.code);
+            append_code(&mut code, parser.code);
             let exit_jump = code.len();
             code.push(Op::JumpIfFalse(usize::MAX));
             blocks.push(BlockFrame::Repeat { start, exit_jump, breaks: Vec::new() });
@@ -314,7 +314,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                 if parser.peek() != &Token::End {
                     return Err(format!("line {}: unexpected token in function argument {:?}", line_no + 1, parser.peek()));
                 }
-                code.extend(parser.code);
+                append_code(&mut code, parser.code);
             }
             code.push(Op::Call(name.to_string(), args.len()));
             continue;
@@ -327,7 +327,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: unexpected token in return expression {:?}", line_no + 1, parser.peek()));
             }
-            code.extend(parser.code);
+            append_code(&mut code, parser.code);
             code.push(Op::ReturnValue);
             continue;
         }
@@ -422,7 +422,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         if parser.peek() != &Token::End {
             return Err(format!("line {}: unexpected token {:?}", line_no + 1, parser.peek()));
         }
-        code.extend(parser.code);
+        append_code(&mut code, parser.code);
         if statement.2 { code.push(Op::Print); } else { code.push(Op::Store(statement.0)); }
     }
 
