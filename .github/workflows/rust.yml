@@ -20,3 +20,5 @@ jobs:
         run: cargo run -- examples/loops.zv
       - name: Run functions example
         run: cargo run -- examples/functions.zv
+      - name: Run booleans example
+        run: cargo run -- examples/booleans.zv
