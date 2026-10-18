@@ -2,7 +2,7 @@
 
 ## Current milestone: VM-backed transaction runtime prototype
 
-`src/chain_runtime.rs` adds a Rust transaction harness that calls the existing Zenvora Lang compiler and VM for every transfer. The transfer policy is written as Zenvora source; the Rust host passes in the current balances and amount, executes the program, checks the VM result, and only then commits updated balances. A versioned `ZENVORA_LEDGER_V1` snapshot stores balances and receipts; the loader rejects malformed records and unsupported versions.
+`src/chain_runtime.rs` adds a Rust transaction harness that calls the existing Zenvora Lang compiler and VM for every transfer. The transfer policy is written as Zenvora source; the Rust host passes in the current balances and amount, executes the program, checks the VM result, and only then commits updated balances. A versioned `ZENVORA_LEDGER_V2` ledger stores genesis allocations and the receipt log; the loader replays every receipt from genesis and rejects inconsistent balance transitions, malformed records, duplicate allocations, unsupported versions, and oversized files. V1 snapshots are not accepted by this prototype loader; keep any old local snapshots backed up before testing this version.
 
 ### Local CLI for the prototype
 
@@ -45,4 +45,4 @@ The CI workflow must pass before this prototype is considered verified. This is 
 
 ## Safety/status
 
-The runtime has versioned local-file snapshots, but does not yet implement a block database, consensus, cryptographic signatures, a deployable ABI, production wallet security, or a public testnet. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing Zenvora Lang contracts.
+The runtime has a replay-validated V2 local ledger format, but does not yet implement a block database, consensus, cryptographic signatures, a deployable ABI, production wallet security, or a public testnet. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing Zenvora Lang contracts.
