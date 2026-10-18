@@ -18,7 +18,7 @@ These are design drafts, not proof that listed features are implemented. Consens
 - `src/chain_protocol.rs` — canonical transaction/header encodings, SHA-256 IDs, Merkle roots, and Ed25519 signature verification.
 - `src/chain_runtime.rs` — Zenvora-VM transfer execution, V3 ledger persistence, signed nonce tracking, and state/receipt roots.
 - `src/chain_block.rs` — atomic candidate-block execution and transaction/receipt/state-root validation.
-- `src/block_store.rs` — append-only local block storage and full replay verification.
+- `src/block_store.rs` — append-only local block storage, independent candidate execution before persistence, and full replay verification.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
 - `examples/functions.zv` — function parameters, local variables, return values, and loops.
