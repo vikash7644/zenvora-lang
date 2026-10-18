@@ -118,9 +118,10 @@ zv --chain-store-init dev.zvb 71 owner.zvk 1000000
 zv --chain-store-transfer dev.zvb 71 owner.zvk bob 125 3
 zv --chain-store-balance dev.zvb 71 bob
 zv --chain-store-info dev.zvb 71
+zv --chain-rpc dev.zvb 71 8545
 ```
 
-The prototype signs Ed25519 transactions, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store, and replays stored blocks to verify the resulting state. See [the chain integration guide](docs/chain-lang-integration.md) for the exact behavior and limits.
+The prototype signs Ed25519 transactions, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store, replays stored blocks to verify the resulting state, and exposes a read-only JSON-RPC endpoint bound to loopback. See [the chain integration guide](docs/chain-lang-integration.md) for supported RPC methods and limits.
 
 **Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; there is no networked testnet, consensus/finality, P2P, or production wallet/security review. Do not use real funds or treat the local file as a decentralized blockchain.
 
