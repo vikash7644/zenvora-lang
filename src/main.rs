@@ -865,7 +865,13 @@ where
     let mut steps = 0usize;
     const MAX_STEPS: usize = 1_000_000;
     const MAX_CALL_DEPTH: usize = 1_024;
+    if code.len() > MAX_BYTECODE_INSTRUCTIONS {
+        return Err(format!("program instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
+    }
     while pc < code.len() {
+        if stack.len() > MAX_STACK_VALUES {
+            return Err(format!("operand stack exceeds safety limit ({MAX_STACK_VALUES} values)"));
+        }
         steps += 1;
         if steps > MAX_STEPS {
             return Err("execution exceeded safety limit (1,000,000 instructions)".into());
@@ -1036,6 +1042,11 @@ where
 
 
 const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
+const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
+const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
+const MAX_BYTECODE_STRING_BYTES: usize = 1024 * 1024;
+const MAX_CALL_ARGUMENTS: usize = 1024;
+const MAX_STACK_VALUES: usize = 65_536;
 
 fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
     let mut output = String::from(BYTECODE_HEADER);
@@ -1085,6 +1096,9 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
 }
 
 fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
+    if source.len() > MAX_BYTECODE_BYTES {
+        return Err(format!("bytecode file exceeds safety limit ({} bytes)", MAX_BYTECODE_BYTES));
+    }
     let mut lines = source.lines();
     if lines.next() != Some(BYTECODE_HEADER) {
         return Err("invalid bytecode header or unsupported bytecode version".into());
@@ -1097,7 +1111,12 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
         let invalid = || format!("invalid bytecode instruction on line {line_no}");
         let op = match parts[0] {
             "PUSH" if parts.len() == 2 => Op::Push(parts[1].parse().map_err(|_| invalid())?),
-            "PUSH_STRING_HEX" if parts.len() == 2 => Op::PushString(hex_decode(parts[1])?),
+            "PUSH_STRING_HEX" if parts.len() == 2 => {
+                if parts[1] != "-" && parts[1].len() / 2 > MAX_BYTECODE_STRING_BYTES {
+                    return Err(format!("bytecode string exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+                }
+                Op::PushString(hex_decode(parts[1])?)
+            },
             "PUSH_BOOL" if parts.len() == 2 => Op::PushBool(match parts[1] {
                 "true" => true,
                 "false" => false,
@@ -1127,10 +1146,19 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "JUMP_IF_FALSE_KEEP" if parts.len() == 2 => Op::JumpIfFalseKeep(parts[1].parse().map_err(|_| invalid())?),
             "JUMP_IF_TRUE_KEEP" if parts.len() == 2 => Op::JumpIfTrueKeep(parts[1].parse().map_err(|_| invalid())?),
             "JUMP" if parts.len() == 2 => Op::Jump(parts[1].parse().map_err(|_| invalid())?),
-            "BUILTIN" if parts.len() == 3 && is_builtin(parts[1]) => Op::Builtin(parts[1].into(), parts[2].parse().map_err(|_| invalid())?),
+            "BUILTIN" if parts.len() == 3 && is_builtin(parts[1]) => {
+                let arg_count: usize = parts[2].parse().map_err(|_| invalid())?;
+                if arg_count > MAX_CALL_ARGUMENTS {
+                    return Err(format!("bytecode builtin argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
+                }
+                Op::Builtin(parts[1].into(), arg_count)
+            },
             "CALL_TARGET" if parts.len() == 4 => {
                 let target: usize = parts[1].parse().map_err(|_| invalid())?;
                 let arg_count: usize = parts[2].parse().map_err(|_| invalid())?;
+                if arg_count > MAX_CALL_ARGUMENTS {
+                    return Err(format!("bytecode function argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
+                }
                 let params: Vec<String> = if parts[3] == "-" { Vec::new() } else { parts[3].split(',').map(str::to_string).collect() };
                 if arg_count != params.len() || params.iter().any(|name| !valid_identifier(name)) {
                     return Err(invalid());
@@ -1141,6 +1169,9 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "RETURN_VALUE" if parts.len() == 1 => Op::ReturnValue,
             _ => return Err(invalid()),
         };
+        if code.len() >= MAX_BYTECODE_INSTRUCTIONS {
+            return Err(format!("bytecode instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
+        }
         code.push(op);
     }
     for (index, op) in code.iter().enumerate() {
@@ -1163,6 +1194,9 @@ fn hex_encode(input: &str) -> String {
 
 fn hex_decode(input: &str) -> Result<String, String> {
     if input == "-" { return Ok(String::new()); }
+    if input.len() / 2 > MAX_BYTECODE_STRING_BYTES {
+        return Err(format!("bytecode string exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+    }
     if !input.len().is_multiple_of(2) {
         return Err("invalid hex string in bytecode".into());
     }
@@ -1319,6 +1353,10 @@ mod tests {
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nMAGIC\n").unwrap_err().contains("invalid bytecode instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nJUMP 99\n").unwrap_err().contains("invalid instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nCALL_TARGET 9 0 -\n").unwrap_err().contains("invalid function entry"));
+        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", "PUSH 1\n".repeat(super::MAX_BYTECODE_INSTRUCTIONS))).unwrap_err().contains("instruction count exceeds safety limit"));
+        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\nPUSH_STRING_HEX {}", "61".repeat(super::MAX_BYTECODE_STRING_BYTES + 1))).unwrap_err().contains("string exceeds safety limit"));
+        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nBUILTIN array 1025\n").unwrap_err().contains("argument count exceeds safety limit"));
+        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", " ".repeat(super::MAX_BYTECODE_BYTES))).unwrap_err().contains("file exceeds safety limit"));
     }
 
     #[test]
