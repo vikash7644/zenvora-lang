@@ -236,9 +236,20 @@ fn main() {
     };
     let lines: Vec<String> = source.lines().map(str::to_string).collect();
     let mut vars = HashMap::new();
-    if let Err(e) = run_lines(&lines, &mut vars, 0) {
-        eprintln!("Zenvora error: {e}");
-        std::process::exit(1);
+    match run_lines(&lines, &mut vars, 0) {
+        Ok(Flow::Normal) => {}
+        Ok(Flow::Break) => {
+            eprintln!("Zenvora error: 'break' used outside a repeat loop");
+            std::process::exit(1);
+        }
+        Ok(Flow::Continue) => {
+            eprintln!("Zenvora error: 'continue' used outside a repeat loop");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Zenvora error: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
