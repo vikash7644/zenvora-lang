@@ -197,12 +197,6 @@ impl Parser {
                 } else {
                     self.code.push(Op::Load(name));
                 }
-                while self.peek() == &Token::LBracket {
-                    self.take();
-                    self.expression()?;
-                    if self.take() != Token::RBracket { return Err("expected ']' after index expression".into()); }
-                    self.code.push(Op::Index);
-                }
             },
             Token::Minus => { self.factor()?; self.code.push(Op::Neg); }
             Token::Not => { self.factor()?; self.code.push(Op::Not); }
@@ -211,6 +205,12 @@ impl Parser {
                 if self.take() != Token::RParen { return Err("expected ')'".into()); }
             }
             other => return Err(format!("expected a number, variable, or '(', found {other:?}")),
+        }
+        while self.peek() == &Token::LBracket {
+            self.take();
+            self.expression()?;
+            if self.take() != Token::RBracket { return Err("expected ']' after index expression".into()); }
+            self.code.push(Op::Index);
         }
         Ok(())
     }
