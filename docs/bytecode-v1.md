@@ -31,11 +31,13 @@ cargo run -- --run-bytecode functions.zvb
 | `ADD`, `SUB`, `MUL`, `DIV` | `a b → Value` | Integer arithmetic with overflow and divide-by-zero checks; `ADD` also concatenates two strings |
 | `NEG` | `Int → Int` | Negate an integer |
 | `NOT` | `Bool → Bool` | Boolean negation |
-| `AND`, `OR` | `Bool Bool → Bool` | Eager boolean logic; operands are both evaluated |
+| `AND`, `OR` | `Bool Bool → Bool` | Combine two booleans after operand evaluation; the compiler uses the keep-jump instructions for short-circuit semantics |
 | `PRINT` | `Value →` | Print an integer, string, or boolean |
 | `EQ`, `NE` | `a b → Bool` | Compare values for equality or inequality |
 | `LT`, `LE`, `GT`, `GE` | `Int Int → Bool` | Ordered integer comparisons |
 | `JUMP_IF_FALSE target` | `Condition →` | Pop a condition; jump when false. Booleans are preferred; integer zero/non-zero is also accepted |
+| `JUMP_IF_FALSE_KEEP target` | `Bool → Bool` | Jump when the top value is false without popping it; used to implement short-circuit `and` |
+| `JUMP_IF_TRUE_KEEP target` | `Bool → Bool` | Jump when the top value is true without popping it; used to implement short-circuit `or` |
 | `JUMP target` | no change | Continue at the absolute instruction index |
 | `CALL_TARGET target argc params` | `argc args →` | Pop arguments, create an isolated local frame, and enter the function at the absolute instruction index |
 | `RETURN` | no change | Return from the current function without a value |
