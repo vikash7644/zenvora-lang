@@ -5,7 +5,7 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 ## Repository contents
 
 - `Cargo.toml` — Rust package manifest for the `zv` command.
-- `src/main.rs` — lexer, expression parser, bytecode compiler and stack VM.
+- `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM and automated regression tests.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
 - `examples/functions.zv` — function parameters, local variables, return values, and loops.
@@ -38,6 +38,10 @@ Expected example output:
 35
 ```
 
+## Automated regression tests
+
+`cargo test` checks expression evaluation, booleans, nested conditions, `break`/`continue`, nested-loop break behavior, function calls and recursion, invalid function calls, runtime errors, and malformed braces. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
+
 ## Current language syntax
 
 ```zv
@@ -58,7 +62,7 @@ The current prototype supports integer and boolean variables, assignment, arithm
 
 ## Roadmap
 
-1. Continue stabilizing syntax, diagnostics and automated regression tests.
+1. Expand regression coverage and stabilize syntax and diagnostics.
 2. Add global/module scope rules, types and better diagnostics.
 3. Define a stable bytecode format and bytecode-file support.
 4. Strengthen runtime safety checks and add resource-aware execution limits.
