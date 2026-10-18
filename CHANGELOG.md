@@ -4,7 +4,7 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
-- Hardened block-store appends by replaying the stored chain prefix and independently executing the candidate block before persistence. Added regression coverage proving that state/receipt commitments from unrelated transactions are rejected without altering the stored tip.
+- Hardened block-store appends by independently executing each candidate against a verified tip-runtime cache before persistence; loading still rebuilds state by replaying the complete stored chain. Added regression coverage proving that state/receipt commitments from unrelated transactions are rejected without altering the stored tip. The verified cache avoids replaying the entire chain on every append.
 
 - Added `zv --new <project-name>` to create a safe starter project with a runnable `main.zv` and project README; existing paths are never overwritten. Added CLI dispatch and regression coverage.
 - Documented the beginner starter-project workflow in the README.
