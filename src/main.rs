@@ -2319,6 +2319,56 @@ mod tests {
     }
 
     #[test]
+    fn persisted_transaction_pool_can_be_produced_into_a_validator_signed_block() {
+        let base = std::env::temp_dir();
+        let suffix = std::process::id();
+        let key_path = base.join(format!("zenvora-pool-producer-key-{suffix}.zvk"));
+        let store_path = base.join(format!("zenvora-pool-producer-store-{suffix}.zvb"));
+        let pool_path = base.join(format!("zenvora-pool-producer-{suffix}.zvp"));
+        for path in [&key_path, &store_path, &pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+        let key_text = key_path.to_string_lossy().to_string();
+        let store_text = store_path.to_string_lossy().to_string();
+        let pool_text = pool_path.to_string_lossy().to_string();
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
+            key_text.clone(), "1000".into(),
+        ]).unwrap();
+
+        let key = read_chain_key(&key_text).unwrap();
+        let public_key = key.verifying_key().to_bytes();
+        let address = crate::chain_protocol::address_from_public_key(&public_key).unwrap();
+        let (_, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        let mut transaction = crate::chain_protocol::TransactionV1 {
+            chain_id: 71, sender: address, nonce: 0, recipient: "bob".into(),
+            amount: 100, max_fee: 1, gas_limit: 21_000, valid_until_height: Some(20),
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = crate::chain_block::SignedTransactionEnvelope {
+            transaction, public_key: public_key.to_vec(),
+        };
+        let mut pool = crate::tx_pool::TransactionPool::new(71, 1).unwrap();
+        pool.submit(&runtime, envelope).unwrap();
+        pool.save_to_file(&pool_text).unwrap();
+
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce".into(), store_text.clone(), "71".into(),
+            pool_text.clone(), key_text.clone(),
+        ]).unwrap();
+        let (store, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(store.blocks().len(), 2);
+        assert_eq!(runtime.balance("bob"), 100);
+        let next_pool = crate::tx_pool::TransactionPool::load_from_file(&pool_text, &runtime, 71, 2).unwrap();
+        assert!(next_pool.is_empty());
+        for path in [&key_path, &store_path, &pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
     fn multi_validator_cli_requires_quorum_and_replays_signed_block() {
         let base = std::env::temp_dir();
         let suffix = std::process::id();
