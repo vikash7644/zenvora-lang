@@ -12,11 +12,12 @@ cargo test
 cargo run -- examples/hello.zv
 cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
+cargo run -- examples/strings.zv
 ```
 
 ## Automated tests
 
-The in-source Rust test suite uses output capture to verify actual VM results, not just successful compilation. It covers arithmetic and assignment, booleans and nested conditions, loop control (including nested loops), function parameters and return values, recursion, invalid loop control, undefined functions, argument-count errors, division by zero, integer overflow, undefined variables, and unmatched braces. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+The Rust unit and integration suites run 56 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
 
 ## Supported syntax
 
@@ -32,9 +33,9 @@ if age >= 18 {
 
 The program prints `1`. Set `age := 16` and it prints `0`.
 
-- `define name := expression` declares a variable whose value can be an integer or boolean.
-- `name := expression` updates or creates an integer variable.
-- `show expression` prints an integer or boolean; `print(expression)` is also accepted.
+- `define name := expression` declares a variable whose value can be an integer, boolean, or string.
+- `name := expression` updates or creates a variable.
+- `show expression` prints an integer, boolean, or string; `print(expression)` is also accepted.
 - Integer arithmetic: unary minus, `+`, `-`, `*`, `/`, and parentheses.
 - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons produce native boolean values `true` or `false`.
 - Logical operators: `not`, `and`, and `or`; they require boolean operands and currently evaluate both sides eagerly.
@@ -69,12 +70,12 @@ Version 1 is a readable text format with the `ZENVORA_BYTECODE 1` header. The lo
 
 ## Not implemented yet
 
-Strings, short-circuit logical evaluation, explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
+Short-circuit logical evaluation, explicit global/module scope rules, custom types, modules, a formally frozen bytecode specification, native machine-code generation, smart contracts and blockchain integration are future milestones. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality supports values of the same type. Conditions accept booleans (integer zero/nonzero is also accepted for compatibility). The VM stops after 1,000,000 executed instructions to guard against accidental infinite loops; more resource-aware limits and runtime safety checks remain future work. Do not use this prototype for funds or production contracts.
 
 ## Roadmap
 
 1. Expand regression coverage and stabilize syntax and diagnostics.
 2. Add explicit global/module scope rules and useful types.
-3. Define a stable bytecode format.
-4. Add serializable bytecode and a stable VM specification.
+3. Stabilize bytecode v1 and implement a formal verifier.
+4. Define VM compatibility guarantees and stronger resource limits.
 5. Explore WebAssembly output and a contract ABI only after the core language is reliable.
