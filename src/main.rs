@@ -3032,7 +3032,7 @@ mod tests {
         assert!(compile(direct).unwrap_err().contains("view cannot call action 'increment'"));
         let expression = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\nreturn increment(1)\n}\n}\n";
         assert!(compile(expression).unwrap_err().contains("view cannot call action 'increment'"));
-        let string_literal = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview label() {\nreturn \"increment()\"\n}\n}\n";
+        let string_literal = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview label() {\nreturn \"increment()\"\n}\n}\nshow label()\n";
         assert_eq!(execute(string_literal).unwrap(), vec!["increment()"]);
     }
 
