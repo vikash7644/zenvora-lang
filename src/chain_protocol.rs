@@ -172,6 +172,31 @@ impl TransactionV1 {
         Ok(())
     }
 
+    /// Validate a signed transfer against the current account snapshot.
+    ///
+    /// This is admission validation only: it does not mutate balances or consume the nonce.
+    /// max_fee is treated as a total fee reserve, not a per-gas price.
+    pub fn validate_signed_transfer(
+        &self,
+        public_key_bytes: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+        expected_nonce: u64,
+        sender_balance: u64,
+    ) -> Result<u64, String> {
+        self.validate_for(expected_chain_id, current_height)?;
+        self.verify_signature(public_key_bytes)?;
+        if self.nonce != expected_nonce {
+            return Err("transaction nonce does not match the account's expected nonce".into());
+        }
+        let required_balance = self.amount
+            .checked_add(self.max_fee)
+            .ok_or_else(|| "transaction amount plus max fee overflows".to_string())?;
+        if sender_balance < required_balance {
+            return Err("insufficient balance for amount plus maximum fee reserve".into());
+        }
+        Ok(required_balance)
+    }
     fn validate_fields(&self) -> Result<(), String> {
         if self.chain_id == 0 {
             return Err("chain ID must be nonzero".into());
@@ -496,6 +521,37 @@ mod tests {
         assert!(bad_signature.verify_signature(&public_key).is_err());
     }
 
+    #[test]
+    fn signed_transfer_admission_checks_nonce_balance_network_and_expiry() {
+        let signing_key = SigningKey::from_bytes(&[51; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let mut transaction = tx();
+        transaction.sender = address_from_public_key(&public_key).unwrap();
+        transaction.nonce = 4;
+        transaction.signature = signing_key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+
+        assert_eq!(
+            transaction.validate_signed_transfer(&public_key, 71, 99, 4, 128).unwrap(),
+            128
+        );
+        assert!(transaction.validate_signed_transfer(&public_key, 71, 99, 5, 128).is_err());
+        assert!(transaction.validate_signed_transfer(&public_key, 71, 99, 4, 127).is_err());
+        assert!(transaction.validate_signed_transfer(&public_key, 72, 99, 4, 128).is_err());
+        assert!(transaction.validate_signed_transfer(&public_key, 71, 101, 4, 128).is_err());
+    }
+
+    #[test]
+    fn signed_transfer_admission_rejects_amount_fee_overflow() {
+        let signing_key = SigningKey::from_bytes(&[52; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let mut transaction = tx();
+        transaction.sender = address_from_public_key(&public_key).unwrap();
+        transaction.amount = u64::MAX;
+        transaction.max_fee = 1;
+        transaction.signature = signing_key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+
+        assert!(transaction.validate_signed_transfer(&public_key, 71, 99, 4, u64::MAX).is_err());
+    }
     #[test]
     fn address_derivation_requires_a_full_ed25519_public_key() {
         let key = SigningKey::from_bytes(&[7; 32]);
