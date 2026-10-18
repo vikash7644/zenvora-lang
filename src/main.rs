@@ -2240,6 +2240,61 @@ mod tests {
         let _ = std::fs::remove_file(second_store_path);
     }
 
+    #[test]
+    fn multi_validator_cli_requires_quorum_and_replays_signed_block() {
+        let base = std::env::temp_dir();
+        let suffix = std::process::id();
+        let key_paths: Vec<std::path::PathBuf> = (0..4)
+            .map(|index| base.join(format!("zenvora-multi-key-{suffix}-{index}.zvk")))
+            .collect();
+        let store_path = base.join(format!("zenvora-multi-store-{suffix}.zvb"));
+        let config_path = base.join(format!("zenvora-multi-genesis-{suffix}.txt"));
+        for path in key_paths.iter().chain([&store_path, &config_path]) {
+            let _ = std::fs::remove_file(path);
+        }
+        let key_texts: Vec<String> = key_paths.iter().map(|path| path.to_string_lossy().to_string()).collect();
+        for path in &key_texts {
+            run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), path.clone()]).unwrap();
+        }
+        let mut allocations = Vec::new();
+        for path in &key_texts {
+            let key = read_chain_key(path).unwrap();
+            let address = crate::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+            allocations.push(format!("{address} 1000"));
+        }
+        let config = format!("ZENVORA_GENESIS_V1\nchain_id=71\n{}\n", allocations.join("\n"));
+        std::fs::write(&config_path, config).unwrap();
+        let store_text = store_path.to_string_lossy().to_string();
+        let config_text = config_path.to_string_lossy().to_string();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init-multi".into(), store_text.clone(), "71".into(), config_text,
+        ]).unwrap();
+
+        let insufficient = vec![
+            "zv".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
+            key_texts[0].clone(), "bob".into(), "100".into(), "1".into(),
+            key_texts[0].clone(), key_texts[1].clone(),
+        ];
+        assert!(run_chain_command(&insufficient).is_err());
+        let (before, before_runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(before.blocks().len(), 1);
+        assert_eq!(before_runtime.balance("bob"), 0);
+
+        let sufficient = vec![
+            "zv".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
+            key_texts[0].clone(), "bob".into(), "100".into(), "1".into(),
+            key_texts[0].clone(), key_texts[1].clone(), key_texts[2].clone(),
+        ];
+        run_chain_command(&sufficient).unwrap();
+        let (store, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(store.blocks().len(), 2);
+        assert_eq!(runtime.balance("bob"), 100);
+
+        for path in key_paths.iter().chain([&store_path, &config_path]) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
         let mut output = Vec::new();
