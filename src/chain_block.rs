@@ -207,7 +207,7 @@ mod tests {
 
         let mut bad_envelope = envelope.clone();
         bad_envelope.transaction.amount += 1;
-        let valid_header = candidate_header(&runtime, &envelope, 1, genesis.header_hash().unwrap(), 1_800_000_001);
+        let valid_header = candidate_header(&runtime, &envelope, &key, 1, genesis.header_hash().unwrap(), 1_800_000_001);
         assert!(execute_block(&mut runtime, &valid_header, &[envelope, bad_envelope], 71, Some(&genesis)).is_err());
         assert_eq!(runtime.state_root(), original_root);
         assert_eq!(runtime.balance("bob"), 0);
