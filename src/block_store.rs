@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use super::chain_block::{execute_block, SignedTransactionEnvelope};
+use super::chain_consensus::verify_consensus_proof;
 use super::chain_protocol::{transaction_merkle_root, BlockHeaderV1, TransactionV1};
 use super::chain_runtime::{ChainRuntime, TransferReceipt};
 
@@ -65,6 +66,7 @@ impl BlockStore {
             return Err("block chain ID does not match store".into());
         }
         header.canonical_bytes()?;
+        verify_consensus_proof(header, &self.genesis_balances)?;
         if runtime_after.genesis_balances() != &self.genesis_balances {
             return Err("runtime genesis allocations do not match block store".into());
         }
