@@ -22,10 +22,21 @@ pub fn sign_header_as_proposer(header: &mut BlockHeaderV1, key: &SigningKey) -> 
 /// Add a validator signature to a header's proof. Records are sorted by validator address.
 pub fn add_validator_signature(header: &mut BlockHeaderV1, key: &SigningKey) -> Result<(), String> {
     let public_key = key.verifying_key().to_bytes();
-    let address = address_from_public_key(&public_key)?;
     let signing_bytes = header.consensus_signing_bytes()?;
     let signature = key.sign(&signing_bytes).to_bytes();
+    add_signature_record(header, &public_key, &signature)
+}
 
+/// Merge a validator's public key and signature record into a header proof.
+pub fn add_signature_record(
+    header: &mut BlockHeaderV1,
+    public_key: &[u8],
+    signature: &[u8],
+) -> Result<(), String> {
+    if public_key.len() != 32 || signature.len() != 64 {
+        return Err("consensus signature record must contain a 32-byte key and 64-byte signature".into());
+    }
+    let address = address_from_public_key(public_key)?;
     let mut records: Vec<(String, Vec<u8>)> = Vec::new();
     if !header.consensus_proof.is_empty() {
         if header.consensus_proof.len() % SIGNATURE_RECORD_BYTES != 0 {
@@ -42,8 +53,8 @@ pub fn add_validator_signature(header: &mut BlockHeaderV1, key: &SigningKey) -> 
         return Err("validator has already signed this header".into());
     }
     let mut record = Vec::with_capacity(SIGNATURE_RECORD_BYTES);
-    record.extend_from_slice(&public_key);
-    record.extend_from_slice(&signature);
+    record.extend_from_slice(public_key);
+    record.extend_from_slice(signature);
     records.push((address, record));
     records.sort_by(|left, right| left.0.cmp(&right.0));
     if records.len() > MAX_VALIDATORS {
@@ -53,18 +64,14 @@ pub fn add_validator_signature(header: &mut BlockHeaderV1, key: &SigningKey) -> 
     Ok(())
 }
 
-/// Verify proposer authorization, sorted unique signatures, and a 2/3+1 validator quorum.
-///
-/// Validators are genesis accounts whose addresses use the protocol's public-key-derived format
-/// and whose genesis balance is positive. The genesis block itself is trusted and must have no
-/// consensus proof.
-pub fn verify_consensus_proof(
+/// Verify all supplied signatures without requiring a quorum; useful when validating a proposal.
+pub fn verify_partial_consensus_proof(
     header: &BlockHeaderV1,
     genesis_balances: &BTreeMap<String, i64>,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     if header.height == 0 {
         return if header.consensus_proof.is_empty() {
-            Ok(())
+            Ok(0)
         } else {
             Err("genesis block must not contain a consensus proof".into())
         };
@@ -74,14 +81,7 @@ pub fn verify_consensus_proof(
     {
         return Err("non-genesis block requires complete validator signature records".into());
     }
-
-    let validators: BTreeSet<String> = genesis_balances.iter()
-        .filter(|(address, balance)| **balance > 0 && is_public_key_address(address))
-        .map(|(address, _)| address.clone())
-        .collect();
-    if validators.is_empty() || validators.len() > MAX_VALIDATORS {
-        return Err("genesis validator set is empty or exceeds the prototype limit".into());
-    }
+    let validators = validator_addresses(genesis_balances)?;
     let signature_count = header.consensus_proof.len() / SIGNATURE_RECORD_BYTES;
     if signature_count > validators.len() {
         return Err("consensus proof contains more signers than the validator set".into());
@@ -112,11 +112,35 @@ pub fn verify_consensus_proof(
     if !signers.contains(&header.proposer) {
         return Err("block proposer must be included in the validator signatures".into());
     }
+    Ok(signers.len())
+}
+
+/// Verify proposer authorization, sorted unique signatures, and a 2/3+1 validator quorum.
+pub fn verify_consensus_proof(
+    header: &BlockHeaderV1,
+    genesis_balances: &BTreeMap<String, i64>,
+) -> Result<(), String> {
+    if header.height == 0 {
+        return verify_partial_consensus_proof(header, genesis_balances).map(|_| ());
+    }
+    let signer_count = verify_partial_consensus_proof(header, genesis_balances)?;
+    let validators = validator_addresses(genesis_balances)?;
     let quorum = (validators.len() * 2) / 3 + 1;
-    if signers.len() < quorum {
-        return Err(format!("insufficient validator signatures: have {}, require {quorum}", signers.len()));
+    if signer_count < quorum {
+        return Err(format!("insufficient validator signatures: have {signer_count}, require {quorum}"));
     }
     Ok(())
+}
+
+fn validator_addresses(genesis_balances: &BTreeMap<String, i64>) -> Result<BTreeSet<String>, String> {
+    let validators: BTreeSet<String> = genesis_balances.iter()
+        .filter(|(address, balance)| **balance > 0 && is_public_key_address(address))
+        .map(|(address, _)| address.clone())
+        .collect();
+    if validators.is_empty() || validators.len() > MAX_VALIDATORS {
+        return Err("genesis validator set is empty or exceeds the prototype limit".into());
+    }
+    Ok(validators)
 }
 
 fn is_public_key_address(address: &str) -> bool {
