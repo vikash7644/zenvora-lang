@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::{env, fs, process};
 use std::path::Path;
 use ed25519_dalek::{Signer, SigningKey};
@@ -1790,6 +1790,37 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             println!("WARNING: private key is unencrypted; keep this file private and do not use it for real funds.");
             Ok(())
         }
+        [_, mode, store_path, chain_id, config_path] if mode == "--chain-store-init-multi" => {
+            if Path::new(store_path).exists() {
+                return Err(format!("block store already exists at {store_path}; refusing to overwrite it"));
+            }
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let allocations = read_genesis_config(config_path, chain_id)?;
+            let proposer = allocations.iter()
+                .find(|(address, balance)| **balance > 0 && is_validator_address(address))
+                .map(|(address, _)| address.clone())
+                .ok_or_else(|| "genesis config needs at least one funded public-key-derived validator address".to_string())?;
+            let mut runtime = chain_runtime::ChainRuntime::new();
+            for (address, balance) in &allocations {
+                runtime.set_genesis_balance(address, *balance)?;
+            }
+            let mut store = crate::block_store::BlockStore::new(chain_id, allocations)?;
+            let header = crate::chain_protocol::BlockHeaderV1 {
+                chain_id, height: 0, timestamp_secs: 0, parent_hash: [0; 32],
+                transaction_root: crate::chain_protocol::transaction_merkle_root(&[])?,
+                receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[])?,
+                state_root: runtime.state_root(), proposer: proposer.clone(), consensus_proof: Vec::new(),
+            };
+            crate::chain_block::execute_block(&mut runtime, &header, &[], chain_id, None)?;
+            store.append_executed_block(store_path, &runtime, &header, &[], &[])?;
+            let validator_count = runtime.genesis_balances().iter()
+                .filter(|(address, balance)| **balance > 0 && is_validator_address(address))
+                .count();
+            println!("Zenvora multi-account genesis initialized: chain_id={chain_id} validators={validator_count}");
+            println!("Genesis proposer: {proposer}");
+            println!("Block store: {store_path}");
+            Ok(())
+        }
         [_, mode, store_path, chain_id, key_path, balance] if mode == "--chain-store-init" => {
             if Path::new(store_path).exists() {
                 return Err(format!("block store already exists at {store_path}; refusing to overwrite it"));
@@ -1826,56 +1857,15 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
         }
         [_, mode, store_path, chain_id, key_path, recipient, amount, max_fee] if mode == "--chain-store-transfer" => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
-            let signing_key = read_chain_key(key_path)?;
-            let public_key = signing_key.verifying_key().to_bytes();
-            let sender = crate::chain_protocol::address_from_public_key(&public_key)?;
-            let amount: u64 = amount.parse().map_err(|_| "amount must be a positive integer")?;
-            let max_fee: u64 = max_fee.parse().map_err(|_| "maximum fee reserve must be a nonnegative integer")?;
-            let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
-            let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
-            let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
-            let mut transaction = crate::chain_protocol::TransactionV1 {
-                chain_id,
-                sender: sender.clone(),
-                nonce: runtime.account_nonce(&sender),
-                recipient: recipient.clone(),
-                amount,
-                max_fee,
-                gas_limit: 21_000,
-                valid_until_height: None,
-                signature: Vec::new(),
-            };
-            transaction.signature = signing_key.sign(&transaction.signing_bytes()?).to_bytes().to_vec();
-            let envelope = crate::chain_block::SignedTransactionEnvelope {
-                transaction: transaction.clone(),
-                public_key: public_key.to_vec(),
-            };
-            let mut candidate = runtime.clone();
-            let receipt = candidate.apply_signed_transaction(&transaction, &public_key, chain_id, height)?;
-            let mut header = crate::chain_protocol::BlockHeaderV1 {
-                chain_id,
-                height,
-                timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
-                parent_hash: previous.header.header_hash()?,
-                transaction_root: crate::chain_protocol::transaction_merkle_root(&[transaction])?,
-                receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[receipt])?,
-                state_root: candidate.state_root(),
-                proposer: sender,
-                consensus_proof: Vec::new(),
-            };
-            crate::chain_consensus::sign_header_as_proposer(&mut header, &signing_key)?;
-            let receipts = crate::chain_block::execute_block(
-                &mut runtime, &header, &[envelope.clone()], chain_id, Some(&previous.header),
-            )?;
-            store.append_executed_block(store_path, &runtime, &header, &[envelope], &receipts)?;
-            println!("Block committed locally: height={height} chain_id={chain_id}");
-            println!("Transaction: {}", receipts[0].transaction_id.as_deref().unwrap_or("unknown"));
-            println!("Status: {} | {} balance={} | {} balance={}",
-                if receipts[0].accepted { "ACCEPTED" } else { "REJECTED" },
-                receipts[0].from, receipts[0].sender_balance,
-                receipts[0].to, receipts[0].recipient_balance);
-            println!("WARNING: local single-node prototype; fees are reserved but not charged, consensus/networking are not implemented.");
-            Ok(())
+            run_signed_transfer_cli(
+                store_path, chain_id, key_path, recipient, amount, max_fee,
+                std::slice::from_ref(key_path),
+            )
+        }
+        [_, mode, store_path, chain_id, key_path, recipient, amount, max_fee, validator_paths @ ..]
+            if mode == "--chain-store-transfer-multi" && !validator_paths.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_signed_transfer_cli(store_path, chain_id, key_path, recipient, amount, max_fee, validator_paths)
         }
         [_, mode, store_path, chain_id, address] if mode == "--chain-store-balance" => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
@@ -1950,6 +1940,134 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
         }
         _ => Err("invalid chain command arguments".into()),
     }
+}
+
+fn is_validator_address(address: &str) -> bool {
+    address.len() == 42
+        && address.starts_with("zv")
+        && address.as_bytes()[2..].iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+}
+
+fn read_genesis_config(path: &str, expected_chain_id: u64) -> Result<BTreeMap<String, i64>, String> {
+    let metadata = std::fs::metadata(path).map_err(|error| format!("cannot inspect genesis config: {error}"))?;
+    if metadata.len() > 1024 * 1024 {
+        return Err("genesis config exceeds 1 MiB".into());
+    }
+    let content = std::fs::read_to_string(path).map_err(|error| format!("cannot read genesis config: {error}"))?;
+    let mut lines = content.lines();
+    if lines.next() != Some("ZENVORA_GENESIS_V1") {
+        return Err("genesis config must start with ZENVORA_GENESIS_V1".into());
+    }
+    let chain_line = lines.next().ok_or_else(|| "genesis config is missing chain_id".to_string())?;
+    let chain_value = chain_line.strip_prefix("chain_id=")
+        .ok_or_else(|| "genesis config must have chain_id=<number> on line two".to_string())?;
+    let chain_id: u64 = chain_value.parse().map_err(|_| "invalid genesis chain ID")?;
+    if chain_id != expected_chain_id || chain_id == 0 {
+        return Err("genesis config chain ID does not match requested chain".into());
+    }
+    let mut allocations = BTreeMap::new();
+    for (index, line) in lines.enumerate() {
+        let line_number = index + 3;
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') { continue; }
+        let mut fields = line.split_whitespace();
+        let address = fields.next().ok_or_else(|| format!("genesis line {line_number} is missing address"))?;
+        let balance: i64 = fields.next().ok_or_else(|| format!("genesis line {line_number} is missing balance"))?
+            .parse().map_err(|_| format!("genesis line {line_number} has invalid balance"))?;
+        if fields.next().is_some() || balance < 0 || allocations.contains_key(address) {
+            return Err(format!("genesis line {line_number} has extra fields, negative balance, or duplicate address"));
+        }
+        allocations.insert(address.to_string(), balance);
+    }
+    if allocations.is_empty() {
+        return Err("genesis config must contain at least one allocation".into());
+    }
+    let validator_count = allocations.iter()
+        .filter(|(address, balance)| **balance > 0 && is_validator_address(address))
+        .count();
+    if validator_count == 0 || validator_count > 42 {
+        return Err("genesis config must contain 1 to 42 funded public-key-derived validator addresses".into());
+    }
+    let mut check = chain_runtime::ChainRuntime::new();
+    for (address, balance) in &allocations {
+        check.set_genesis_balance(address, *balance)?;
+    }
+    Ok(allocations)
+}
+
+fn run_signed_transfer_cli(
+    store_path: &str,
+    chain_id: u64,
+    transaction_key_path: &str,
+    recipient: &str,
+    amount_text: &str,
+    max_fee_text: &str,
+    validator_key_paths: &[String],
+) -> Result<(), String> {
+    if validator_key_paths.is_empty() || validator_key_paths.len() > 42 {
+        return Err("supply between 1 and 42 validator key files".into());
+    }
+    let transaction_key = read_chain_key(transaction_key_path)?;
+    let public_key = transaction_key.verifying_key().to_bytes();
+    let sender = crate::chain_protocol::address_from_public_key(&public_key)?;
+    let amount: u64 = amount_text.parse().map_err(|_| "amount must be a positive integer")?;
+    let max_fee: u64 = max_fee_text.parse().map_err(|_| "maximum fee reserve must be a nonnegative integer")?;
+    let validator_keys: Vec<SigningKey> = validator_key_paths.iter()
+        .map(|path| read_chain_key(path))
+        .collect::<Result<_, _>>()?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let mut transaction = crate::chain_protocol::TransactionV1 {
+        chain_id,
+        sender: sender.clone(),
+        nonce: runtime.account_nonce(&sender),
+        recipient: recipient.to_string(),
+        amount,
+        max_fee,
+        gas_limit: 21_000,
+        valid_until_height: None,
+        signature: Vec::new(),
+    };
+    transaction.signature = transaction_key.sign(&transaction.signing_bytes()?).to_bytes().to_vec();
+    let envelope = crate::chain_block::SignedTransactionEnvelope {
+        transaction: transaction.clone(),
+        public_key: public_key.to_vec(),
+    };
+    let mut candidate = runtime.clone();
+    let receipt = candidate.apply_signed_transaction(&transaction, &public_key, chain_id, height)?;
+    let first_validator_address = crate::chain_protocol::address_from_public_key(
+        &validator_keys[0].verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id,
+        height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root: crate::chain_protocol::transaction_merkle_root(&[transaction])?,
+        receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[receipt])?,
+        state_root: candidate.state_root(),
+        proposer: first_validator_address,
+        consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &validator_keys[0])?;
+    for key in validator_keys.iter().skip(1) {
+        crate::chain_consensus::add_validator_signature(&mut header, key)?;
+    }
+    let receipts = crate::chain_block::execute_block(
+        &mut runtime, &header, &[envelope.clone()], chain_id, Some(&previous.header),
+    )?;
+    store.append_executed_block(store_path, &runtime, &header, &[envelope], &receipts)?;
+    println!("Block committed locally: height={height} chain_id={chain_id}");
+    println!("Transaction: {}", receipts[0].transaction_id.as_deref().unwrap_or("unknown"));
+    println!("Validator signatures: {}", validator_keys.len());
+    println!("Status: {} | {} balance={} | {} balance={}",
+        if receipts[0].accepted { "ACCEPTED" } else { "REJECTED" },
+        receipts[0].from, receipts[0].sender_balance,
+        receipts[0].to, receipts[0].recipient_balance);
+    println!("WARNING: local prototype; fees are reserved but not charged, and this is not full BFT consensus.");
+    Ok(())
 }
 
 fn read_chain_key(path: &str) -> Result<SigningKey, String> {
