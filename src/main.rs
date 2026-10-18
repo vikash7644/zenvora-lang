@@ -1152,7 +1152,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
     // A call's static stack effect depends on whether its target can return a
     // value. This first-generation format does not encode return types.
     let returns_value: HashSet<usize> = entries.iter().copied().filter(|entry| {
-        let end = entries.iter().copied().find(|candidate| candidate > *entry).unwrap_or(code.len());
+        let end = entries.iter().copied().find(|candidate| candidate > entry).unwrap_or(code.len());
         code[*entry..end].iter().any(|op| matches!(op, Op::ReturnValue))
     }).collect();
 
