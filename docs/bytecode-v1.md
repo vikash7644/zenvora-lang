@@ -53,7 +53,7 @@ The loader checks the header/version, opcode names, operand counts and types, id
 
 - Rejects unresolved calls, out-of-region jumps, invalid function-entry locations, and returns reached from the main-program region.
 - Performs a work-list traversal from each region entry and also seeds disconnected instruction islands at an empty stack to inspect code hidden behind unconditional jumps.
-- Rejects stack underflow in checked paths, stack growth beyond the configured limit, and control-flow joins where incoming stack depths disagree.
+- Rejects stack underflow in checked paths, stack growth beyond the configured limit, control-flow joins where incoming stack depths disagree, and function returns with leftover or missing operand values.
 - Checks that the main program exits with an empty operand stack and that reachable function paths do not fall through into another region.
 
 The v1 format does not encode a function table or return types. Function regions are inferred from call targets, and call stack effects infer value returns from the target's instructions. Consequently, the verifier is an important hardening layer, not a proof that arbitrary bytecode is safe: function regions and return-value effects are inferred rather than declared in metadata, type safety is not proven, and static analysis of disconnected code starts with an assumed empty stack. Runtime checks remain necessary.
