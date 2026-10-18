@@ -687,6 +687,68 @@ mod tests {
         assert!(runtime.receipts().is_empty());
     }
     #[test]
+    fn signed_transaction_admission_rejects_wrong_chain_expiry_nonce_gap_and_fee_reserve_atomically() {
+        let signing_key = SigningKey::from_bytes(&[63; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = address_from_public_key(&public_key).unwrap();
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&sender, 1_000).unwrap();
+        runtime.set_genesis_balance("bob", 0).unwrap();
+
+        let mut transaction = TransactionV1 {
+            chain_id: 71,
+            sender: sender.clone(),
+            nonce: 0,
+            recipient: "bob".into(),
+            amount: 125,
+            max_fee: 3,
+            gas_limit: 21_000,
+            valid_until_height: Some(10),
+            signature: Vec::new(),
+        };
+        transaction.signature = signing_key
+            .sign(&transaction.signing_bytes().unwrap())
+            .to_bytes()
+            .to_vec();
+
+        assert!(runtime.apply_signed_transaction(&transaction, &public_key, 72, 1).is_err());
+        assert!(runtime.apply_signed_transaction(&transaction, &public_key, 71, 11).is_err());
+
+        transaction.nonce = 1;
+        transaction.valid_until_height = None;
+        transaction.signature = signing_key
+            .sign(&transaction.signing_bytes().unwrap())
+            .to_bytes()
+            .to_vec();
+        assert!(runtime.apply_signed_transaction(&transaction, &public_key, 71, 1).is_err());
+
+        assert_eq!(runtime.account_nonce(&sender), 0);
+        assert_eq!(runtime.balance(&sender), 1_000);
+        assert_eq!(runtime.balance("bob"), 0);
+        assert!(runtime.receipts().is_empty());
+
+        let mut low_balance_runtime = ChainRuntime::new();
+        low_balance_runtime.set_genesis_balance(&sender, 100).unwrap();
+        low_balance_runtime.set_genesis_balance("bob", 0).unwrap();
+        transaction.nonce = 0;
+        transaction.amount = 98;
+        transaction.max_fee = 3;
+        transaction.signature = signing_key
+            .sign(&transaction.signing_bytes().unwrap())
+            .to_bytes()
+            .to_vec();
+
+        assert!(low_balance_runtime
+            .apply_signed_transaction(&transaction, &public_key, 71, 1)
+            .unwrap_err()
+            .contains("insufficient balance"));
+        assert_eq!(low_balance_runtime.account_nonce(&sender), 0);
+        assert_eq!(low_balance_runtime.balance(&sender), 100);
+        assert_eq!(low_balance_runtime.balance("bob"), 0);
+        assert!(low_balance_runtime.receipts().is_empty());
+    }
+
+    #[test]
     fn loader_rejects_legacy_or_unknown_versions_explicitly() {
         let path = std::env::temp_dir().join(format!("zenvora-ledger-version-{}.zvr", std::process::id()));
         std::fs::write(&path, "ZENVORA_LEDGER_V1\n").unwrap();
