@@ -9,6 +9,7 @@ mod chain_protocol;
 mod chain_block;
 mod block_store;
 mod chain_rpc;
+mod chain_p2p;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -1896,6 +1897,17 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
             crate::chain_rpc::serve(store_path.clone(), chain_id, port)
         }
+        [_, mode, store_path, chain_id, bind_ip, port] if mode == "--chain-p2p-serve" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "P2P port must be between 1 and 65535")?;
+            crate::chain_p2p::serve(store_path.clone(), chain_id, bind_ip, port)
+        }
+        [_, mode, store_path, chain_id, peer] if mode == "--chain-p2p-sync" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let synced = crate::chain_p2p::sync_from_peer(store_path, chain_id, peer)?;
+            println!("Verified and synced {synced} block(s) from {peer}");
+            Ok(())
+        }
         [_, mode, ledger_path, address, amount] if mode == "--chain-init" => {
             if Path::new(ledger_path).exists() {
                 return Err(format!("ledger already exists at {ledger_path}; refusing to overwrite it"));
@@ -2043,7 +2055,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>");
             process::exit(2);
         }
     };
