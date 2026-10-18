@@ -88,7 +88,7 @@ The current prototype supports integer, boolean, and string values, assignment, 
 
 ## Status and safety
 
-This is an early work in progress. Explicit global/module scope rules, global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Explicit global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
