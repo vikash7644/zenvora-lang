@@ -6,6 +6,7 @@ use ed25519_dalek::{Signer, SigningKey};
 mod module_loader;
 mod chain_runtime;
 mod chain_protocol;
+mod chain_consensus;
 mod chain_block;
 mod block_store;
 mod chain_rpc;
