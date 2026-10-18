@@ -1,0 +1,36 @@
+name: Zenvora Lang CI
+
+on:
+  push:
+    branches:
+      - main
+      - chain-lang-integration
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zenvora-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test (stable Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Compile all targets
+        run: cargo check --all-targets
+
+      - name: Run test suite
+        run: cargo test --all-targets
