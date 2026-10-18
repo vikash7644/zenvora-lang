@@ -1,0 +1,9 @@
+# String utilities and checked integer aggregation in Zenvora Lang
+define phrase := "zenvora-lang"
+show starts_with(phrase, "zen")
+show ends_with(phrase, "lang")
+show replace("a-b-a", "a", "x")
+define colors := split("red,green,blue", ",")
+show colors
+show join(array("Zenvora", "Lang"), " ")
+show sum(array(10, 20, 22))
