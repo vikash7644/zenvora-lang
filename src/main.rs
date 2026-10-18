@@ -1889,6 +1889,15 @@ mod tests {
         assert!(super::create_project("../escape").is_err());
         assert!(super::create_project("").is_err());
     }
+
+    #[test]
+    fn new_project_name_validation_accepts_simple_names_and_rejects_paths() {
+        assert!(super::create_project("../escape").is_err());
+        assert!(super::create_project("nested/project").is_err());
+        assert!(super::create_project("bad name").is_err());
+        assert!(super::create_project("").is_err());
+        assert!(super::create_project("-starts-with-dash").is_err());
+    }
     #[test]
     fn check_program_compiles_without_running_side_effects() {
         let path = std::env::temp_dir().join(format!("zenvora-check-{}.zv", std::process::id()));
