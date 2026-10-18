@@ -569,7 +569,7 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
     match name {
         "array" => Ok(Value::Array(args)),
         "map" => {
-            if args.len() % 2 != 0 { return Err("builtin 'map' expects alternating string keys and values".into()); }
+            if !args.len().is_multiple_of(2) { return Err("builtin 'map' expects alternating string keys and values".into()); }
             let mut result = std::collections::BTreeMap::new();
             let mut it = args.into_iter();
             while let Some(key) = it.next() {
@@ -890,11 +890,11 @@ fn hex_encode(input: &str) -> String {
 
 fn hex_decode(input: &str) -> Result<String, String> {
     if input == "-" { return Ok(String::new()); }
-    if input.len() % 2 != 0 {
+    if !input.len().is_multiple_of(2) {
         return Err("invalid hex string in bytecode".into());
     }
     let mut bytes = Vec::with_capacity(input.len() / 2);
-    for pair in input.as_bytes().chunks_exact(2) {
+    for pair in input.as_bytes().as_chunks::<2>().0 {
         let digits = std::str::from_utf8(pair).map_err(|_| "invalid hex string in bytecode")?;
         bytes.push(u8::from_str_radix(digits, 16).map_err(|_| "invalid hex string in bytecode")?);
     }
