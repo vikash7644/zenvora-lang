@@ -36,6 +36,29 @@ Automated tests cover:
 
 The CI workflow must pass before this prototype is considered verified. This is a real VM-backed transaction execution path inside the Zenvora Lang repository, but it is **not yet a full blockchain node**.
 
+## Loopback read-only JSON-RPC
+
+Run the local query server against a replay-verified block store:
+
+```text
+zv --chain-rpc dev.zvb 71
+zv --chain-rpc dev.zvb 71 8545
+```
+
+The service binds only to `127.0.0.1` and supports JSON-RPC 2.0 methods:
+- `chain_getInfo` — chain ID, block count, tip height/hash, state root, and maturity labels.
+- `chain_getBalance` — account balance and next expected nonce.
+- `chain_getBlock` — block header commitments and transaction summaries by height.
+- `chain_getTransaction` — signed transaction details by transaction ID.
+
+Example request body:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"chain_getInfo","params":[]}
+```
+
+This is read-only and reloads/replays the local block store for each request. It is deliberately not a public RPC endpoint and has no authentication layer because it only binds loopback. Do not expose it through a tunnel or public interface. HTTP requests are size-bounded; chunked transfer encoding and non-POST requests are rejected. The RPC does not submit transactions or implement peer networking.
+
 ## Canonical protocol-format and hashing prototype
 
 `src/chain_protocol.rs` defines versioned canonical encodings for transaction signing payloads, signed transaction envelopes, and block headers. Encodings use explicit big-endian integers, length-prefixed fields, and distinct domain tags. Bounded decoders reject truncated inputs, trailing bytes, invalid versions, malformed fields, and oversized inputs.
