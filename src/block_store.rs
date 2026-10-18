@@ -202,8 +202,18 @@ impl BlockStore {
         if metadata.len() > MAX_STORE_BYTES {
             return Err("block store exceeds maximum file size".into());
         }
-        let content = std::fs::read_to_string(path)
+        // Bound bytes read from the opened file, not only the earlier metadata
+        // snapshot: the path can be replaced or the file can grow between those steps.
+        use std::io::Read;
+        let mut content = String::new();
+        std::fs::File::open(path)
+            .map_err(|error| format!("cannot open block store: {error}"))?
+            .take(MAX_STORE_BYTES + 1)
+            .read_to_string(&mut content)
             .map_err(|error| format!("cannot read block store: {error}"))?;
+        if content.len() as u64 > MAX_STORE_BYTES {
+            return Err("block store exceeds maximum file size".into());
+        }
         let mut lines = content.lines();
         if lines.next() != Some(STORE_VERSION) {
             return Err("unsupported or missing block-store version".into());
