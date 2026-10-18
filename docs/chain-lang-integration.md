@@ -9,13 +9,23 @@
 After building the `zv` binary, the current prototype supports:
 
 ```text
+# Earlier VM-backed transfer ledger
 zv --chain-init ledger.zvr alice 1000
 zv --chain-transfer ledger.zvr alice bob 125
 zv --chain-balance ledger.zvr alice
 zv --chain-receipts ledger.zvr
+
+# Signed local block-store prototype
+zv --chain-keygen owner.zvk
+zv --chain-store-init dev.zvb 71 owner.zvk 1000000
+zv --chain-store-transfer dev.zvb 71 owner.zvk bob 125 3
+zv --chain-store-balance dev.zvb 71 bob
+zv --chain-store-info dev.zvb 71
 ```
 
-`--chain-init` creates a new ledger and refuses to overwrite an existing file. To fund another address, use `--chain-init` only when creating a fresh ledger; genesis balances for multiple addresses should be added through a dedicated genesis/config format in a future milestone. Each transfer loads the snapshot, runs the transfer rule in the Zenvora VM, and saves the resulting balances and receipt. A rejected transfer is recorded as a rejected receipt without changing balances.
+`--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The CLI currently supports one genesis account per new store; multi-account genesis configuration is a later milestone.
+
+**Key warning:** `owner.zvk` contains an unencrypted private seed. On Unix-like systems the CLI requests owner-only file permissions, but this is a development key format, not a production wallet or secure key-management system. Fees are checked as a reserve but are not charged. The block store is a single local file: this is not yet a networked testnet, consensus is not implemented, and no real funds should be used.
 
 Automated tests cover:
 - a valid transfer and subsequent transfer using the committed state;
