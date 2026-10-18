@@ -1805,7 +1805,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let header = crate::chain_protocol::BlockHeaderV1 {
                 chain_id,
                 height: 0,
-                timestamp_secs: current_unix_seconds()?,
+                timestamp_secs: 0,
                 parent_hash: [0; 32],
                 transaction_root: crate::chain_protocol::transaction_merkle_root(&[])?,
                 receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[])?,
@@ -2074,10 +2074,13 @@ mod tests {
         let base = std::env::temp_dir();
         let key_path = base.join(format!("zenvora-cli-key-{}.zvk", std::process::id()));
         let store_path = base.join(format!("zenvora-cli-store-{}.zvb", std::process::id()));
+        let second_store_path = base.join(format!("zenvora-cli-store-second-{}.zvb", std::process::id()));
         let _ = std::fs::remove_file(&key_path);
         let _ = std::fs::remove_file(&store_path);
+        let _ = std::fs::remove_file(&second_store_path);
         let key_text = key_path.to_string_lossy().to_string();
         let store_text = store_path.to_string_lossy().to_string();
+        let second_store_text = second_store_path.to_string_lossy().to_string();
 
         run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
         assert!(run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).is_err());
@@ -2088,6 +2091,16 @@ mod tests {
             "zv".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
             key_text.clone(), "1000".into(),
         ]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), second_store_text.clone(), "71".into(),
+            key_text.clone(), "1000".into(),
+        ]).unwrap();
+        let (first_genesis, _) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        let (second_genesis, _) = crate::block_store::BlockStore::load_from_file(&second_store_text, 71).unwrap();
+        assert_eq!(
+            first_genesis.blocks()[0].header.header_hash().unwrap(),
+            second_genesis.blocks()[0].header.header_hash().unwrap(),
+        );
         run_chain_command(&vec![
             "zv".into(), "--chain-store-transfer".into(), store_text.clone(), "71".into(),
             key_text.clone(), "bob".into(), "100".into(), "1".into(),
@@ -2101,6 +2114,7 @@ mod tests {
 
         let _ = std::fs::remove_file(key_path);
         let _ = std::fs::remove_file(store_path);
+        let _ = std::fs::remove_file(second_store_path);
     }
 
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
