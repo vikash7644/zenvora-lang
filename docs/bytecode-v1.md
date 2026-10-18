@@ -4,7 +4,7 @@
 
 ## File framing
 
-A file begins with this exact first line:
+The compiler runs the control-flow verifier on generated instructions before returning compiled code, and the loader repeats validation after decoding a file. A file begins with this exact first line:
 
 ```text
 ZENVORA_BYTECODE 1
