@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Extended contract-view checks with conservative call-graph analysis: views now reject calls to helper functions that directly assign declared contract state or transitively call detected state-mutating functions. Regression coverage verifies a view cannot reach a mutating helper. This is not a complete effect system; complex dynamic or indirect behaviors remain outside the current language model.
+
 - Contract view lowering now rejects direct calls to declared `action` functions, including calls used in expressions, while ignoring matching text inside string literals and comments. Added regression tests for both call forms and the string-literal case; indirect mutation through arbitrary helper functions remains a known limitation.
 
 - Hardened block-store appends by independently executing each candidate against a verified tip-runtime cache before persistence; loading still rebuilds state by replaying the complete stored chain. Added regression coverage proving that state/receipt commitments from unrelated transactions are rejected without altering the stored tip. The verified cache avoids replaying the entire chain on every append.
