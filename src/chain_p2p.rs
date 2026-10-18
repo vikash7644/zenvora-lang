@@ -460,7 +460,7 @@ mod tests {
     use super::super::block_store::BlockStore;
     use super::super::chain_block::{execute_block, SignedTransactionEnvelope};
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
-    use super::super::chain_consensus::sign_header_as_proposer;
+    use super::super::chain_consensus::{sign_header_as_proposer, verify_consensus_proof};
     use super::super::chain_runtime::ChainRuntime;
     use super::super::tx_pool::TransactionPool;
     use ed25519_dalek::{Signer, SigningKey};
@@ -531,6 +531,79 @@ mod tests {
         let bad = handle_message(&json!({"method":"get_block","height":"bad"}), &path_text, 71);
         assert_eq!(bad["ok"], false);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn remote_validator_signs_only_a_valid_candidate_and_completes_quorum() {
+        let suffix = std::process::id();
+        let store_path = std::env::temp_dir().join(format!("zenvora-peer-vote-{suffix}.zvb"));
+        let key_path = std::env::temp_dir().join(format!("zenvora-peer-vote-{suffix}.zvk"));
+        let _ = std::fs::remove_file(&store_path);
+        let _ = std::fs::remove_file(&key_path);
+        let store_text = store_path.to_string_lossy().to_string();
+        let key_text = key_path.to_string_lossy().to_string();
+
+        let proposer_key = SigningKey::from_bytes(&[171; 32]);
+        let validator_key = SigningKey::from_bytes(&[172; 32]);
+        let proposer_public = proposer_key.verifying_key().to_bytes();
+        let validator_public = validator_key.verifying_key().to_bytes();
+        let proposer_address = address_from_public_key(&proposer_public).unwrap();
+        let validator_address = address_from_public_key(&validator_public).unwrap();
+        let mut allocations = BTreeMap::new();
+        allocations.insert(proposer_address.clone(), 1_000);
+        allocations.insert(validator_address.clone(), 1_000);
+        allocations.insert("bob".to_string(), 0);
+        let mut runtime = ChainRuntime::new();
+        for (address, balance) in &allocations {
+            runtime.set_genesis_balance(address, *balance).unwrap();
+        }
+        let genesis = BlockHeaderV1 {
+            chain_id: 71, height: 0, timestamp_secs: 0, parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(), proposer: proposer_address.clone(), consensus_proof: Vec::new(),
+        };
+        execute_block(&mut runtime, &genesis, &[], 71, None).unwrap();
+        let mut store = BlockStore::new(71, allocations).unwrap();
+        store.append_executed_block(&store_text, &runtime, &genesis, &[], &[]).unwrap();
+
+        let mut transaction = TransactionV1 {
+            chain_id: 71, sender: proposer_address, nonce: 0, recipient: "bob".into(),
+            amount: 100, max_fee: 1, gas_limit: 21_000, valid_until_height: Some(10),
+            signature: Vec::new(),
+        };
+        transaction.signature = proposer_key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = SignedTransactionEnvelope { transaction: transaction.clone(), public_key: proposer_public.to_vec() };
+        let mut candidate = runtime.clone();
+        let receipt = candidate.apply_signed_transaction(&transaction, &proposer_public, 71, 1).unwrap();
+        let mut header = BlockHeaderV1 {
+            chain_id: 71, height: 1, timestamp_secs: 1, parent_hash: genesis.header_hash().unwrap(),
+            transaction_root: transaction_merkle_root(&[transaction]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[receipt]).unwrap(),
+            state_root: candidate.state_root(), proposer: proposer_address, consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut header, &proposer_key).unwrap();
+
+        let key_file = format!(
+            "ZENVORA_KEY_V1\nprivate={}\npublic={}\naddress={}\n",
+            super::hex_encode(&[172; 32]), super::hex_encode(&validator_public), validator_address
+        );
+        std::fs::write(&key_path, key_file).unwrap();
+        let request = json!({
+            "method":"sign_block",
+            "header":super::hex_encode(&header.canonical_bytes().unwrap()),
+            "transactions":[{
+                "publicKey":super::hex_encode(&envelope.public_key),
+                "transaction":super::hex_encode(&envelope.transaction.canonical_bytes().unwrap())
+            }]
+        });
+        let response = handle_message_with_pool(&request, &store_text, 71, None, Some(&key_text));
+        assert_eq!(response["ok"], true, "{}", response);
+        header.consensus_proof = super::hex_decode(response["result"]["consensusProof"].as_str().unwrap()).unwrap();
+        verify_consensus_proof(&header, runtime.genesis_balances()).unwrap();
+
+        std::fs::remove_file(store_path).unwrap();
+        std::fs::remove_file(key_path).unwrap();
     }
 
     #[test]
