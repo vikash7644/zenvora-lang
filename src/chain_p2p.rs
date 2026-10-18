@@ -348,12 +348,13 @@ fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle_message, sync_from_peer};
+    use super::{gossip_pool_to_peer, handle_message, handle_message_with_pool, sync_from_peer};
     use super::super::block_store::BlockStore;
     use super::super::chain_block::{execute_block, SignedTransactionEnvelope};
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
     use super::super::chain_consensus::sign_header_as_proposer;
     use super::super::chain_runtime::ChainRuntime;
+    use super::super::tx_pool::TransactionPool;
     use ed25519_dalek::{Signer, SigningKey};
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -422,6 +423,62 @@ mod tests {
         let bad = handle_message(&json!({"method":"get_block","height":"bad"}), &path_text, 71);
         assert_eq!(bad["ok"], false);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn peer_gossip_submits_signed_transactions_to_remote_pool() {
+        let suffix = std::process::id();
+        let local_store_path = std::env::temp_dir().join(format!("zenvora-gossip-local-{suffix}.zvb"));
+        let peer_store_path = std::env::temp_dir().join(format!("zenvora-gossip-peer-{suffix}.zvb"));
+        let local_pool_path = std::env::temp_dir().join(format!("zenvora-gossip-local-{suffix}.zvp"));
+        let peer_pool_path = std::env::temp_dir().join(format!("zenvora-gossip-peer-{suffix}.zvp"));
+        for path in [&local_store_path, &peer_store_path, &local_pool_path, &peer_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+        let local_text = local_store_path.to_string_lossy().to_string();
+        let peer_text = peer_store_path.to_string_lossy().to_string();
+        let local_pool_text = local_pool_path.to_string_lossy().to_string();
+        let peer_pool_text = peer_pool_path.to_string_lossy().to_string();
+        let (local_runtime, _, key) = build_store(&local_text, false);
+        let (peer_runtime, _, _) = build_store(&peer_text, false);
+        let public_key = key.verifying_key().to_bytes();
+        let mut transaction = TransactionV1 {
+            chain_id: 71, sender: address_from_public_key(&public_key).unwrap(), nonce: 0,
+            recipient: "bob".into(), amount: 75, max_fee: 1, gas_limit: 21_000,
+            valid_until_height: Some(100), signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = SignedTransactionEnvelope { transaction, public_key: public_key.to_vec() };
+        let mut local_pool = TransactionPool::new(71, 1).unwrap();
+        local_pool.submit(&local_runtime, envelope).unwrap();
+        local_pool.save_to_file(&local_pool_text).unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let peer_text_for_thread = peer_text.clone();
+        let peer_pool_for_thread = peer_pool_text.clone();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut length_bytes = [0_u8; 4];
+            stream.read_exact(&mut length_bytes).unwrap();
+            let length = u32::from_be_bytes(length_bytes) as usize;
+            let mut bytes = vec![0_u8; length];
+            stream.read_exact(&mut bytes).unwrap();
+            let request: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            let response = handle_message_with_pool(
+                &request, &peer_text_for_thread, 71, Some(&peer_pool_for_thread),
+            ).to_string();
+            stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        assert_eq!(gossip_pool_to_peer(&local_text, 71, &local_pool_text, &peer.to_string()).unwrap(), 1);
+        server.join().unwrap();
+        let peer_pool = TransactionPool::load_from_file(&peer_pool_text, &peer_runtime, 71, 1).unwrap();
+        assert_eq!(peer_pool.len(), 1);
+        assert_eq!(peer_runtime.balance("bob"), 0);
+        for path in [&local_store_path, &peer_store_path, &local_pool_path, &peer_pool_path] {
+            std::fs::remove_file(path).unwrap();
+        }
     }
 
     #[test]
