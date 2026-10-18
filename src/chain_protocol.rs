@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(transaction_merkle_root(&[]).unwrap(), transaction_merkle_root(&[]).unwrap());
         assert_ne!(transaction_merkle_root(&[]).unwrap(), transaction_merkle_root(&[a.clone()]).unwrap());
         assert_eq!(transaction_merkle_root(&[a.clone(), b.clone()]).unwrap(), transaction_merkle_root(&[a.clone(), b.clone()]).unwrap());
-        assert_ne!(transaction_merkle_root(&[a.clone(), b.clone()]).unwrap(), transaction_merkle_root(&[b, a]).unwrap());
+        assert_ne!(transaction_merkle_root(&[a.clone(), b.clone()]).unwrap(), transaction_merkle_root(&[b, a.clone()]).unwrap());
         assert_ne!(transaction_merkle_root(&[a.clone()]).unwrap(), transaction_merkle_root(&[a.clone(), a]).unwrap());
     }
 
