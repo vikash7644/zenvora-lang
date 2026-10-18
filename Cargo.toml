@@ -8,3 +8,6 @@ license = "MIT"
 [[bin]]
 name = "zv"
 path = "src/main.rs"
+
+[dependencies]
+sha2 = "0.10"
