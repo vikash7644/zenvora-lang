@@ -560,7 +560,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values") }
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert") }
 
 fn value_to_string(value: &Value) -> String {
     match value {
@@ -632,6 +632,65 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
             let Value::Map(items) = &args[0] else { return Err(format!("type error: {name} expects a map")); };
             let values = if name == "keys" { items.keys().cloned().map(Value::Str).collect() } else { items.values().cloned().collect() };
             Ok(Value::Array(values))
+        }
+        "type_of" => {
+            arity(1)?;
+            let kind = match &args[0] {
+                Value::Int(_) => "integer",
+                Value::Str(_) => "string",
+                Value::Bool(_) => "boolean",
+                Value::Array(_) => "array",
+                Value::Map(_) => "map",
+            };
+            Ok(Value::Str(kind.into()))
+        }
+        "to_string" => {
+            arity(1)?;
+            Ok(Value::Str(value_to_string(&args[0])))
+        }
+        "abs" => {
+            arity(1)?;
+            match args[0] {
+                Value::Int(value) => Ok(Value::Int(value.checked_abs().ok_or("integer overflow in abs")?)),
+                _ => Err("type error: abs expects an integer".into()),
+            }
+        }
+        "min" | "max" => {
+            arity(2)?;
+            match (&args[0], &args[1]) {
+                (Value::Int(left), Value::Int(right)) => Ok(Value::Int(if name == "min" { (*left).min(*right) } else { (*left).max(*right) })),
+                _ => Err(format!("type error: {name} expects two integers")),
+            }
+        }
+        "range" => {
+            arity(2)?;
+            let (Value::Int(start), Value::Int(end)) = (&args[0], &args[1]) else {
+                return Err("type error: range expects two integers".into());
+            };
+            let length = end.checked_sub(*start).ok_or("range bounds overflow")?;
+            if length < 0 { return Err("range end must be greater than or equal to start".into()); }
+            const MAX_RANGE_ITEMS: i64 = 100_000;
+            if length > MAX_RANGE_ITEMS { return Err(format!("range exceeds safety limit ({MAX_RANGE_ITEMS} items)")); }
+            let mut items = Vec::with_capacity(length as usize);
+            let mut current = *start;
+            while current < *end {
+                items.push(Value::Int(current));
+                current = current.checked_add(1).ok_or("integer overflow while building range")?;
+            }
+            Ok(Value::Array(items))
+        }
+        "assert" => {
+            if !(1..=2).contains(&arg_len) {
+                return Err(format!("builtin 'assert' expects 1 or 2 argument(s), got {arg_len}"));
+            }
+            match &args[0] {
+                Value::Bool(true) => Ok(Value::Bool(true)),
+                Value::Bool(false) => {
+                    let message = if args.len() == 2 { value_to_string(&args[1]) } else { "assertion failed".into() };
+                    Err(message)
+                }
+                _ => Err("type error: assert expects a boolean condition".into()),
+            }
         }
         _ => Err(format!("unknown builtin '{name}'")),
     }
@@ -1160,6 +1219,22 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn standard_library_type_conversion_math_range_and_assert() {
+        let output = execute("show type_of(42)\nshow type_of(array(1))\nshow to_string(true)\nshow abs(-9)\nshow min(8, 3)\nshow max(8, 3)\nshow range(2, 5)\nshow len(range(0, 4))\nshow assert(2 < 3)\n").unwrap();
+        assert_eq!(output, vec!["integer", "array", "true", "9", "3", "8", "[2, 3, 4]", "4", "true"]);
+    }
+
+    #[test]
+    fn standard_library_rejects_invalid_arguments_and_resource_abuse() {
+        assert!(execute("show abs(true)\n").unwrap_err().contains("abs expects"));
+        assert!(execute("show range(5, 2)\n").unwrap_err().contains("range end"));
+        assert!(execute("show range(0, 100001)\n").unwrap_err().contains("safety limit"));
+        assert!(execute("show assert(false, \"custom failure\")\n").unwrap_err().contains("custom failure"));
+        assert!(execute("show assert(1)\n").unwrap_err().contains("assert expects a boolean"));
+        assert!(execute("show abs(-9223372036854775807 - 1)\n").unwrap_err().contains("integer overflow"));
     }
 
     #[test]
