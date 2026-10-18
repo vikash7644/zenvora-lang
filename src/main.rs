@@ -212,8 +212,21 @@ fn split_arguments(input: &str) -> Vec<&str> {
     let mut args = Vec::new();
     let mut depth = 0i32;
     let mut start = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
     for (i, ch) in input.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
         match ch {
+            '"' => in_string = true,
             '(' => depth += 1,
             ')' => depth -= 1,
             ',' if depth == 0 => { args.push(input[start..i].trim()); start = i + ch.len_utf8(); }
@@ -798,6 +811,12 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["hello\nworld", "Zenvora Lang", ""]);
+    }
+
+    #[test]
+    fn functions_accept_string_arguments_with_commas() {
+        let output = execute("show echo(\"hello, world\")\nfn echo(value) {\nreturn value\n}\n").unwrap();
+        assert_eq!(output, vec!["hello, world"]);
     }
 
     #[test]
