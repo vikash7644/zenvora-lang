@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Block-store and transaction-pool loaders now cap the bytes read from the opened file itself, not only its earlier metadata size, so concurrent file growth/replacement cannot bypass their configured input limits.
+
 - Ledger loading now caps bytes read from the open file itself, in addition to checking metadata, preventing a file that grows or is replaced during the read from bypassing the configured 64 MiB allocation limit.
 
 - Added signed-transaction admission regression coverage for wrong chain IDs, expired transactions, nonce gaps, and insufficient amount-plus-fee reserves; each rejection is checked for zero state, nonce, or receipt mutation.
