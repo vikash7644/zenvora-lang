@@ -21,6 +21,9 @@ zv --chain-store-init dev.zvb 71 owner.zvk 1000000
 zv --chain-store-transfer dev.zvb 71 owner.zvk bob 125 3
 zv --chain-store-balance dev.zvb 71 bob
 zv --chain-store-info dev.zvb 71
+# Persisted transaction-pool flow
+zv --chain-rpc-pool dev.zvb 71 pending.zvp 8545
+zv --chain-store-produce dev.zvb 71 pending.zvp owner.zvk
 ```
 
 `--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The single-account initializer remains available, and `--chain-store-init-multi` accepts a multi-account genesis config. Genesis headers use a deterministic timestamp so stores initialized from the same chain ID and allocations share the same genesis hash.
@@ -32,13 +35,13 @@ Create one key file per validator with `zv --chain-keygen validator-1.zvk`, then
 ```text
 ZENVORA_GENESIS_V1
 chain_id=71
-zv<first-validator-address> 1000000
-zv<second-validator-address> 1000000
-zv<third-validator-address> 1000000
-zv<fourth-validator-address> 1000000
+<address-printed-for-validator-1> 1000000
+<address-printed-for-validator-2> 1000000
+<address-printed-for-validator-3> 1000000
+<address-printed-for-validator-4> 1000000
 ```
 
-Replace each placeholder with the exact `zv...` address printed by key generation; do not include angle brackets. The address and balance are whitespace-separated. The config accepts up to 42 funded public-key-derived validator addresses, plus optional ordinary genesis allocations.
+Replace each placeholder with the exact `zv...` address printed by key generation; do not include angle brackets. The address and balance are whitespace-separated. Replace each placeholder with the entire exact address printed by `--chain-keygen` (including its `zv` prefix). The config accepts up to 42 funded public-key-derived validator addresses, plus optional ordinary genesis allocations.
 
 ```text
 zv --chain-store-init-multi dev.zvb 71 genesis.txt
@@ -79,6 +82,12 @@ Example request body:
 ```json
 {"jsonrpc":"2.0","id":1,"method":"chain_getInfo","params":[]}
 ```
+
+With a persisted transaction pool enabled, use `zv --chain-rpc-pool dev.zvb 71 pending.zvp 8545`. This mode additionally supports:
+- `chain_submitTransaction` — parameters `publicKey` and `transaction`, both lowercase hex; the transaction field is the canonical signed `TransactionV1` envelope.
+- `chain_getPendingTransactions` — list pending transaction IDs and basic fields.
+
+The pool verifies the transaction signature, chain ID, expiry, sender nonce, and balance/fee reserve against a cloned runtime with earlier pool entries replayed. It persists to a bounded local file scoped to the next block height. Produce a block with `zv --chain-store-produce dev.zvb 71 pending.zvp validator-1.zvk ...`; supply enough distinct genesis-authorized validator keys to meet the quorum. After a successful block commit, the producer resets the pool for the next height. This is manual local submission and block production; transaction gossip and automatic validator coordination are not implemented.
 
 This is read-only and reloads/replays the local block store for each request. It is deliberately not a public RPC endpoint and has no authentication layer because it only binds loopback. Do not expose it through a tunnel or public interface. HTTP requests are size-bounded; chunked transfer encoding and non-POST requests are rejected. The RPC does not submit transactions or implement peer networking.
 
@@ -135,7 +144,7 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 - Add validator discovery/communication and an automated multi-validator round/vote workflow.
 - Implement a full consensus round protocol: validator-set configuration, proposal/vote messages, timeouts, equivocation handling, fork choice, and explicit finality rules.
 - Add transaction fee charging, gas metering, per-operation cost schedule, and deterministic execution limits.
-- Add transaction submission over authenticated RPC, transaction pool policy, peer authentication, rate limits, and abuse controls.
+- Add transaction gossip, authenticated RPC for non-loopback deployments, peer authentication, rate limits, and abuse controls.
 - Add indexed block/receipt storage, snapshots, recovery tests, and state/receipt proof APIs.
 - Replace the illustrative transfer rule with compiled Zenvora contract artifacts and a typed contract ABI/state host interface.
 - Add fuzzing, property tests, multi-node adversarial tests, reproducible builds, and an external security review before any public testnet with value.
