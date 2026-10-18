@@ -719,7 +719,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{compile, compile_core, run_with_output};
+    use super::{compile, compile_core, run_with_output, Op};
 
     fn execute(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
@@ -739,6 +739,20 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&restored, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["42", "true", "42"]);
+    }
+
+    #[test]
+    fn bytecode_serializes_every_instruction_variant() {
+        let code = vec![
+            Op::Push(-7), Op::PushBool(true), Op::Load("value".into()), Op::Store("value".into()),
+            Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Print,
+            Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::JumpIfFalse(24), Op::Jump(24),
+            Op::CallTarget { target: 0, params: vec!["arg".into()], arg_count: 1 },
+            Op::Return, Op::ReturnValue,
+        ];
+        let encoded = super::serialize_bytecode(&code).unwrap();
+        assert_eq!(super::deserialize_bytecode(&encoded).unwrap(), code);
+        assert!(super::serialize_bytecode(&[Op::Call("unresolved".into(), 0)]).unwrap_err().contains("unresolved function call"));
     }
 
     #[test]
