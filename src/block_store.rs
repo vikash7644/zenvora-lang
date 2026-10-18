@@ -290,6 +290,7 @@ mod tests {
     use super::super::chain_protocol::{
         address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1,
     };
+    use super::super::chain_consensus::sign_header_as_proposer;
     use super::super::chain_runtime::ChainRuntime;
     use ed25519_dalek::{Signer, SigningKey};
     use std::collections::BTreeMap;
@@ -371,7 +372,7 @@ mod tests {
         let expected_receipt = expected.apply_signed_transaction(
             &envelope.transaction, &envelope.public_key, 71, 1,
         ).unwrap();
-        let header = BlockHeaderV1 {
+        let mut header = BlockHeaderV1 {
             chain_id: 71,
             height: 1,
             timestamp_secs: 1_800_000_001,
@@ -382,6 +383,7 @@ mod tests {
             proposer: "validator_1".into(),
             consensus_proof: Vec::new(),
         };
+        sign_header_as_proposer(&mut header, &key).unwrap();
         let receipts = execute_block(&mut runtime, &header, &[envelope.clone()], 71, Some(&genesis_header)).unwrap();
         assert_eq!(receipts, vec![expected_receipt]);
         store.append_executed_block(&path, &runtime, &header, &[envelope], &receipts).unwrap();
@@ -404,7 +406,7 @@ mod tests {
         let envelope = signed_transfer(&key, 0);
         let mut expected = runtime.clone();
         let receipt = expected.apply_signed_transaction(&envelope.transaction, &envelope.public_key, 71, 1).unwrap();
-        let header = BlockHeaderV1 {
+        let mut header = BlockHeaderV1 {
             chain_id: 71,
             height: 1,
             timestamp_secs: 1_800_000_001,
@@ -415,6 +417,7 @@ mod tests {
             proposer: "validator_1".into(),
             consensus_proof: Vec::new(),
         };
+        sign_header_as_proposer(&mut header, &key).unwrap();
         let receipts = execute_block(&mut runtime, &header, &[envelope.clone()], 71, Some(&genesis_header)).unwrap();
         store.append_executed_block(&path, &runtime, &header, &[envelope], &receipts).unwrap();
 
