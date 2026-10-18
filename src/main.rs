@@ -1849,7 +1849,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             };
             let mut candidate = runtime.clone();
             let receipt = candidate.apply_signed_transaction(&transaction, &public_key, chain_id, height)?;
-            let header = crate::chain_protocol::BlockHeaderV1 {
+            let mut header = crate::chain_protocol::BlockHeaderV1 {
                 chain_id,
                 height,
                 timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
@@ -1860,6 +1860,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
                 proposer: sender,
                 consensus_proof: Vec::new(),
             };
+            crate::chain_consensus::sign_header_as_proposer(&mut header, &signing_key)?;
             let receipts = crate::chain_block::execute_block(
                 &mut runtime, &header, &[envelope.clone()], chain_id, Some(&previous.header),
             )?;
