@@ -54,7 +54,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
     Ok(out)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Op {
     Push(i64), PushBool(bool), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
     Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
@@ -560,24 +560,162 @@ where
     Ok(())
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 2 || args[1] == "--help" || args[1] == "-h" {
-        println!("Zenvora Lang v0.5.0\nUsage: zv <file.zv>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
-        if args.len() != 2 { process::exit(2); }
-        return;
+
+const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
+
+fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
+    let mut output = String::from(BYTECODE_HEADER);
+    output.push('\n');
+    for op in code {
+        let line = match op {
+            Op::Push(n) => format!("PUSH {n}"),
+            Op::PushBool(value) => format!("PUSH_BOOL {value}"),
+            Op::Load(name) => format!("LOAD {name}"),
+            Op::Store(name) => format!("STORE {name}"),
+            Op::Add => "ADD".into(),
+            Op::Sub => "SUB".into(),
+            Op::Mul => "MUL".into(),
+            Op::Div => "DIV".into(),
+            Op::Neg => "NEG".into(),
+            Op::Not => "NOT".into(),
+            Op::And => "AND".into(),
+            Op::Or => "OR".into(),
+            Op::Print => "PRINT".into(),
+            Op::Eq => "EQ".into(),
+            Op::Ne => "NE".into(),
+            Op::Lt => "LT".into(),
+            Op::Le => "LE".into(),
+            Op::Gt => "GT".into(),
+            Op::Ge => "GE".into(),
+            Op::JumpIfFalse(target) => format!("JUMP_IF_FALSE {target}"),
+            Op::Jump(target) => format!("JUMP {target}"),
+            Op::Call(name, _) => return Err(format!("cannot serialize unresolved function call '{name}'")),
+            Op::CallTarget { target, params, arg_count } => {
+                let names = if params.is_empty() { "-".to_string() } else { params.join(",") };
+                format!("CALL_TARGET {target} {arg_count} {names}")
+            }
+            Op::Return => "RETURN".into(),
+            Op::ReturnValue => "RETURN_VALUE".into(),
+        };
+        output.push_str(&line);
+        output.push('\n');
     }
-    let path = &args[1];
-    let source = fs::read_to_string(path).unwrap_or_else(|e| {
-        eprintln!("Zenvora error: cannot read {path}: {e}");
-        process::exit(1)
-    });
-    match compile(&source).and_then(|code| run(&code)) {
-        Ok(()) => {},
-        Err(e) => { eprintln!("Zenvora error: {e}"); process::exit(1); }
-    }
+    Ok(output)
 }
 
+fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
+    let mut lines = source.lines();
+    if lines.next() != Some(BYTECODE_HEADER) {
+        return Err("invalid bytecode header or unsupported bytecode version".into());
+    }
+    let mut code = Vec::new();
+    for (index, raw) in lines.enumerate() {
+        let line_no = index + 2;
+        let parts: Vec<&str> = raw.split_whitespace().collect();
+        if parts.is_empty() { continue; }
+        let invalid = || format!("invalid bytecode instruction on line {line_no}");
+        let op = match parts[0] {
+            "PUSH" if parts.len() == 2 => Op::Push(parts[1].parse().map_err(|_| invalid())?),
+            "PUSH_BOOL" if parts.len() == 2 => Op::PushBool(match parts[1] {
+                "true" => true,
+                "false" => false,
+                _ => return Err(invalid()),
+            }),
+            "LOAD" if parts.len() == 2 && valid_identifier(parts[1]) => Op::Load(parts[1].into()),
+            "STORE" if parts.len() == 2 && valid_identifier(parts[1]) => Op::Store(parts[1].into()),
+            "ADD" if parts.len() == 1 => Op::Add,
+            "SUB" if parts.len() == 1 => Op::Sub,
+            "MUL" if parts.len() == 1 => Op::Mul,
+            "DIV" if parts.len() == 1 => Op::Div,
+            "NEG" if parts.len() == 1 => Op::Neg,
+            "NOT" if parts.len() == 1 => Op::Not,
+            "AND" if parts.len() == 1 => Op::And,
+            "OR" if parts.len() == 1 => Op::Or,
+            "PRINT" if parts.len() == 1 => Op::Print,
+            "EQ" if parts.len() == 1 => Op::Eq,
+            "NE" if parts.len() == 1 => Op::Ne,
+            "LT" if parts.len() == 1 => Op::Lt,
+            "LE" if parts.len() == 1 => Op::Le,
+            "GT" if parts.len() == 1 => Op::Gt,
+            "GE" if parts.len() == 1 => Op::Ge,
+            "JUMP_IF_FALSE" if parts.len() == 2 => Op::JumpIfFalse(parts[1].parse().map_err(|_| invalid())?),
+            "JUMP" if parts.len() == 2 => Op::Jump(parts[1].parse().map_err(|_| invalid())?),
+            "CALL_TARGET" if parts.len() == 4 => {
+                let target: usize = parts[1].parse().map_err(|_| invalid())?;
+                let arg_count: usize = parts[2].parse().map_err(|_| invalid())?;
+                let params: Vec<String> = if parts[3] == "-" { Vec::new() } else { parts[3].split(',').map(str::to_string).collect() };
+                if arg_count != params.len() || params.iter().any(|name| !valid_identifier(name)) {
+                    return Err(invalid());
+                }
+                Op::CallTarget { target, params, arg_count }
+            }
+            "RETURN" if parts.len() == 1 => Op::Return,
+            "RETURN_VALUE" if parts.len() == 1 => Op::ReturnValue,
+            _ => return Err(invalid()),
+        };
+        code.push(op);
+    }
+    for (index, op) in code.iter().enumerate() {
+        match op {
+            Op::Jump(target) | Op::JumpIfFalse(target) if *target > code.len() =>
+                return Err(format!("bytecode jump at instruction {index} targets invalid instruction {target}")),
+            Op::CallTarget { target, .. } if *target >= code.len() =>
+                return Err(format!("bytecode call at instruction {index} targets invalid function entry {target}")),
+            _ => {}
+        }
+    }
+    Ok(code)
+}
+
+fn valid_identifier(name: &str) -> bool {
+    !name.is_empty() && name.chars().enumerate().all(|(index, ch)| {
+        ch == '_' || ch.is_ascii_alphanumeric() && (index > 0 || !ch.is_ascii_digit())
+    })
+}
+
+fn read_source(path: &str) -> Result<String, String> {
+    fs::read_to_string(path).map_err(|error| format!("cannot read {path}: {error}"))
+}
+
+fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
+    let source = read_source(source_path)?;
+    let code = compile(&source)?;
+    let serialized = serialize_bytecode(&code)?;
+    fs::write(output_path, serialized).map_err(|error| format!("cannot write {output_path}: {error}"))
+}
+
+fn run_bytecode(path: &str) -> Result<(), String> {
+    let serialized = read_source(path)?;
+    let code = deserialize_bytecode(&serialized)?;
+    run(&code)
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
+        println!("Zenvora Lang v0.5.0\nUsage: zv <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        return;
+    }
+    let result = match args.as_slice() {
+        [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
+        [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
+        [_, path] if !path.starts_with("--") => {
+            let source = read_source(path).unwrap_or_else(|error| {
+                eprintln!("Zenvora error: {error}");
+                process::exit(1)
+            });
+            compile(&source).and_then(|code| run(&code))
+        }
+        _ => {
+            eprintln!("Usage: zv <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb>");
+            process::exit(2);
+        }
+    };
+    if let Err(error) = result {
+        eprintln!("Zenvora error: {error}");
+        process::exit(1);
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -588,6 +726,27 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&code, &mut |line| output.push(line))?;
         Ok(output)
+    }
+
+    #[test]
+    fn bytecode_round_trip_preserves_execution() {
+        let source = "define total := 20 + 22\nshow total\nif total >= 40 {\nshow true\n} otherwise {\nshow false\n}\nfn twice(n) {\nreturn n * 2\n}\nshow twice(21)\n";
+        let compiled = compile(source).unwrap();
+        let serialized = super::serialize_bytecode(&compiled).unwrap();
+        assert!(serialized.starts_with("ZENVORA_BYTECODE 1\n"));
+        let restored = super::deserialize_bytecode(&serialized).unwrap();
+        assert_eq!(restored, compiled);
+        let mut output = Vec::new();
+        run_with_output(&restored, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42", "true", "42"]);
+    }
+
+    #[test]
+    fn bytecode_rejects_unknown_instructions_and_invalid_jumps() {
+        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 2\n").unwrap_err().contains("unsupported bytecode version"));
+        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nMAGIC\n").unwrap_err().contains("invalid bytecode instruction"));
+        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nJUMP 99\n").unwrap_err().contains("invalid instruction"));
+        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nCALL_TARGET 9 0 -\n").unwrap_err().contains("invalid function entry"));
     }
 
     #[test]
