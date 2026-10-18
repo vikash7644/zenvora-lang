@@ -717,7 +717,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" | "to_int" | "index_of") }
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" | "to_int" | "index_of" | "unique" | "assert_eq") }
 
 fn value_to_string(value: &Value) -> String {
     match value {
@@ -984,6 +984,34 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 return Err(format!("join result exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
             }
             Ok(Value::Str(parts.join(separator)))
+        }
+        "assert_eq" => {
+            if !(2..=3).contains(&arg_len) {
+                return Err(format!("builtin 'assert_eq' expects 2 or 3 argument(s), got {arg_len}"));
+            }
+            if args[0] == args[1] {
+                Ok(Value::Bool(true))
+            } else {
+                let message = if args.len() == 3 {
+                    value_to_string(&args[2])
+                } else {
+                    format!("assert_eq failed: left was {}, right was {}", value_to_string(&args[0]), value_to_string(&args[1]))
+                };
+                Err(message)
+            }
+        }
+        "unique" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else {
+                return Err("type error: unique expects an array".into());
+            };
+            let mut result = Vec::with_capacity(items.len());
+            for item in items {
+                if !result.contains(item) {
+                    result.push(item.clone());
+                }
+            }
+            Ok(Value::Array(result))
         }
         "assert" => {
             if !(1..=2).contains(&arg_len) {
@@ -1933,6 +1961,24 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["20", "10"]);
+    }
+
+    #[test]
+    fn unique_preserves_first_occurrence_order_for_mixed_values() {
+        let output = execute(r#"show unique(array(3, 1, 3, "x", 1, "x", true, false, true))
+show unique(array())
+"#).unwrap();
+        assert_eq!(output, vec!["[3, 1, x, true, false]", "[]"]);
+        assert!(execute("show unique(7)\n").unwrap_err().contains("expects an array"));
+    }
+
+    #[test]
+    fn assert_eq_compares_values_and_reports_actionable_failures() {
+        assert_eq!(execute("show assert_eq(42, 42)\nshow assert_eq(array(1, 2), array(1, 2))\nshow assert_eq(1, 2, \"bad balance\")\n").unwrap_err(), "bad balance");
+        let output = execute("show assert_eq(42, 42)\nshow assert_eq(array(1, 2), array(1, 2))\n").unwrap();
+        assert_eq!(output, vec!["true", "true"]);
+        assert!(execute("show assert_eq(1, 2)\n").unwrap_err().contains("left was 1, right was 2"));
+        assert!(execute("show assert_eq(1)\n").unwrap_err().contains("expects 2 or 3"));
     }
 
     #[test]

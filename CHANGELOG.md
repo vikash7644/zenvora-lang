@@ -4,6 +4,9 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Added `unique(array)` with stable first-occurrence ordering and `assert_eq(actual, expected[, message])` for test and contract-invariant assertions.
+- Added regression tests for mixed-value deduplication, empty arrays, equality, arity errors, and custom assertion messages.
+
 - Added `starts_with`, `ends_with`, `replace`, `split`, and `join` string helpers, plus overflow-checked `sum` for integer arrays.
 - Added `first`, `last`, and `reverse` collection/text helpers, `is_empty` checks for arrays/maps/strings, and range-validated integer `clamp`.
 - Added whitespace trimming, Unicode-aware lowercase/uppercase conversion, Unicode scalar counting, checked string-to-`i64` conversion, and zero-based `index_of` for strings and arrays.
