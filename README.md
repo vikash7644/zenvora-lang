@@ -41,6 +41,7 @@ cargo run -- examples/stdlib.zv
 cargo run -- examples/stdlib-strings.zv
 cargo run -- examples/contracts.zv
 cargo run -- examples/modules.zv
+cargo run -- --check examples/functions.zv
 cargo run -- --emit-bytecode examples/functions.zv functions.zvb
 cargo run -- --run-bytecode functions.zvb
 cargo run -- --version
@@ -59,6 +60,14 @@ Expected example output:
 ## Automated regression tests
 
 `cargo test` runs the compiler/VM, CLI, and language regression suites across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips, malformed bytecode, verifier stack-underflow and control-flow-join checks, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, arrays/maps, direct indexing and indexed assignment, collection access/update helpers, standard-library validation, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
+
+## Compile-only validation
+
+Use `zv --check <file.zv>` to load relative imports and compile the program without executing it. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
+
+```sh
+cargo run -- --check examples/functions.zv
+```
 
 ## Bytecode files
 
