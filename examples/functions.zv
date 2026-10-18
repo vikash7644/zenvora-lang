@@ -1,15 +1,20 @@
 # Basic functions are currently no-argument and return no value.
 call greet()
-call count_to_three()
+call count_to_three(3)
+call add_and_show(20, 22)
 
 fn greet() {
     show 2026
 }
 
-fn count_to_three() {
+fn count_to_three(limit) {
     define count := 0
-    repeat count < 3 {
+    repeat count < limit {
         count := count + 1
         show count
     }
+}
+
+fn add_and_show(left, right) {
+    show left + right
 }
