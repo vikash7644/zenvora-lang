@@ -67,6 +67,9 @@ jobs:
       - name: Run standard library example
         run: cargo run -- examples/stdlib.zv
 
+      - name: Run contract DSL example
+        run: cargo run -- examples/contracts.zv
+
       - name: Run module import example
         run: cargo run -- examples/modules.zv
 
