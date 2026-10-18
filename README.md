@@ -1,34 +1,63 @@
 # Zenvora Lang
 
-Zenvora Lang is the planned custom programming language for the Zenvora ecosystem. The repository currently contains architecture documentation and a sample `.zvl` contract; it does **not** yet contain the compiler/interpreter folders described in earlier drafts of this README.
+Zenvora Lang is an independent programming-language project for the Zenvora ecosystem. The repository now includes the first runnable compiler/bytecode-VM milestone in Rust.
 
 ## Repository contents
 
-- `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; it is a design document, not a completed chain implementation.
-- `docs/ECOSYSTEM_AUDIT_2026-10-18.md` — audit of the connected GitHub repositories, Vercel project/deployment metadata, and Supabase visibility.
-- `examples/token.zvl` — illustrative smart-contract DSL example; it is not currently executable by a compiler in this repository.
-- `website/` — static, responsive Zenvora ecosystem landing page. It needs no package installation or build step.
+- `Cargo.toml` — Rust package manifest for the `zv` command.
+- `src/main.rs` — lexer, expression parser, bytecode compiler and stack VM.
+- `examples/hello.zv` — runnable example program.
+- `docs/language-v0.1.md` — current feature status and roadmap.
+- `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; this is a design document, not a completed chain implementation.
+- `examples/token.zvl` — illustrative smart-contract DSL draft; it is not executable by the current compiler.
+- `website/` — static responsive ecosystem landing page.
 
-## Website preview
+## Build and run
 
-Open `website/index.html` directly in a browser, or serve the `website` directory with any static HTTP server.
+Requires Rust and Cargo (including on Android through Termux if the Rust toolchain is installed).
 
-Vercel deployment requires access to the intended Vercel project. The linked project/deployment scope must be verified before claiming that this source is deployed.
+```sh
+cargo check
+cargo run -- examples/hello.zv
+cargo run -- --help
+```
 
-## Long-term goal
+Expected example output:
 
-Build an independent Web3 stack in verifiable stages:
+```text
+30
+60
+20
+35
+```
 
-1. Stabilize the custom language and tests.
-2. Define and implement a deterministic bytecode/VM or compiler runtime.
-3. Build and test chain primitives, signatures, state validation, networking and consensus.
-4. Add RPC, SDK, explorer and wallet against a testnet.
-5. Consider DEX, governance and other dApps only after core protocol and security work.
+## Current language syntax
 
-## Development status
+```zv
+define a := 10
+define b := 20
+define total := a + b
+show total
+show total * 2
+total := total + 5
+show total
+```
 
-This is work in progress. Architecture notes and examples are not proof of a functioning compiler, blockchain, DEX, wallet, or mainnet. Use test data only until each component has been implemented, tested and reviewed.
+The current milestone supports integer variables, assignment, arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, `show expression`, and `print(expression)`. It reports undefined variables, invalid syntax, division by zero and integer overflow.
+
+## Roadmap
+
+1. Add automated tests and stabilize expression semantics.
+2. Add comparisons, booleans and conditional branches.
+3. Implement loops with reliable `break` and `continue` behavior.
+4. Add functions, scopes, types, and better diagnostics.
+5. Define a stable bytecode format and bytecode-file support.
+6. Explore WebAssembly output and smart-contract integration after the core language is reliable.
+
+## Status and safety
+
+This is an early work in progress. Strings, conditionals, loops, functions, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
-MIT
+MIT.
