@@ -26,6 +26,12 @@ Automated tests cover:
 
 The CI workflow must pass before this prototype is considered verified. This is a real VM-backed transaction execution path inside the Zenvora Lang repository, but it is **not yet a full blockchain node**.
 
+## Canonical protocol-format prototype
+
+`src/chain_protocol.rs` now defines a versioned canonical encoding for a transaction signing payload and block header. It uses explicit big-endian integers, length-prefixed byte/string fields, and domain-separated format tags. Structural tests cover deterministic encoding, wrong-chain rejection, expiry, malformed fields, and genesis/parent-hash rules.
+
+This is **not yet a complete transaction protocol**: signature bytes are opaque and not cryptographically verified; transaction nonces/balances are not checked by this module; roots are supplied rather than computed; there is no cryptographic transaction/block hash, block execution, persistent block database, P2P protocol, or consensus proof verification. Those are separate gates, not implied by the format structs.
+
 ## Intended architecture
 
 1. **Zenvora Lang source** — contract logic and developer-facing syntax.
