@@ -151,25 +151,25 @@ fn loop_control_does_not_hide_runtime_errors() {
 #[test]
 fn break_on_first_iteration_runs_body_only_once() {
     let output = run_program(
-        "define count := 0\\nrepeat count < 10 {\\n    count := count + 1\\n    show count\\n    break\\n}\\nshow count\\n",
+        "define count := 0\nrepeat count < 10 {\n    count := count + 1\n    show count\n    break\n}\nshow count\n",
     );
     assert!(
         output.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\\n1\\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n1\n");
 }
 
 #[test]
 fn loop_with_initially_false_condition_does_not_run_body() {
     let output = run_program(
-        "define count := 5\\nrepeat count < 5 {\\n    show count\\n    count := count + 1\\n}\\nshow count\\n",
+        "define count := 5\nrepeat count < 5 {\n    show count\n    count := count + 1\n}\nshow count\n",
     );
     assert!(
         output.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "5\\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "5\n");
 }
