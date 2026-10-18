@@ -474,6 +474,28 @@ mod tests {
     }
 
     #[test]
+    fn failed_persistence_does_not_advance_store_tip_or_runtime_cache() {
+        let key = SigningKey::from_bytes(&[84; 32]);
+        let (runtime, mut store, genesis_header) = genesis(&key);
+        let directory = std::env::temp_dir().join(format!("zenvora-block-store-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir(&directory).unwrap();
+
+        assert!(store.append_executed_block(&directory, &runtime, &genesis_header, &[], &[]).is_err());
+        assert!(store.blocks().is_empty());
+
+        let valid_path = std::env::temp_dir().join(format!("zenvora-block-store-after-failure-{}.zvb", std::process::id()));
+        let _ = std::fs::remove_file(&valid_path);
+        store.append_executed_block(&valid_path, &runtime, &genesis_header, &[], &[]).unwrap();
+        let (loaded, restored) = BlockStore::load_from_file(&valid_path, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 1);
+        assert_eq!(restored.state_root(), runtime.state_root());
+
+        std::fs::remove_file(valid_path).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
     fn block_store_replay_rejects_tampered_signed_transaction() {
         let key = SigningKey::from_bytes(&[82; 32]);
         let (mut runtime, mut store, genesis_header) = genesis(&key);
