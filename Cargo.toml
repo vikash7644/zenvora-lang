@@ -1,0 +1,10 @@
+[package]
+name = "zenvora"
+version = "0.1.0"
+edition = "2021"
+description = "Zenvora Lang compiler and bytecode virtual machine"
+license = "MIT"
+
+[[bin]]
+name = "zv"
+path = "src/main.rs"
