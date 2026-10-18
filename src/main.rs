@@ -49,7 +49,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone)]
 enum Op {
     Push(i64), Load(String), Store(String), Add, Sub, Mul, Div, Neg, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String), CallTarget(usize), Return,
+    Eq, Ne, Lt, Le, Gt, Ge, JumpIfFalse(usize), Jump(usize), Call(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return,
 }
 
 struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
@@ -117,6 +117,22 @@ enum BlockFrame {
     Repeat { start: usize, exit_jump: usize, breaks: Vec<usize> },
 }
 
+fn split_arguments(input: &str) -> Vec<&str> {
+    let mut args = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    for (i, ch) in input.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => { args.push(input[start..i].trim()); start = i + ch.len_utf8(); }
+            _ => {}
+        }
+    }
+    if start < input.len() { args.push(input[start..].trim()); }
+    args
+}
+
 fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     let mut code = Vec::new();
     let mut blocks: Vec<BlockFrame> = Vec::new();
@@ -156,11 +172,24 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
 
         if let Some(rest) = line.strip_prefix("call ") {
             let call_text = rest.trim();
-            let name = call_text.strip_suffix(')').and_then(|s| s.strip_suffix('(')).ok_or_else(|| format!("line {}: expected 'call function_name()'", line_no + 1))?.trim();
+            let (name, args_with_close) = call_text.split_once('(').ok_or_else(|| format!("line {}: expected 'call function_name(...)'", line_no + 1))?;
+            let args_text = args_with_close.strip_suffix(')').ok_or_else(|| format!("line {}: expected ')' after function arguments", line_no + 1))?;
+            let name = name.trim();
             if name.is_empty() || !name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || !c.is_ascii_digit())) {
                 return Err(format!("line {}: invalid function name", line_no + 1));
             }
-            code.push(Op::Call(name.to_string()));
+            let args = split_arguments(args_text);
+            let args: Vec<&str> = if args_text.trim().is_empty() { Vec::new() } else { args };
+            for arg in &args {
+                let tokens = lex(arg.trim()).map_err(|e| format!("line {}: {e}", line_no + 1))?;
+                let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
+                parser.expression().map_err(|e| format!("line {}: invalid function argument: {e}", line_no + 1))?;
+                if parser.peek() != &Token::End {
+                    return Err(format!("line {}: unexpected token in function argument {:?}", line_no + 1, parser.peek()));
+                }
+                code.extend(parser.code);
+            }
+            code.push(Op::Call(name.to_string(), args.len()));
             continue;
         }
         if line == "return" { code.push(Op::Return); continue; }
@@ -266,17 +295,29 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
 
 fn compile(source: &str) -> Result<Vec<Op>, String> {
     let mut main_source = String::new();
-    let mut functions: Vec<(String, String)> = Vec::new();
+    let mut functions: Vec<(String, Vec<String>, String)> = Vec::new();
     let lines: Vec<&str> = source.lines().collect();
     let mut i = 0usize;
     while i < lines.len() {
         let line = lines[i].trim();
         if let Some(header) = line.strip_prefix("fn ").and_then(|s| s.strip_suffix('{')) {
-            let name = header.trim().strip_suffix("()").ok_or_else(|| format!("line {}: expected 'fn name() {{'", i + 1))?.trim();
+            let header = header.trim();
+            let (name, params_text) = header.split_once('(').ok_or_else(|| format!("line {}: expected 'fn name(parameters) {{'", i + 1))?;
+            let params_text = params_text.strip_suffix(')').ok_or_else(|| format!("line {}: expected ')' in function declaration", i + 1))?;
+            let name = name.trim();
             if name.is_empty() || !name.chars().enumerate().all(|(j,c)| c == '_' || c.is_ascii_alphanumeric() && (j > 0 || !c.is_ascii_digit())) {
                 return Err(format!("line {}: invalid function name", i + 1));
             }
-            if functions.iter().any(|(existing, _)| existing == name) {
+            let params: Vec<String> = if params_text.trim().is_empty() { Vec::new() } else { params_text.split(',').map(|p| p.trim().to_string()).collect() };
+            for param in &params {
+                if param.is_empty() || !param.chars().enumerate().all(|(j,c)| c == '_' || c.is_ascii_alphanumeric() && (j > 0 || !c.is_ascii_digit())) {
+                    return Err(format!("line {}: invalid parameter name in function '{name}'", i + 1));
+                }
+            }
+            for (j, param) in params.iter().enumerate() {
+                if params[..j].contains(param) { return Err(format!("line {}: duplicate parameter '{param}'", i + 1)); }
+            }
+            if functions.iter().any(|(existing, _, _)| existing == name) {
                 return Err(format!("line {}: duplicate function '{name}'", i + 1));
             }
             i += 1;
@@ -291,7 +332,7 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
                 i += 1;
             }
             if depth != 0 { return Err(format!("missing closing brace for function '{name}'")); }
-            functions.push((name.to_string(), body));
+            functions.push((name.to_string(), params, body));
         } else {
             main_source.push_str(lines[i]);
             main_source.push('\n');
@@ -302,10 +343,10 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
     let mut code = compile_core(&main_source)?;
     let main_exit = code.len();
     code.push(Op::Jump(usize::MAX));
-    let mut entries: HashMap<String, usize> = HashMap::new();
-    for (name, body) in &functions {
+    let mut entries: HashMap<String, (usize, Vec<String>)> = HashMap::new();
+    for (name, params, body) in &functions {
         let entry = code.len();
-        entries.insert(name.clone(), entry);
+        entries.insert(name.clone(), (entry, params.clone()));
         let mut body_code = compile_core(body)?;
         for op in &mut body_code {
             match op {
@@ -319,9 +360,12 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
     let end = code.len();
     code[main_exit] = Op::Jump(end);
     for op in &mut code {
-        if let Op::Call(name) = op {
-            let target = entries.get(name).copied().ok_or_else(|| format!("call to undefined function '{name}'"))?;
-            *op = Op::CallTarget(target);
+        if let Op::Call(name, arg_count) = op {
+            let (target, params) = entries.get(name).cloned().ok_or_else(|| format!("call to undefined function '{name}'"))?;
+            if *arg_count != params.len() {
+                return Err(format!("function '{name}' expects {} argument(s), got {}", params.len(), arg_count));
+            }
+            *op = Op::CallTarget { target, params, arg_count: *arg_count };
         }
     }
     Ok(code)
@@ -331,7 +375,7 @@ fn run(code: &[Op]) -> Result<(), String> {
     let mut stack: Vec<i64> = Vec::new();
     let mut vars: HashMap<String, i64> = HashMap::new();
     let mut pc = 0usize;
-    let mut call_stack: Vec<usize> = Vec::new();
+    let mut call_stack: Vec<(usize, HashMap<String, i64>)> = Vec::new();
     let mut steps = 0usize;
     const MAX_STEPS: usize = 1_000_000;
     while pc < code.len() {
@@ -353,9 +397,24 @@ fn run(code: &[Op]) -> Result<(), String> {
                 if condition == 0 { pc = *target; continue; }
             }
             Op::Jump(target) => { pc = *target; continue; }
-            Op::Call(name) => return Err(format!("unresolved function call '{name}'")),
-            Op::CallTarget(target) => { call_stack.push(pc + 1); pc = *target; continue; }
-            Op::Return => { pc = call_stack.pop().ok_or("return used outside a function call")?; continue; }
+            Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
+            Op::CallTarget { target, params, arg_count } => {
+                let mut values = Vec::with_capacity(*arg_count);
+                for _ in 0..*arg_count { values.push(stack.pop().ok_or("VM stack underflow while reading function arguments")?); }
+                values.reverse();
+                let mut local_vars = HashMap::new();
+                for (name, value) in params.iter().zip(values) { local_vars.insert(name.clone(), value); }
+                let caller_vars = std::mem::replace(&mut vars, local_vars);
+                call_stack.push((pc + 1, caller_vars));
+                pc = *target;
+                continue;
+            }
+            Op::Return => {
+                let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
+                vars = caller_vars;
+                pc = return_pc;
+                continue;
+            }
             Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => {
                 let b = stack.pop().ok_or("VM stack underflow")?;
                 let a = stack.pop().ok_or("VM stack underflow")?;
