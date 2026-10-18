@@ -46,8 +46,11 @@ pub fn execute_block(
             }
         }
         None => {
-            if header.height != 1 || header.parent_hash != [0; 32] {
-                return Err("first prototype block must have height 1 and a zero parent hash".into());
+            if header.height != 0 || header.parent_hash != [0; 32] {
+                return Err("genesis block must have height 0 and a zero parent hash".into());
+            }
+            if !transactions.is_empty() {
+                return Err("genesis block cannot contain transactions".into());
             }
         }
     }
@@ -110,6 +113,20 @@ mod tests {
         SignedTransactionEnvelope { transaction, public_key: public_key.to_vec() }
     }
 
+    fn genesis_header(runtime: &ChainRuntime) -> BlockHeaderV1 {
+        BlockHeaderV1 {
+            chain_id: 71,
+            height: 0,
+            timestamp_secs: 1_800_000_000,
+            parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(),
+            proposer: "validator_1".into(),
+            consensus_proof: Vec::new(),
+        }
+    }
+
     fn candidate_header(
         runtime_before: &ChainRuntime,
         envelope: &SignedTransactionEnvelope,
@@ -146,11 +163,13 @@ mod tests {
     fn block_execution_checks_roots_and_commits_atomically() {
         let key = SigningKey::from_bytes(&[71; 32]);
         let mut runtime = funded_runtime(&key);
+        let genesis = genesis_header(&runtime);
+        assert!(execute_block(&mut runtime, &genesis, &[], 71, None).unwrap().is_empty());
         let envelope = signed_transfer(&key, 0, 125);
-        let header = candidate_header(&runtime, &envelope, 1, [0; 32], 1_800_000_000);
+        let header = candidate_header(&runtime, &envelope, 1, genesis.header_hash().unwrap(), 1_800_000_001);
 
         let receipts = execute_block(
-            &mut runtime, &header, &[envelope.clone()], 71, None,
+            &mut runtime, &header, &[envelope.clone()], 71, Some(&genesis),
         ).unwrap();
         assert_eq!(receipts.len(), 1);
         assert_eq!(runtime.balance("bob"), 125);
@@ -169,19 +188,20 @@ mod tests {
         let key = SigningKey::from_bytes(&[72; 32]);
         let mut runtime = funded_runtime(&key);
         let original_root = runtime.state_root();
+        let genesis = genesis_header(&runtime);
         let envelope = signed_transfer(&key, 0, 125);
-        let mut header = candidate_header(&runtime, &envelope, 1, [0; 32], 1_800_000_000);
+        let mut header = candidate_header(&runtime, &envelope, 1, genesis.header_hash().unwrap(), 1_800_000_001);
         header.state_root[0] ^= 1;
 
-        assert!(execute_block(&mut runtime, &header, &[envelope.clone()], 71, None).is_err());
+        assert!(execute_block(&mut runtime, &header, &[envelope.clone()], 71, Some(&genesis)).is_err());
         assert_eq!(runtime.state_root(), original_root);
         assert_eq!(runtime.balance("bob"), 0);
         assert_eq!(runtime.account_nonce(&envelope.transaction.sender), 0);
 
         let mut bad_envelope = envelope.clone();
         bad_envelope.transaction.amount += 1;
-        let valid_header = candidate_header(&runtime, &envelope, 1, [0; 32], 1_800_000_000);
-        assert!(execute_block(&mut runtime, &valid_header, &[envelope, bad_envelope], 71, None).is_err());
+        let valid_header = candidate_header(&runtime, &envelope, 1, genesis.header_hash().unwrap(), 1_800_000_001);
+        assert!(execute_block(&mut runtime, &valid_header, &[envelope, bad_envelope], 71, Some(&genesis)).is_err());
         assert_eq!(runtime.state_root(), original_root);
         assert_eq!(runtime.balance("bob"), 0);
     }
@@ -191,7 +211,7 @@ mod tests {
         let key = SigningKey::from_bytes(&[73; 32]);
         let runtime = funded_runtime(&key);
         let envelope = signed_transfer(&key, 0, 125);
-        let mut header = candidate_header(&runtime, &envelope, 1, [0; 32], 100);
+        let mut header = candidate_header(&runtime, &envelope, 1, [9; 32], 100);
         header.chain_id = 72;
         assert!(execute_block(&mut runtime.clone(), &header, &[envelope.clone()], 71, None).is_err());
 
