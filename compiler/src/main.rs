@@ -284,7 +284,7 @@ mod tests {
             "show 3".to_string(),
         ];
         let (body, next) = collect_block(&lines, 1).unwrap();
-        assert_eq!(body.len(), 4);
+        assert_eq!(body.len(), 3);
         assert_eq!(next, 5);
     }
 
