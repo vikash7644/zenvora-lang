@@ -14,11 +14,16 @@ cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
+cargo run -- examples/modules.zv
 ```
 
 ## Automated tests
 
-The Rust unit and integration suites run 62 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+The Rust unit and integration suites run 66 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+
+## Modules
+
+A source file can import another .zv file with a relative path, for example: use "modules/math.zv". Paths resolve relative to the importing file. A module is loaded only once per program. Cyclic imports and import nesting deeper than 64 files are rejected with an error. This is an early source-expansion module system: explicit namespaces, visibility rules, package resolution and module versioning are not implemented.
 
 ## Supported syntax
 
