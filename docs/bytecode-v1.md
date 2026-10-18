@@ -51,4 +51,6 @@ All jump and function targets are zero-based instruction indices, not source lin
 
 The current loader checks the header/version, opcode names, operand counts and types, identifiers, function parameter counts, jump bounds, and function-entry bounds. Unknown instructions and malformed files return an error rather than being executed.
 
-This is not yet a complete bytecode verifier: it does not prove stack types or stack depth for every possible control-flow path, and an in-range call target is not yet proven to be a compiler-generated function boundary. Runtime checks remain necessary. Future work includes a formally specified verifier, stronger resource limits, and a compatibility policy before the format is considered stable.
+The loader enforces a 16 MiB bytecode-file limit, a 1,000,000-instruction limit, a 1 MiB decoded-string limit, and a 1,024-argument limit for calls and built-ins. The VM also enforces instruction-count, function-call-depth, and operand-stack limits.
+
+This is not yet a complete bytecode verifier: it does not prove stack types or stack depth for every possible control-flow path, and an in-range call target is not yet proven to be a compiler-generated function boundary. Runtime checks remain necessary. Future work includes a formally specified verifier, stronger resource accounting, and a compatibility policy before the format is considered stable.
