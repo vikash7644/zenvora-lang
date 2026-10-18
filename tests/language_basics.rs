@@ -211,3 +211,35 @@ fn return_outside_a_function_call_is_an_error() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("return used outside a function call"));
 }
+
+#[test]
+fn functions_accept_integer_arguments_and_evaluate_argument_expressions() {
+    let output = run_program(
+        "call add_and_show(2 + 3, 4 * 2)\nfn add_and_show(left, right) {\nshow left + right\n}\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "13\n");
+}
+
+#[test]
+fn function_local_variables_do_not_leak_into_the_caller() {
+    let output = run_program(
+        "define count := 99\ncall change_count()\nshow count\nfn change_count() {\ndefine count := 5\ncount := count + 1\nshow count\n}\n",
+    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "6\n99\n");
+}
+
+#[test]
+fn function_argument_count_must_match_parameters() {
+    let output = run_program("call show_pair(1)\nfn show_pair(left, right) {\nshow left + right\n}\n");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("expects 2 argument(s), got 1"));
+}
+
+#[test]
+fn function_parameters_are_required_and_are_local() {
+    let output = run_program("call show_value(7)\nfn show_value(value) {\nshow value\n}\n");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "7\n");
+}
