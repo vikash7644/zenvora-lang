@@ -1873,6 +1873,11 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             run_pool_block_cli(store_path, chain_id, pool_path, validator_paths)
         }
+        [_, mode, store_path, chain_id, pool_path, proposer_key, peers @ ..]
+            if mode == "--chain-store-produce-peer-quorum" && !peers.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_peer_quorum_block_cli(store_path, chain_id, pool_path, proposer_key, peers)
+        }
         [_, mode, store_path, chain_id, pool_path] if mode == "--chain-rpc-pool" => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             crate::chain_rpc::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), 8545)
@@ -1906,6 +1911,13 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
             crate::chain_rpc::serve(store_path.clone(), chain_id, port)
+        }
+        [_, mode, store_path, chain_id, pool_path, validator_key, bind_ip, port] if mode == "--chain-p2p-serve-validator" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "P2P port must be between 1 and 65535")?;
+            crate::chain_p2p::serve_with_validator(
+                store_path.clone(), chain_id, pool_path.clone(), validator_key.clone(), bind_ip, port,
+            )
         }
         [_, mode, store_path, chain_id, pool_path, bind_ip, port] if mode == "--chain-p2p-serve-pool" => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
@@ -1966,6 +1978,88 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
         }
         _ => Err("invalid chain command arguments".into()),
     }
+}
+
+fn run_peer_quorum_block_cli(
+    store_path: &str,
+    chain_id: u64,
+    pool_path: &str,
+    proposer_key_path: &str,
+    peers: &[String],
+) -> Result<(), String> {
+    if peers.is_empty() || peers.len() > 100 {
+        return Err("supply between 1 and 100 validator peer addresses".into());
+    }
+    let proposer_key = read_chain_key(proposer_key_path)?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let pool = crate::tx_pool::TransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
+    if pool.is_empty() {
+        return Err("transaction pool is empty".into());
+    }
+    let envelopes = pool.pending().to_vec();
+    let mut candidate = runtime.clone();
+    let mut candidate_receipts = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        candidate_receipts.push(candidate.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, chain_id, height,
+        )?);
+    }
+    let transactions: Vec<crate::chain_protocol::TransactionV1> = envelopes.iter()
+        .map(|envelope| envelope.transaction.clone()).collect();
+    let proposer_address = crate::chain_protocol::address_from_public_key(
+        &proposer_key.verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id,
+        height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root: crate::chain_protocol::transaction_merkle_root(&transactions)?,
+        receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&candidate_receipts)?,
+        state_root: candidate.state_root(),
+        proposer: proposer_address,
+        consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &proposer_key)?;
+    let mut peer_errors = Vec::new();
+    for peer in peers {
+        if crate::chain_consensus::verify_consensus_proof(&header, runtime.genesis_balances()).is_ok() {
+            break;
+        }
+        match crate::chain_p2p::request_block_signature(peer, &header, &envelopes) {
+            Ok(proof) => {
+                let previous_proof = header.consensus_proof.clone();
+                header.consensus_proof = proof;
+                if let Err(error) = crate::chain_consensus::verify_partial_consensus_proof(&header, runtime.genesis_balances()) {
+                    header.consensus_proof = previous_proof;
+                    peer_errors.push(format!("{peer}: {error}"));
+                }
+            }
+            Err(error) => peer_errors.push(format!("{peer}: {error}")),
+        }
+    }
+    let receipts = match crate::chain_block::execute_block(
+        &mut runtime, &header, &envelopes, chain_id, Some(&previous.header),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            if peer_errors.is_empty() { return Err(error); }
+            return Err(format!("{error}; peer errors: {}", peer_errors.join("; ")));
+        }
+    };
+    if receipts != candidate_receipts {
+        return Err("executed receipts differ from candidate block receipts".into());
+    }
+    store.append_executed_block(store_path, &runtime, &header, &envelopes, &receipts)?;
+    let next_height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    crate::tx_pool::TransactionPool::new(chain_id, next_height)?.save_to_file(pool_path)
+        .map_err(|error| format!("block committed at height {height}, but transaction pool reset failed: {error}"))?;
+    println!("Peer-quorum block committed: height={height} transactions={}", receipts.len());
+    println!("Validator signatures: {}", header.consensus_proof.len() / 96);
+    println!("State root: {}", hex_encode_bytes(&runtime.state_root()));
+    Ok(())
 }
 
 fn run_pool_block_cli(
@@ -2244,7 +2338,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
@@ -2267,7 +2361,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
