@@ -717,7 +717,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert") }
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace") }
 
 fn value_to_string(value: &Value) -> String {
     match value {
@@ -835,6 +835,67 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 current = current.checked_add(1).ok_or("integer overflow while building range")?;
             }
             Ok(Value::Array(items))
+        }
+        "sum" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else { return Err("type error: sum expects an array of integers".into()); };
+            let mut total = 0i64;
+            for item in items {
+                let Value::Int(value) = item else { return Err("type error: sum expects an array containing only integers".into()); };
+                total = total.checked_add(*value).ok_or("integer overflow in sum")?;
+            }
+            Ok(Value::Int(total))
+        }
+        "starts_with" | "ends_with" => {
+            arity(2)?;
+            let (Value::Str(value), Value::Str(pattern)) = (&args[0], &args[1]) else {
+                return Err(format!("type error: {name} expects two strings"));
+            };
+            Ok(Value::Bool(if name == "starts_with" { value.starts_with(pattern) } else { value.ends_with(pattern) }))
+        }
+        "replace" => {
+            arity(3)?;
+            let (Value::Str(value), Value::Str(from), Value::Str(to)) = (&args[0], &args[1], &args[2]) else {
+                return Err("type error: replace expects three strings".into());
+            };
+            if from.is_empty() { return Err("replace search string cannot be empty".into()); }
+            let result = value.replace(from, to);
+            if result.len() > MAX_BYTECODE_STRING_BYTES {
+                return Err(format!("replace result exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+            }
+            Ok(Value::Str(result))
+        }
+        "split" => {
+            arity(2)?;
+            let (Value::Str(value), Value::Str(separator)) = (&args[0], &args[1]) else {
+                return Err("type error: split expects two strings".into());
+            };
+            if separator.is_empty() { return Err("split separator cannot be empty".into()); }
+            const MAX_SPLIT_ITEMS: usize = 100_000;
+            let mut parts = Vec::new();
+            for part in value.split(separator) {
+                if parts.len() >= MAX_SPLIT_ITEMS {
+                    return Err(format!("split exceeds safety limit ({MAX_SPLIT_ITEMS} items)"));
+                }
+                parts.push(Value::Str(part.to_string()));
+            }
+            Ok(Value::Array(parts))
+        }
+        "join" => {
+            arity(2)?;
+            let (Value::Array(items), Value::Str(separator)) = (&args[0], &args[1]) else {
+                return Err("type error: join expects an array of strings and a string separator".into());
+            };
+            let mut parts = Vec::with_capacity(items.len());
+            for item in items {
+                let Value::Str(value) = item else { return Err("type error: join expects an array containing only strings".into()); };
+                parts.push(value.as_str());
+            }
+            let result = parts.join(separator);
+            if result.len() > MAX_BYTECODE_STRING_BYTES {
+                return Err(format!("join result exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+            }
+            Ok(Value::Str(result))
         }
         "assert" => {
             if !(1..=2).contains(&arg_len) {
@@ -1790,6 +1851,22 @@ mod tests {
     fn standard_library_type_conversion_math_range_and_assert() {
         let output = execute("show type_of(42)\nshow type_of(array(1))\nshow to_string(true)\nshow abs(-9)\nshow min(8, 3)\nshow max(8, 3)\nshow range(2, 5)\nshow len(range(0, 4))\nshow assert(2 < 3)\n").unwrap();
         assert_eq!(output, vec!["integer", "array", "true", "9", "3", "8", "[2, 3, 4]", "4", "true"]);
+    }
+
+    #[test]
+    fn string_helpers_and_sum_cover_common_standard_library_operations() {
+        let output = execute("show starts_with(\\"zenvora-lang\\", \\"zen\\")\\nshow ends_with(\\"zenvora-lang\\", \\"lang\\")\\nshow replace(\\"a-b-a\\", \\"a\\", \\"x\\")\\nshow split(\\"red,green,blue\\", \\",\\")\\nshow join(array(\\"Zenvora\\", \\"Lang\\"), \\" \\")\\nshow sum(array(10, 20, 12))\\n").unwrap();
+        assert_eq!(output, vec!["true", "true", "x-b-x", "[red, green, blue]", "Zenvora Lang", "42"]);
+    }
+
+    #[test]
+    fn string_helpers_and_sum_reject_invalid_inputs_and_overflow() {
+        assert!(execute("show starts_with(1, \\"x\\")\\n").unwrap_err().contains("two strings"));
+        assert!(execute("show split(\\"a\\", \\"\\")\\n").unwrap_err().contains("separator cannot be empty"));
+        assert!(execute("show replace(\\"abc\\", \\"\\", \\"x\\")\\n").unwrap_err().contains("search string cannot be empty"));
+        assert!(execute("show join(array(\\"ok\\", 2), \\" \\")\\n").unwrap_err().contains("array containing only strings"));
+        assert!(execute("show sum(array(1, \\"two\\"))\\n").unwrap_err().contains("only integers"));
+        assert!(execute("show sum(array(9223372036854775807, 1))\\n").unwrap_err().contains("integer overflow"));
     }
 
     #[test]
