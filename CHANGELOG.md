@@ -6,7 +6,7 @@ Notable changes to Zenvora Lang are recorded here.
 
 - Added experimental `contract`, `state`, `action`, and `view` syntax lowered to global declarations and functions.
 - Added a runnable local Counter contract example and contract parser regression tests.
-- Contract state exists only for the current program run; persistence, authorization, enforced view purity, and blockchain execution are not implemented.
+- Direct assignments to declared contract state inside `view` bodies are rejected. State exists only for the current program run; persistent storage, authorization, indirect view-purity enforcement, and blockchain execution are not implemented.
 
 ## v0.7.0 — Standard library and modules
 
