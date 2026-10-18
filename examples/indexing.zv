@@ -1,0 +1,11 @@
+# Direct indexing reads arrays by integer index and maps by string key.
+define numbers := array(10, 20, 30)
+show numbers[0]
+show numbers[1 + 1]
+
+define profile := map("name", "Zenvora", "level", 7)
+show profile["name"]
+show profile["level"]
+
+define matrix := array(array(1, 2), array(3, 4))
+show matrix[1][0]
