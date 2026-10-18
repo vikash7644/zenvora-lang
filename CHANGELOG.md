@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Contract view lowering now rejects direct calls to declared `action` functions, including calls used in expressions, while ignoring matching text inside string literals and comments. Added regression tests for both call forms and the string-literal case; indirect mutation through arbitrary helper functions remains a known limitation.
+
 - Hardened block-store appends by independently executing each candidate against a verified tip-runtime cache before persistence; loading still rebuilds state by replaying the complete stored chain. Added regression coverage proving that state/receipt commitments from unrelated transactions are rejected without altering the stored tip. The verified cache avoids replaying the entire chain on every append.
 
 - Added `zv --new <project-name>` to create a safe starter project with a runnable `main.zv` and project README; existing paths are never overwritten. Added CLI dispatch and regression coverage.
