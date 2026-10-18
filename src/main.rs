@@ -450,6 +450,13 @@ enum Value {
 }
 
 fn run(code: &[Op]) -> Result<(), String> {
+    run_with_output(code, &mut |line| println!("{line}"))
+}
+
+fn run_with_output<F>(code: &[Op], output: &mut F) -> Result<(), String>
+where
+    F: FnMut(String),
+{
     let mut stack: Vec<Value> = Vec::new();
     let mut vars: HashMap<String, Value> = HashMap::new();
     let mut pc = 0usize;
@@ -467,8 +474,8 @@ fn run(code: &[Op]) -> Result<(), String> {
             Op::Load(name) => stack.push(vars.get(name).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?),
             Op::Store(name) => { let value = stack.pop().ok_or("VM stack underflow")?; vars.insert(name.clone(), value); }
             Op::Print => match stack.pop().ok_or("VM stack underflow")? {
-                Value::Int(n) => println!("{n}"),
-                Value::Bool(value) => println!("{value}"),
+                Value::Int(n) => output(format!("{n}")),
+                Value::Bool(value) => output(format!("{value}")),
             },
             Op::Neg => {
                 let value = stack.pop().ok_or("VM stack underflow")?;
@@ -568,5 +575,91 @@ fn main() {
     match compile(&source).and_then(|code| run(&code)) {
         Ok(()) => {},
         Err(e) => { eprintln!("Zenvora error: {e}"); process::exit(1); }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::{compile, compile_core, run_with_output};
+
+    fn execute(source: &str) -> Result<Vec<String>, String> {
+        let code = compile(source)?;
+        let mut output = Vec::new();
+        run_with_output(&code, &mut |line| output.push(line))?;
+        Ok(output)
+    }
+
+    #[test]
+    fn arithmetic_variables_and_assignment() {
+        let output = execute(
+            "define a := 10\ndefine b := 20\ndefine total := a + b\nshow total\nshow total * 2\ntotal := total + 5\nshow total\n"
+        ).unwrap();
+        assert_eq!(output, vec!["30", "60", "35"]);
+    }
+
+    #[test]
+    fn booleans_comparisons_and_nested_conditions() {
+        let output = execute(
+            "define alive := true\ndefine ready := false\nshow not ready\nif alive and not ready {\n if 2 < 3 {\n show 7\n } otherwise {\n show 8\n }\n} otherwise {\n show 9\n}\nshow 2 < 3 or 5 < 4\n"
+        ).unwrap();
+        assert_eq!(output, vec!["true", "7", "true"]);
+    }
+
+    #[test]
+    fn repeat_break_and_continue() {
+        let output = execute(
+            "define count := 0\nrepeat count < 5 {\n count := count + 1\n if count == 2 {\n continue\n }\n show count\n if count == 4 {\n break\n }\n}\n"
+        ).unwrap();
+        assert_eq!(output, vec!["1", "3", "4"]);
+    }
+
+    #[test]
+    fn nested_loop_break_only_exits_nearest_loop() {
+        let output = execute(
+            "define i := 0\nrepeat i < 3 {\n i := i + 1\n define j := 0\n repeat j < 4 {\n j := j + 1\n if j == 2 {\n break\n }\n show i * 10 + j\n }\n}\n"
+        ).unwrap();
+        assert_eq!(output, vec!["11", "21", "31"]);
+    }
+
+    #[test]
+    fn functions_parameters_returns_and_local_scope() {
+        let output = execute(
+            "show add(20, 22)\ncall greet()\nfn add(left, right) {\n return left + right\n}\nfn greet() {\n show 2026\n}\n"
+        ).unwrap();
+        assert_eq!(output, vec!["42", "2026"]);
+    }
+
+    #[test]
+    fn recursive_function_calls() {
+        let output = execute(
+            "show factorial(5)\nfn factorial(n) {\n if n <= 1 {\n return 1\n } otherwise {\n return n * factorial(n - 1)\n }\n}\n"
+        ).unwrap();
+        assert_eq!(output, vec!["120"]);
+    }
+
+    #[test]
+    fn invalid_loop_control_is_rejected() {
+        assert!(compile_core("break\n").unwrap_err().contains("outside a repeat loop"));
+        assert!(compile_core("continue\n").unwrap_err().contains("outside a repeat loop"));
+    }
+
+    #[test]
+    fn undefined_function_and_wrong_argument_count_are_rejected() {
+        assert!(compile("call missing()\n").unwrap_err().contains("undefined function"));
+        assert!(compile("show add(1)\nfn add(a, b) {\n return a + b\n}\n").unwrap_err().contains("expects 2 argument"));
+    }
+
+    #[test]
+    fn runtime_errors_are_reported_instead_of_panicking() {
+        assert!(execute("show 1 / 0\n").unwrap_err().contains("division by zero"));
+        assert!(execute("show missing\n").unwrap_err().contains("undefined variable"));
+        assert!(execute("show 9223372036854775807 + 1\n").unwrap_err().contains("integer overflow"));
+    }
+
+    #[test]
+    fn unmatched_braces_are_rejected() {
+        assert!(compile_core("if true {\n show 1\n").unwrap_err().contains("missing closing brace"));
+        assert!(compile_core("}\n").unwrap_err().contains("closing brace without matching block"));
     }
 }
