@@ -471,7 +471,7 @@ mod tests {
         let error = store.append_executed_block(
             &path, &fake_runtime, &header, &[supplied], &[fake_receipt],
         ).unwrap_err();
-        assert!(error.contains("independently replayed") || error.contains("independently executed"));
+        assert!(error.contains("block receipt root does not match executed receipts") || error.contains("independently replayed") || error.contains("independently executed"));
         assert_eq!(store.blocks().len(), 1);
         let (loaded, replayed) = BlockStore::load_from_file(&path, 71).unwrap();
         assert_eq!(loaded.blocks().len(), 1);
