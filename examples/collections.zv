@@ -1,0 +1,19 @@
+# Zenvora Lang v0.6.1 — collection helpers
+# Arrays use zero-based indexes. push/put return updated copies.
+
+define numbers := array(10, 20, 30)
+show numbers
+show get(numbers, 1)
+show len(numbers)
+
+define extended := push(numbers, 40)
+show extended
+show contains(extended, 20)
+
+# Maps use string keys and deterministic key ordering.
+define profile := map("name", "Zenvora", "level", 6)
+show get(profile, "name")
+define upgraded := put(profile, "level", 7)
+show get(upgraded, "level")
+show keys(profile)
+show values(profile)
