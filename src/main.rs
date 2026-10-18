@@ -819,6 +819,119 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 _ => Err(format!("type error: {name} expects two integers")),
             }
         }
+        "gcd" => {
+            arity(2)?;
+            let (Value::Int(mut a), Value::Int(mut b)) = (&args[0], &args[1]) else {
+                return Err("type error: gcd expects two integers".into());
+            };
+            a = a.checked_abs().ok_or("integer overflow in gcd")?;
+            b = b.checked_abs().ok_or("integer overflow in gcd")?;
+            while b != 0 { let remainder = a % b; a = b; b = remainder; }
+            Ok(Value::Int(a))
+        }
+        "lcm" => {
+            arity(2)?;
+            let (Value::Int(a), Value::Int(b)) = (&args[0], &args[1]) else {
+                return Err("type error: lcm expects two integers".into());
+            };
+            if *a == 0 || *b == 0 { return Ok(Value::Int(0)); }
+            let mut x = a.checked_abs().ok_or("integer overflow in lcm")?;
+            let mut y = b.checked_abs().ok_or("integer overflow in lcm")?;
+            let mut p = x;
+            while y != 0 { let r = p % y; p = y; y = r; }
+            x = a.checked_div(p).ok_or("integer overflow in lcm")?;
+            Ok(Value::Int(x.checked_mul(*b).and_then(i64::checked_abs).ok_or("integer overflow in lcm")?))
+        }
+        "factorial" => {
+            arity(1)?;
+            let Value::Int(n) = args[0] else { return Err("type error: factorial expects an integer".into()); };
+            if !(0..=20).contains(&n) { return Err("factorial expects an integer from 0 through 20".into()); }
+            let mut result = 1i64;
+            for value in 2..=n { result = result.checked_mul(value).ok_or("integer overflow in factorial")?; }
+            Ok(Value::Int(result))
+        }
+        "is_prime" => {
+            arity(1)?;
+            let Value::Int(n) = args[0] else { return Err("type error: is_prime expects an integer".into()); };
+            if n < 2 { return Ok(Value::Bool(false)); }
+            if n == 2 { return Ok(Value::Bool(true)); }
+            if n % 2 == 0 { return Ok(Value::Bool(false)); }
+            let mut divisor = 3i64;
+            while divisor <= n / divisor {
+                if n % divisor == 0 { return Ok(Value::Bool(false)); }
+                divisor += 2;
+            }
+            Ok(Value::Bool(true))
+        }
+        "fibonacci" => {
+            arity(1)?;
+            let Value::Int(n) = args[0] else { return Err("type error: fibonacci expects an integer".into()); };
+            if !(0..=92).contains(&n) { return Err("fibonacci expects an integer from 0 through 92".into()); }
+            let (mut a, mut b) = (0i64, 1i64);
+            for _ in 0..n { let next = a.checked_add(b).ok_or("integer overflow in fibonacci")?; a = b; b = next; }
+            Ok(Value::Int(a))
+        }
+        "pow_int" => {
+            arity(2)?;
+            let (Value::Int(base), Value::Int(exponent)) = (&args[0], &args[1]) else {
+                return Err("type error: pow_int expects two integers".into());
+            };
+            if !(0..=63).contains(exponent) { return Err("pow_int exponent must be from 0 through 63".into()); }
+            let mut result = 1i64;
+            let mut factor = *base;
+            let mut power = *exponent as u32;
+            while power > 0 {
+                if power & 1 == 1 { result = result.checked_mul(factor).ok_or("integer overflow in pow_int")?; }
+                power >>= 1;
+                if power > 0 { factor = factor.checked_mul(factor).ok_or("integer overflow in pow_int")?; }
+            }
+            Ok(Value::Int(result))
+        }
+        "mean" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else { return Err("type error: mean expects an array of integers".into()); };
+            if items.is_empty() { return Err("mean cannot be used with an empty array".into()); }
+            let mut total = 0i64;
+            for item in items {
+                let Value::Int(value) = item else { return Err("type error: mean expects an array containing only integers".into()); };
+                total = total.checked_add(*value).ok_or("integer overflow in mean")?;
+            }
+            Ok(Value::Int(total / i64::try_from(items.len()).map_err(|_| "mean item count overflow")?))
+        }
+        "speed" | "density" | "molarity" => {
+            arity(2)?;
+            let (Value::Int(numerator), Value::Int(denominator)) = (&args[0], &args[1]) else {
+                return Err(format!("type error: {name} expects two integers"));
+            };
+            if *denominator <= 0 { return Err(format!("{name} denominator must be positive")); }
+            Ok(Value::Int(numerator.checked_div(*denominator).ok_or("integer overflow in scientific calculation")?))
+        }
+        "force" => {
+            arity(2)?;
+            let (Value::Int(mass), Value::Int(acceleration)) = (&args[0], &args[1]) else {
+                return Err("type error: force expects mass and acceleration as integers".into());
+            };
+            Ok(Value::Int(mass.checked_mul(*acceleration).ok_or("integer overflow in force")?))
+        }
+        "kinetic_energy" => {
+            arity(2)?;
+            let (Value::Int(mass), Value::Int(velocity)) = (&args[0], &args[1]) else {
+                return Err("type error: kinetic_energy expects mass and velocity as integers".into());
+            };
+            if *mass < 0 { return Err("kinetic_energy mass cannot be negative".into()); }
+            let velocity_squared = velocity.checked_mul(*velocity).ok_or("integer overflow in kinetic_energy")?;
+            Ok(Value::Int(mass.checked_mul(velocity_squared).ok_or("integer overflow in kinetic_energy")? / 2))
+        }
+        "bmi_x10" => {
+            arity(2)?;
+            let (Value::Int(mass_kg), Value::Int(height_cm)) = (&args[0], &args[1]) else {
+                return Err("type error: bmi_x10 expects mass in kg and height in cm as integers".into());
+            };
+            if *mass_kg <= 0 || *height_cm <= 0 { return Err("bmi_x10 mass and height must be positive".into()); }
+            let numerator = mass_kg.checked_mul(100_000).ok_or("integer overflow in bmi_x10")?;
+            let denominator = height_cm.checked_mul(*height_cm).ok_or("integer overflow in bmi_x10")?;
+            Ok(Value::Int(numerator / denominator))
+        }
         "range" => {
             arity(2)?;
             let (Value::Int(start), Value::Int(end)) = (&args[0], &args[1]) else {
@@ -1691,6 +1804,20 @@ mod tests {
         std::fs::write(&path, concat!("show (1 + )", "\n")).unwrap();
         assert!(super::check_program(&path_text).unwrap_err().contains("expected"));
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn advanced_math_and_science_builtins_are_checked() {
+        let output = execute("show gcd(48, 18)\\nshow lcm(12, 18)\\nshow factorial(5)\\nshow is_prime(97)\\nshow fibonacci(10)\\nshow pow_int(3, 4)\\nshow mean([2, 4, 9])\\nshow speed(100, 5)\\nshow force(10, 9)\\nshow kinetic_energy(2, 5)\\nshow density(12, 3)\\nshow molarity(6, 2)\\nshow bmi_x10(70, 175)\\n").unwrap();
+        assert_eq!(output, vec!["6", "36", "120", "true", "55", "81", "5", "20", "90", "25", "4", "3", "22"]);
+    }
+
+    #[test]
+    fn advanced_math_builtins_reject_invalid_inputs_and_overflow() {
+        assert!(execute("show factorial(21)\\n").unwrap_err().contains("0 through 20"));
+        assert!(execute("show pow_int(9223372036854775807, 2)\\n").unwrap_err().contains("integer overflow"));
+        assert!(execute("show speed(10, 0)\\n").unwrap_err().contains("denominator must be positive"));
+        assert!(execute("show bmi_x10(70, 0)\\n").unwrap_err().contains("must be positive"));
     }
 
     #[test]
