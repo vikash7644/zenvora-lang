@@ -1938,6 +1938,27 @@ show clamp(-3, 0, 10)
     }
 
     #[test]
+    fn string_helpers_reject_oversized_results_before_building_them() {
+        let limit = super::MAX_BYTECODE_STRING_BYTES;
+        let oversized_replacement = "b".repeat(limit);
+        let replace_error = super::builtin("replace", vec![
+            super::Value::Str("a".repeat(limit)),
+            super::Value::Str("a".into()),
+            super::Value::Str(oversized_replacement),
+        ]).unwrap_err();
+        assert!(replace_error.contains("replace result exceeds safety limit"));
+
+        let join_error = super::builtin("join", vec![
+            super::Value::Array(vec![
+                super::Value::Str("a".repeat(limit / 2 + 1)),
+                super::Value::Str("b".repeat(limit / 2 + 1)),
+            ]),
+            super::Value::Str(",".into()),
+        ]).unwrap_err();
+        assert!(join_error.contains("join result exceeds safety limit"));
+    }
+
+    #[test]
     fn collection_and_numeric_helpers_reject_invalid_inputs() {
         assert!(execute("show first(array())\n").unwrap_err().contains("empty array"));
         assert!(execute("show last(4)\n").unwrap_err().contains("expects an array"));
