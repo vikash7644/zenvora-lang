@@ -347,22 +347,20 @@ mod tests {
 
         let envelope = signed_transfer(&key, 0);
         let mut candidate = runtime.clone();
+        let mut bad_header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: genesis_header.header_hash().unwrap(),
+            transaction_root: transaction_merkle_root(&[envelope.transaction.clone()]).unwrap(),
+            receipt_root: [0; 32],
+            state_root: [0; 32],
+            proposer: "validator_1".into(),
+            consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut bad_header, &key).unwrap();
         let receipt = execute_block(
-            &mut candidate,
-            &BlockHeaderV1 {
-                chain_id: 71,
-                height: 1,
-                timestamp_secs: 1_800_000_001,
-                parent_hash: genesis_header.header_hash().unwrap(),
-                transaction_root: transaction_merkle_root(&[envelope.transaction.clone()]).unwrap(),
-                receipt_root: [0; 32],
-                state_root: [0; 32],
-                proposer: "validator_1".into(),
-                consensus_proof: Vec::new(),
-            },
-            &[envelope.clone()],
-            71,
-            Some(&genesis_header),
+            &mut candidate, &bad_header, &[envelope.clone()], 71, Some(&genesis_header),
         );
         // Build the actual header from the executed candidate state and receipt.
         assert!(receipt.is_err()); // Deliberately proves a bad commitment never changes the candidate.
