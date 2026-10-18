@@ -5,13 +5,14 @@ Zenvora Lang is an independent programming-language project for the Zenvora ecos
 ## Repository contents
 
 - `Cargo.toml` — Rust package manifest for the `zv` command.
-- `CHANGELOG.md` — v0.6.0 release notes and verified feature status.
+- `CHANGELOG.md` — v0.6.1 release notes and current feature status.
 - `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM and automated regression tests.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
 - `examples/functions.zv` — function parameters, local variables, return values, and loops.
 - `examples/booleans.zv` — native booleans and logical operators.
 - `examples/strings.zv` — string literals, escapes, concatenation, equality, and string function arguments.
+- `examples/collections.zv` — arrays, maps, collection access, and immutable update helpers.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
 - `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
@@ -30,6 +31,7 @@ cargo run -- examples/loops.zv
 cargo run -- examples/functions.zv
 cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
+cargo run -- examples/collections.zv
 cargo run -- --emit-bytecode examples/functions.zv functions.zvb
 cargo run -- --run-bytecode functions.zvb
 cargo run -- --version
@@ -47,7 +49,7 @@ Expected example output:
 
 ## Automated regression tests
 
-`cargo test` runs 60 automated tests across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips and malformed bytecode, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
+`cargo test` runs 62 automated tests across the compiler/VM, CLI, and language examples. Coverage includes arithmetic, booleans, Unicode strings and escapes, bytecode round-trips and malformed bytecode, nested conditions and loops, `break`/`continue`, function calls and recursion, invalid names, runtime errors, recursion-depth limits, arrays/maps, collection access/update helpers, and malformed syntax. GitHub Actions runs `cargo check`, `cargo test`, and the example programs on pushes and pull requests.
 
 ## Bytecode files
 
@@ -76,7 +78,7 @@ This prints `1`. Change the age to `16` and it prints `0`.
 
 See [`examples/loops.zv`](examples/loops.zv) for a runnable `repeat`/`break`/`continue` example and [`examples/functions.zv`](examples/functions.zv) for functions.
 
-The current prototype supports integer, boolean, and string values, assignment, string concatenation with `+`, integer arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, double-quoted strings with `\\`, `\"`, `\n`, `\r`, and `\t` escapes, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Boolean values `true` and `false` are supported, comparisons produce booleans, and `not`, `and`, and `or` are available. `and` and `or` short-circuit: `false and ...` skips the right operand, and `true or ...` skips the right operand. `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Functions support value parameters with `fn add(left, right) { ... }`, calls such as `call add(2 + 3, 4)`, and expression calls such as `show add(2, 3)`. `return expression` returns an integer, boolean, or string value; plain `return` exits without a value. Calls can be made before a function definition, functions can call other functions recursively, and each call gets a separate local variable environment. Access to caller/global variables from inside a function is not implemented yet. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
+The current prototype supports integer, boolean, string, array, and map values, assignment, string concatenation with `+`, integer arithmetic (`+`, `-`, `*`, `/`), unary minus, parentheses, comments beginning with `#`, double-quoted strings with `\\`, `\"`, `\n`, `\r`, and `\t` escapes, `show expression`, `print(expression)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), nested `if/otherwise` blocks, `repeat condition { ... }` loops, and `break`/`continue` loop control. Boolean values `true` and `false` are supported, comparisons produce booleans, and `not`, `and`, and `or` are available. `and` and `or` short-circuit: `false and ...` skips the right operand, and `true or ...` skips the right operand. `break` exits the nearest loop; `continue` jumps back to reevaluate that loop's condition. Using either outside a loop is a compile error. Functions support value parameters with `fn add(left, right) { ... }`, calls such as `call add(2 + 3, 4)`, and expression calls such as `show add(2, 3)`. Collection helpers are built-ins: `array(...)` creates an array; `map("key", value, ...)` creates a string-keyed map; `get(collection, key)` reads an element; `len(collection)` returns array/map/string length; `contains(collection, value_or_key)` checks membership; `push(array, value)` returns a new array; `put(map, key, value)` returns a new map; `keys(map)` and `values(map)` return arrays. `push` and `put` are immutable-style helpers: they return updated collections and do not mutate the original. `return expression` returns an integer, boolean, or string value; plain `return` exits without a value. Calls can be made before a function definition, functions can call other functions recursively, and each call gets a separate local variable environment. Access to caller/global variables from inside a function is not implemented yet. Arithmetic operators other than string concatenation require integers; ordered comparisons require integers; equality compares values. The compiler reports undefined variables/functions, invalid syntax, division by zero and integer overflow.
 
 ## Roadmap
 
@@ -88,7 +90,7 @@ The current prototype supports integer, boolean, and string values, assignment, 
 
 ## Status and safety
 
-This is an early work in progress. Explicit global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
+This is an early work in progress. Indexing syntax such as `items[0]`, direct collection mutation, explicit global/module scope rules, advanced static type checking, native machine-code generation, smart-contract execution, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
 ## License
 
