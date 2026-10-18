@@ -39,6 +39,7 @@ The program prints `1`. Set `age := 16` and it prints `0`.
 - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`. Comparisons produce native boolean values `true` or `false`.
 - Logical operators: `not`, `and`, and `or`; they require boolean operands and currently evaluate both sides eagerly.
 - Conditional blocks use `if condition {`, followed by statements and a closing `}`; an optional else branch uses the exact line ` } otherwise {` without the leading space (normally written as `} otherwise {`).
+- Double-quoted string literals support `\\`, `\"`, `\n`, `\r`, and `\t` escapes. `+` concatenates two strings; concatenating a string with an integer is a type error.
 - `#` starts a comment.
 - Nested if/otherwise blocks are supported.
 - `repeat condition { ... }` loops reevaluate their comparison condition before each iteration.
