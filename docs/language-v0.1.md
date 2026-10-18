@@ -15,12 +15,13 @@ cargo run -- examples/booleans.zv
 cargo run -- examples/strings.zv
 cargo run -- examples/collections.zv
 cargo run -- examples/indexing.zv
+cargo run -- examples/stdlib.zv
 cargo run -- examples/modules.zv
 ```
 
 ## Automated tests
 
-The Rust unit and integration suites run 69 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
+The Rust unit and integration suites run 71 automated tests. They check actual VM output, Unicode strings and escapes, bytecode round-trips and malformed bytecode, arithmetic, booleans, nested conditions, loop control, function parameters and return values, recursion, arrays/maps and collection built-ins, invalid names and calls, runtime errors, and malformed syntax. Run the suite with `cargo test`; GitHub Actions runs it automatically for pushes to `main` and pull requests.
 
 ## Modules
 
