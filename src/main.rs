@@ -523,11 +523,58 @@ fn count_block_braces(line: &str) -> (i32, i32) {
 // Lowers the first-generation contract DSL into the existing compiler's
 // global declarations and functions. This is a local language prototype,
 // not a persistent blockchain contract runtime.
+fn calls_named_function(statement: &str, name: &str) -> bool {
+    let bytes = statement.as_bytes();
+    let mut index = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'#' { break; }
+        if byte == b'"' {
+            in_string = true;
+            index += 1;
+            continue;
+        }
+        if byte.is_ascii_alphabetic() || byte == b'_' {
+            let start = index;
+            index += 1;
+            while index < bytes.len() && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_') {
+                index += 1;
+            }
+            if &statement[start..index] == name {
+                let mut next = index;
+                while next < bytes.len() && bytes[next].is_ascii_whitespace() { next += 1; }
+                if next < bytes.len() && bytes[next] == b'(' { return true; }
+            }
+            continue;
+        }
+        index += 1;
+    }
+    false
+}
+
 fn lower_contracts(source: &str) -> Result<String, String> {
     let lines: Vec<&str> = source.lines().collect();
     let state_names: HashSet<String> = lines.iter().filter_map(|raw| {
         let rest = raw.trim().strip_prefix("state ")?;
         let name = rest.split_once(":=")?.0.trim();
+        if valid_identifier(name) { Some(name.to_string()) } else { None }
+    }).collect();
+    let action_names: HashSet<String> = lines.iter().filter_map(|raw| {
+        let rest = raw.trim().strip_prefix("action ")?;
+        let name = rest.split_once('(')?.0.trim();
         if valid_identifier(name) { Some(name.to_string()) } else { None }
     }).collect();
     let mut output = String::new();
@@ -605,6 +652,11 @@ fn lower_contracts(source: &str) -> Result<String, String> {
                             let base = left.trim().split('[').next().unwrap_or(left.trim()).trim();
                             if state_names.contains(base) {
                                 return Err(format!("line {}: view '{header}' cannot directly assign to contract state '{base}'", index + 1));
+                            }
+                        }
+                        for action in &action_names {
+                            if calls_named_function(statement, action) {
+                                return Err(format!("line {}: view cannot call action '{action}'", index + 1));
                             }
                         }
                     }
@@ -2972,6 +3024,16 @@ mod tests {
         let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\ncall increment(3)\ncall increment(4)\nshow current()\n";
         let output = execute(source).unwrap();
         assert_eq!(output, vec!["7"]);
+    }
+
+    #[test]
+    fn contract_views_reject_direct_action_calls() {
+        let direct = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\ncall increment(1)\nreturn count\n}\n}\n";
+        assert!(compile(direct).unwrap_err().contains("view cannot call action 'increment'"));
+        let expression = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\nreturn increment(1)\n}\n}\n";
+        assert!(compile(expression).unwrap_err().contains("view cannot call action 'increment'"));
+        let string_literal = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview label() {\nreturn \"increment()\"\n}\n}\n";
+        assert_eq!(execute(string_literal).unwrap(), vec!["increment()"]);
     }
 
     #[test]
