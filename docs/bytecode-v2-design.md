@@ -17,22 +17,29 @@ Bytecode v1 infers function regions from `CALL_TARGET` instructions. This leaves
 
 ## Proposed file framing
 
-The exact syntax is provisional. A v2 file would start with:
+The current **provisional canonical grammar** used by `parse_v2_file` is:
 
 ```text
 ZENVORA_BYTECODE 2
-PROGRAM 0 5
-FUNCTION 5 9 1 value value
+PROGRAM 0 2
+FUNCTION 2 4 1 value amount
+CODE
+PUSH 1
+JUMP 2
+PUSH 7
+RETURN_VALUE
 ```
 
-The example above illustrates the *shape* only; it is not a complete executable program. The intended fields are:
+The records mean:
 
 - `PROGRAM <start> <end>`: the main instruction region, using a half-open interval `[start, end)`.
 - `FUNCTION <entry> <end> <parameter-count> <return-kind> <parameter-names...>`: a function region, also half-open. Return kind is one of `void` or `value`.
 - Function entries and region boundaries are absolute instruction indices, not source line numbers.
-- A zero-parameter function has no parameter-name operands. The final wire grammar must define an unambiguous empty-parameter representation before implementation.
-
-Metadata records should precede instruction records, or the format should use an explicit metadata section terminator, so parsing cannot confuse metadata with executable instructions. The implementation must choose and document one canonical grammar before shipping v2.
+- A zero-parameter function uses the single `-` placeholder.
+- `CODE` terminates metadata; every following non-empty line is one instruction record.
+- Calls use `CALL <entry> <argument-count>`; parameter names and return kind are taken from the target's metadata.
+- Main must exit through a final `JUMP <main-end>` with an empty operand stack. Function bodies must return with the declared kind.
+- This grammar and opcode set are still provisional and are not yet the production file format.
 
 ## Required structural checks
 
@@ -90,22 +97,22 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 - [x] Provisional v2 framing parser checks the version header, main start, metadata record shape, parameter count/name consistency, return-kind tags, CODE terminator, instruction-count/size bounds, and region layout.
 - [x] Metadata framing round-trip tests cover a main region plus declared functions, including a zero-parameter function.
 - [x] Initial v2 verifier validates opcode syntax, declared call targets/argument counts, region-local jump targets, reachable stack underflow and stack-depth joins, main exit stack cleanliness, and function return-kind metadata.
-- [ ] A declared but uncalled function is still region-checked.
-- [ ] Every region has exactly one declared entry and a valid end boundary.
-- [ ] Overlapping and out-of-bounds regions are rejected.
+- [x] A declared but uncalled function is still region-checked.
+- [x] Every region has exactly one declared entry and a valid end boundary under the contiguous-region layout.
+- [x] Overlapping and out-of-bounds regions are rejected.
 - [x] Cross-function and cross-main jumps are rejected by the initial v2 verifier.
 - [x] Calls to unknown functions and mismatched argument counts are rejected by the initial v2 verifier.
 - [x] Void/value return mismatches are rejected by the initial v2 verifier.
 - [x] Reachable stack underflow and inconsistent stack depth at joins are rejected by the initial v2 verifier.
-- [ ] Unreachable malformed instructions are rejected structurally.
+- [x] Unreachable malformed opcodes and invalid jump targets are rejected structurally.
 - [x] Disconnected unreachable control-flow components are independently analyzed from an empty operand stack; this conservative policy is documented in the verifier.
 - [ ] Valid compiler output round-trips through v2 encode/decode and executes with the same observable output.
-- [ ] Existing v1 fixtures and all current tests continue to pass.
+- [x] Existing v1 behavior and current regression suite continue to pass in GitHub Actions CI.
 - [ ] Fuzz tests cover header parsing, metadata parsing, integer boundaries, region tables, and jump targets.
 
 ## Current implementation boundary
 
-The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, provisional `parse_v2_file`/`serialize_v2_file` framing helpers, and `verify_v2_file`. The verifier parses a defined opcode subset, checks metadata-driven calls and region-local jumps, and analyzes reachable stack depths/returns. It remains a foundation rather than a complete production verifier: disconnected unreachable control-flow components are analyzed with a conservative empty-stack entry policy, the opcode set is provisional, and the v2 parser/verifier are not wired into the production loader. The existing v1 serializer and loader remain unchanged, and v1 remains the only executable format.
+The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, provisional `parse_v2_file`/`serialize_v2_file` framing helpers, and `verify_v2_file`. The verifier parses the provisional opcode set, checks metadata-driven calls and region-local jumps even in unreachable code, and analyzes stack depths/returns from region entry plus disconnected components. Each disconnected component starts with an empty stack. It remains a foundation rather than a complete production verifier: fuzz tests, compiler emission, and runtime execution are pending, and the v2 parser/verifier are not wired into the production loader. The existing v1 serializer and loader remain unchanged, and v1 remains the only executable format.
 
 ## Security status
 
