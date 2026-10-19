@@ -1,8 +1,9 @@
-//! Structural validation and metadata framing for the proposed Zenvora Bytecode v2 format.
+//! Experimental Zenvora Bytecode v2 framing, metadata, and control-flow verification.
 //!
-//! This module deliberately does not decode opcodes, verify control flow, or execute v2.
-//! The v1 serializer/loader remain unchanged. V2 text parsing here only frames raw
-//! instruction records and validates metadata/layout; it is not an execution-ready loader.
+//! The v2 parser/verifier is called by the production bytecode loader before instructions
+//! are passed to the existing VM. The compiler can emit v2 text on an opt-in CLI path.
+//! V1 remains the default format. V2 is experimental and has not received fuzzing or an
+//! independent security audit; its grammar and opcode set may change.
 
 use std::collections::{HashMap, HashSet};
 
@@ -39,8 +40,7 @@ pub struct ProgramLayout {
     pub functions: Vec<FunctionRegion>,
 }
 
-/// Parsed v2 framing. Instruction lines remain opaque until the opcode decoder
-/// and control-flow verifier are implemented.
+/// Parsed v2 framing and instruction records, ready for opcode verification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedV2File {
     pub layout: ProgramLayout,
@@ -370,7 +370,8 @@ fn region_for_pc(layout: &ProgramLayout, pc: usize) -> Option<(usize, usize, Opt
 /// Verify opcode syntax, every jump/call target (including unreachable code), and
 /// reachable control-flow stack effects for each region independently.
 ///
-/// This verifier is deliberately not connected to the production loader yet.
+/// Each disconnected unreachable component is conservatively analyzed from an empty
+/// operand stack. This is a validation policy, not proof that the code is reachable.
 pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
     if file.instructions.len() != file.layout.instruction_count {
         return Err("bytecode v2: instruction vector length disagrees with layout".into());
