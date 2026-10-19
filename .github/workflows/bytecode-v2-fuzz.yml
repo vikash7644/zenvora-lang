@@ -43,5 +43,5 @@ jobs:
         run: cargo install cargo-fuzz --locked
 
       - name: Run bounded fuzz campaign
-        run: cargo fuzz run parse_v2 -- -max_total_time=60 -timeout=5 -rss_limit_mb=2048
+        run: cargo fuzz run parse_v2 -- -max_total_time=${{ github.event_name == 'pull_request' && 60 || 300 }} -timeout=5 -rss_limit_mb=2048
         working-directory: fuzz
