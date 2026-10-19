@@ -4116,7 +4116,7 @@ fn twice(value) {
         let expected = execute(source).unwrap();
         let (code, layout) = super::compile_with_layout(source).unwrap();
         let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
-        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
         let mut actual = Vec::new();
         super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
 
@@ -4143,7 +4143,7 @@ if total == 7 {
         let expected = execute(source).unwrap();
         let (code, layout) = super::compile_with_layout(source).unwrap();
         let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
-        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
         let mut actual = Vec::new();
         super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
 
