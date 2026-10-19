@@ -40,7 +40,10 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
         }
         if header_end.is_none() {
             if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                let headers = std::str::from_utf8(&buffer[..pos]).map_err(|_| "invalid HTTP headers")?;
+                let headers = match std::str::from_utf8(&buffer[..pos]) {
+                    Ok(headers) => headers,
+                    Err(_) => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"invalid HTTP headers"})),
+                };
                 let mut lines = headers.split("\r\n");
                 let request_line = lines.next().unwrap_or("");
                 if request_line == "OPTIONS /compile-run HTTP/1.1" || request_line == "OPTIONS /compile-run HTTP/1.0" {
@@ -124,7 +127,7 @@ fn respond(stream: &mut TcpStream, status: &str, value: &Value) -> Result<(), St
 mod tests {
     use super::*;
 
-    fn response_for(raw_request: &str) -> String {
+    fn response_for(raw_request: &[u8]) -> String {
         use std::net::Shutdown;
         use std::thread;
 
@@ -132,7 +135,7 @@ mod tests {
         let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
         let (mut server, _) = listener.accept().unwrap();
         let worker = thread::spawn(move || handle(&mut server));
-        client.write_all(raw_request.as_bytes()).unwrap();
+        client.write_all(raw_request).unwrap();
         client.shutdown(Shutdown::Write).unwrap();
         let mut response = String::new();
         client.read_to_string(&mut response).unwrap();
@@ -149,16 +152,29 @@ mod tests {
     #[test]
     fn malformed_content_length_receives_http_400_response() {
         let response = response_for(
-            "POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: nope\r\n\r\n",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: nope\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("invalid Content-Length"));
     }
 
     #[test]
+    fn invalid_utf8_headers_receive_http_400_response() {
+        let request = b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nX-Bad: "
+            .iter()
+            .copied()
+            .chain([0xff])
+            .chain(b"\r\nContent-Length: 2\r\n\r\n{}".iter().copied())
+            .collect::<Vec<_>>();
+        let response = response_for(&request);
+        assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(response.contains("invalid HTTP headers"));
+    }
+
+    #[test]
     fn missing_content_length_receives_http_400_response() {
         let response = response_for(
-            "POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("Content-Length is required"));
