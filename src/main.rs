@@ -2807,7 +2807,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{compile, compile_core, read_chain_key, run_chain_command, run_with_output, Op};
+    use super::{compile, compile_core, lex, read_chain_key, run_chain_command, run_with_output, Op};
     use ed25519_dalek::Signer;
 
     #[test]
