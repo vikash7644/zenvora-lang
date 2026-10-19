@@ -965,6 +965,13 @@ enum Value {
 
 fn is_builtin(name: &str) -> bool { bytecode_v2::is_supported_builtin(name) }
 
+fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
+    if !items.contains_key(key) && items.len() >= MAX_COLLECTION_ITEMS {
+        return Err(format!("map exceeds safety limit ({MAX_COLLECTION_ITEMS} items)"));
+    }
+    Ok(())
+}
+
 fn value_to_string(value: &Value) -> String {
     match value {
         Value::Int(n) => n.to_string(),
@@ -1019,14 +1026,20 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
         }
         "push" => {
             arity(2)?;
-            let mut items = match &args[0] { Value::Array(items) => items.clone(), _ => return Err("type error: push expects an array as its first argument".into()) };
+            let original = match &args[0] { Value::Array(items) => items, _ => return Err("type error: push expects an array as its first argument".into()) };
+            if original.len() >= MAX_COLLECTION_ITEMS {
+                return Err(format!("array exceeds safety limit ({MAX_COLLECTION_ITEMS} items)"));
+            }
+            let mut items = original.clone();
             items.push(args[1].clone());
             Ok(Value::Array(items))
         }
         "put" => {
             arity(3)?;
-            let mut items = match &args[0] { Value::Map(items) => items.clone(), _ => return Err("type error: put expects a map as its first argument".into()) };
+            let original = match &args[0] { Value::Map(items) => items, _ => return Err("type error: put expects a map as its first argument".into()) };
             let Value::Str(key) = &args[1] else { return Err("type error: put key must be a string".into()); };
+            check_map_capacity(original, key)?;
+            let mut items = original.clone();
             items.insert(key.clone(), args[2].clone());
             Ok(Value::Map(items))
         }
@@ -1495,6 +1508,7 @@ where
                     (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
                     (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
                     (Value::Map(mut items), Value::Str(key)) => {
+                        check_map_capacity(&items, &key)?;
                         items.insert(key, value);
                         Value::Map(items)
                     }
@@ -1643,6 +1657,7 @@ where
 
 
 const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
+const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
 const MAX_BYTECODE_STRING_BYTES: usize = 1024 * 1024;
@@ -3407,6 +3422,20 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn collection_growth_respects_item_limits() {
+        let full_array = super::Value::Array(vec![super::Value::Int(0); super::MAX_COLLECTION_ITEMS]);
+        let error = super::builtin("push", vec![full_array, super::Value::Int(1)]).unwrap_err();
+        assert!(error.contains("array exceeds safety limit"), "{error}");
+
+        let full_map: std::collections::BTreeMap<String, super::Value> =
+            (0..super::MAX_COLLECTION_ITEMS).map(|i| (format!("key{i}"), super::Value::Int(i as i64))).collect();
+        let error = super::builtin("put", vec![super::Value::Map(full_map.clone()), super::Value::Str("new-key".into()), super::Value::Int(1)]).unwrap_err();
+        assert!(error.contains("map exceeds safety limit"), "{error}");
+        assert!(super::check_map_capacity(&full_map, "key0").is_ok());
+        assert!(super::check_map_capacity(&full_map, "new-key").unwrap_err().contains("map exceeds safety limit"));
     }
 
     #[test]
