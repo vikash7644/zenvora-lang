@@ -771,6 +771,10 @@ fn lower_contracts(source: &str) -> Result<String, String> {
 }
 
 fn compile(source: &str) -> Result<Vec<Op>, String> {
+    compile_with_layout(source).map(|(code, _)| code)
+}
+
+fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLayout), String> {
     let lowered_source = lower_contracts(source)?;
     let source = lowered_source.as_str();
     let mut main_source = String::new();
@@ -794,7 +798,7 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
                 }
             }
             for (j, param) in params.iter().enumerate() {
-                if params[..j].contains(param) { return Err(format!("line {}: duplicate parameter '{param}'", i + 1)); }
+                if params[..j].contains(param) { return Err(format!("line {}: duplicate parameter '{param}'\", i + 1)); }
             }
             if functions.iter().any(|(existing, _, _)| existing == name) {
                 return Err(format!("line {}: duplicate function '{name}'", i + 1));
@@ -821,7 +825,9 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
     let mut code = compile_core(&main_source)?;
     let main_exit = code.len();
     code.push(Op::Jump(usize::MAX));
+    let main_end = code.len();
     let mut entries: HashMap<String, (usize, Vec<String>)> = HashMap::new();
+    let mut regions: Vec<(usize, usize, String, Vec<String>)> = Vec::new();
     for (name, params, body) in &functions {
         let entry = code.len();
         entries.insert(name.clone(), (entry, params.clone()));
@@ -834,6 +840,7 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
         }
         code.extend(body_code);
         code.push(Op::Return);
+        regions.push((entry, code.len(), name.clone(), params.clone()));
     }
     let end = code.len();
     code[main_exit] = Op::Jump(end);
@@ -846,16 +853,38 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             *op = Op::CallTarget { target, params, arg_count: *arg_count };
         }
     }
-    // Keep source compilation and bytecode loading consistent on reachable function
-    // return kinds without applying v1's conservative stack analysis to compiler-generated
-    // disconnected instruction islands.
-    let mut function_entries: Vec<usize> = code.iter().filter_map(|op| {
+
+    // Preserve v1's existing validation for functions that are called, while
+    // deriving explicit v2 return metadata for every declared function, including
+    // functions that are never called by this source program.
+    let mut called_entries: Vec<usize> = code.iter().filter_map(|op| {
         if let Op::CallTarget { target, .. } = op { Some(*target) } else { None }
     }).collect();
-    function_entries.sort_unstable();
-    function_entries.dedup();
-    infer_function_return_kinds(&code, &function_entries)?;
-    Ok(code)
+    called_entries.sort_unstable();
+    called_entries.dedup();
+    infer_function_return_kinds(&code, &called_entries)?;
+
+    let all_entries: Vec<usize> = regions.iter().map(|region| region.0).collect();
+    let value_returns = infer_function_return_kinds(&code, &all_entries)?;
+    let function_regions = regions.into_iter().map(|(entry, region_end, _name, parameters)| {
+        bytecode_v2::FunctionRegion {
+            entry,
+            end: region_end,
+            parameters,
+            return_kind: if value_returns.contains(&entry) {
+                bytecode_v2::ReturnKind::Value
+            } else {
+                bytecode_v2::ReturnKind::Void
+            },
+        }
+    }).collect();
+    let layout = bytecode_v2::ProgramLayout {
+        instruction_count: code.len(),
+        main_end,
+        functions: function_regions,
+    };
+    bytecode_v2::validate_layout(&layout)?;
+    Ok((code, layout))
 }
 
 #[derive(Debug, Clone, PartialEq)]
