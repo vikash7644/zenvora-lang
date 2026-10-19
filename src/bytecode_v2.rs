@@ -1075,12 +1075,12 @@ JUMP 2
     #[test]
     fn verifier_rejects_builtin_underflow_and_return_in_main() {
         let builtin_underflow = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nBUILTIN len 1\\nJUMP 2\\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN len 1\nJUMP 2\n",
         ).unwrap();
         assert!(verify_v2_file(&builtin_underflow).unwrap_err().contains("stack underflow"));
 
         let return_in_main = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nCODE\\nRETURN\\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nRETURN\n",
         ).unwrap();
         assert!(verify_v2_file(&return_in_main).unwrap_err().contains("return instruction outside a function"));
     }
@@ -1088,7 +1088,7 @@ JUMP 2
     #[test]
     fn verifier_rejects_conditional_function_fallthrough_and_bad_parameter_names() {
         let fallthrough = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nFUNCTION 1 4 1 value flag\\nCODE\\nJUMP 1\\nLOAD flag\\nJUMP_IF_FALSE 3\\nPUSH 1\\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 4 1 value flag\nCODE\nJUMP 1\nLOAD flag\nJUMP_IF_FALSE 3\nPUSH 1\n",
         ).unwrap();
         assert!(verify_v2_file(&fallthrough).unwrap_err().contains("function falls through"));
 
@@ -1099,9 +1099,9 @@ JUMP 2
     #[test]
     fn parser_and_serializer_reject_noncanonical_instruction_records() {
         let malformed = [
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nPUSH 1 extra\\nJUMP 2\\n",
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nBUILTIN unknown 0\\nJUMP 2\\n",
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nJUMP -1\\nJUMP 2\\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1 extra\nJUMP 2\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN unknown 0\nJUMP 2\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nJUMP -1\nJUMP 2\n",
         ];
         for source in malformed {
             let parsed = parse_v2_file(source).unwrap();
