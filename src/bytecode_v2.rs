@@ -696,4 +696,18 @@ mod tests {
         assert!(verify_v2_file(&file).unwrap_err().contains("return kind does not match"));
     }
 
+
+    #[test]
+    fn verifier_checks_disconnected_unreachable_components_with_empty_stack_policy() {
+        let unreachable_underflow = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nPRINT\nJUMP 3\n",
+        ).unwrap();
+        assert!(verify_v2_file(&unreachable_underflow).unwrap_err().contains("stack underflow"));
+
+        let unreachable_loop = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 1\nJUMP 3\n",
+        ).unwrap();
+        assert!(verify_v2_file(&unreachable_loop).is_ok());
+    }
+
 }
