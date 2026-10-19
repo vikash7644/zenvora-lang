@@ -3575,6 +3575,32 @@ show index_of(array(7, "x", true), false)
     }
 
     #[test]
+    fn v2_file_writer_creates_a_loadable_executable_file() {
+        let base = std::env::temp_dir().join(format!("zenvora-v2-smoke-{}", std::process::id()));
+        let source_path = base.with_extension("zv");
+        let bytecode_path = base.with_extension("zv2b");
+        std::fs::write(
+            &source_path,
+            "show double(21)\nfn double(value) {\n return value * 2\n}\n",
+        ).unwrap();
+
+        super::write_bytecode_v2(
+            source_path.to_str().unwrap(),
+            bytecode_path.to_str().unwrap(),
+        ).unwrap();
+
+        let encoded = std::fs::read_to_string(&bytecode_path).unwrap();
+        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+
+        std::fs::remove_file(source_path).unwrap();
+        std::fs::remove_file(bytecode_path).unwrap();
+    }
+
+    #[test]
     fn compiler_emits_v2_for_called_and_uncalled_functions() {
         let source = "show twice(21)\nfn twice(value) {\n return value * 2\n}\nfn never(value) {\n show value\n}\n";
         let (code, layout) = super::compile_with_layout(source).unwrap();
