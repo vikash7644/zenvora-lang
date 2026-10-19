@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn duplicate_content_length_receives_http_400_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Length: 2\\r\\ncontent-length: 2\\r\\n\\r\\n{}",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\ncontent-length: 2\r\n\r\n{}",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("duplicate Content-Length"));
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn transfer_encoding_receives_http_400_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\\r\\nHost: localhost\\r\\nTransfer-Encoding: chunked\\r\\nContent-Length: 2\\r\\n\\r\\n{}",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Length: 2\r\n\r\n{}",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("transfer-encoding is unsupported"));
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn oversized_content_length_receives_http_413_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Length: 999999\\r\\n\\r\\n",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999999\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 413 Payload Too Large"));
     }
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn malformed_json_receives_http_400_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Length: 1\\r\\n\\r\\nx",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\n\r\nx",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("body must be valid JSON"));
