@@ -1053,6 +1053,24 @@ fn pop_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, underflow: &
     Ok(value)
 }
 
+fn binding_size(name: &str, value: &Value) -> usize {
+    name.len().saturating_add(64).saturating_add(value_size(value))
+}
+
+fn binding_map_size(bindings: &HashMap<String, Value>) -> usize {
+    bindings.iter().map(|(name, value)| binding_size(name, value))
+        .fold(0usize, |total, size| total.saturating_add(size))
+}
+
+fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
+    let old_size = old.map(|value| binding_size(name, value)).unwrap_or(0);
+    let next = current.saturating_sub(old_size).saturating_add(binding_size(name, new));
+    if next > MAX_RUNTIME_STATE_BYTES {
+        return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
+    }
+    Ok(next)
+}
+
 fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let arg_len = args.len();
     let arity = |expected: usize| if arg_len == expected { Ok(()) } else { Err(format!("builtin '{name}' expects {expected} argument(s), got {arg_len}")) };
@@ -1529,6 +1547,7 @@ where
 {
     let mut stack: Vec<Value> = Vec::new();
     let mut stack_value_bytes = 0usize;
+    let mut runtime_state_bytes = 0usize;
     let mut vars: HashMap<String, Value> = HashMap::new();
     let mut globals: HashMap<String, Value> = HashMap::new();
     let mut pc = 0usize;
@@ -1551,14 +1570,29 @@ where
             Op::Load(name) => { let value = vars.get(name).or_else(|| globals.get(name)).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?; push_stack_value(&mut stack, &mut stack_value_bytes, value)?; },
             Op::Store(name) => {
                 let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                if vars.contains_key(name) { vars.insert(name.clone(), value); }
-                else if globals.contains_key(name) { globals.insert(name.clone(), value); }
-                else { return Err(format!("assignment to undefined variable '{name}'; use 'define' first")); }
+                if let Some(old) = vars.get(name) {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old), &value)?;
+                    vars.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                } else if let Some(old) = globals.get(name) {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old), &value)?;
+                    globals.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                } else {
+                    return Err(format!("assignment to undefined variable '{name}'; use 'define' first"));
+                }
             }
             Op::Declare(name) => {
                 let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                if call_stack.is_empty() { globals.insert(name.clone(), value); }
-                else { vars.insert(name.clone(), value); }
+                if call_stack.is_empty() {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, globals.get(name), &value)?;
+                    globals.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                } else {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, vars.get(name), &value)?;
+                    vars.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                }
             }
             Op::Print => match pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")? {
                 Value::Int(n) => output(format!("{n}")),
@@ -1569,8 +1603,9 @@ where
             Op::SetIndex(name) => {
                 let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading indexed value")?;
                 let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
-                let collection = vars.get(name).or_else(|| globals.get(name)).cloned()
+                let old_binding = vars.get(name).or_else(|| globals.get(name))
                     .ok_or_else(|| format!("undefined variable '{name}'"))?;
+                let collection = old_binding.clone();
                 let updated = match (collection, index) {
                     (Value::Array(mut items), Value::Int(index)) if index >= 0 => {
                         let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
@@ -1588,8 +1623,10 @@ where
                     _ => return Err("type error: indexed assignment expects an array or map".into()),
                 };
                 ensure_value_depth(&updated)?;
+                let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old_binding), &updated)?;
                 if vars.contains_key(name) { vars.insert(name.clone(), updated); }
                 else { globals.insert(name.clone(), updated); }
+                runtime_state_bytes = next;
             }
             Op::Index => {
                 let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
@@ -1662,22 +1699,33 @@ where
                 let mut values = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count { values.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading function arguments")?); }
                 values.reverse();
+                let added_bytes = params.iter().zip(values.iter()).map(|(name, value)| binding_size(name, value))
+                    .fold(0usize, |total, size| total.saturating_add(size));
+                let next_state_bytes = runtime_state_bytes.saturating_add(added_bytes);
+                if next_state_bytes > MAX_RUNTIME_STATE_BYTES {
+                    return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
+                }
                 let mut local_vars = HashMap::new();
                 for (name, value) in params.iter().zip(values) { local_vars.insert(name.clone(), value); }
                 let caller_vars = std::mem::replace(&mut vars, local_vars);
                 call_stack.push((pc + 1, caller_vars));
+                runtime_state_bytes = next_state_bytes;
                 pc = *target;
                 continue;
             }
             Op::Return => {
+                let local_bytes = binding_map_size(&vars);
                 let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
+                runtime_state_bytes = runtime_state_bytes.saturating_sub(local_bytes);
                 vars = caller_vars;
                 pc = return_pc;
                 continue;
             }
             Op::ReturnValue => {
                 let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow in return expression")?;
+                let local_bytes = binding_map_size(&vars);
                 let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
+                runtime_state_bytes = runtime_state_bytes.saturating_sub(local_bytes);
                 vars = caller_vars;
                 push_stack_value(&mut stack, &mut stack_value_bytes, value)?;
                 pc = return_pc;
@@ -1734,6 +1782,7 @@ const MAX_PARSE_NESTING: usize = 256;
 const MAX_VALUE_DEPTH: usize = 256;
 const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_STACK_VALUE_BYTES: usize = 16 * 1024 * 1024;
+const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
@@ -3528,6 +3577,16 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn live_runtime_bindings_enforce_aggregate_memory_budget() {
+        let mut source = format!("define giant := \"{}\"\\n", "x".repeat(super::MAX_BYTECODE_STRING_BYTES));
+        for index in 0..80 {
+            source.push_str(&format!("define copy_{index} := giant\\n"));
+        }
+        let error = execute(&source).unwrap_err();
+        assert!(error.contains("live variable/call-frame values exceed safety limit"), "{error}");
     }
 
     #[test]
