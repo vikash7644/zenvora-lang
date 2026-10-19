@@ -9,24 +9,39 @@ use sha2::{Digest, Sha256};
 use super::{compile, run_with_output};
 
 const TRANSFER_RULE: &str = r#"
-define sender_balance := 0
-define recipient_balance := 0
-define transfer_amount := 0
+# Chain transfer execution uses the same experimental contract DSL exposed to language users.
+# State is seeded from the current ledger snapshot before each deterministic execution.
+contract Transfer {
+    state sender_balance := 0
+    state recipient_balance := 0
+    state transfer_amount := 0
 
-if transfer_amount > 0 {
-    if sender_balance >= transfer_amount {
-        sender_balance := sender_balance - transfer_amount
-        recipient_balance := recipient_balance + transfer_amount
-        show "ACCEPTED"
-    } otherwise {
-        show "REJECTED"
+    action transfer(amount) {
+        if amount > 0 {
+            if sender_balance >= amount {
+                sender_balance := sender_balance - amount
+                recipient_balance := recipient_balance + amount
+                show "ACCEPTED"
+            } otherwise {
+                show "REJECTED"
+            }
+        } otherwise {
+            show "REJECTED"
+        }
     }
-} otherwise {
-    show "REJECTED"
+
+    view sender_balance_after() {
+        return sender_balance
+    }
+
+    view recipient_balance_after() {
+        return recipient_balance
+    }
 }
 
-show sender_balance
-show recipient_balance
+call transfer(transfer_amount)
+show sender_balance_after()
+show recipient_balance_after()
 "#;
 
 const LEDGER_VERSION: &str = "ZENVORA_LEDGER_V3";
@@ -377,9 +392,9 @@ impl ChainRuntime {
         let sender_before = self.balance(from);
         let recipient_before = self.balance(to);
         let source = TRANSFER_RULE
-            .replace("define sender_balance := 0", &format!("define sender_balance := {sender_before}"))
-            .replace("define recipient_balance := 0", &format!("define recipient_balance := {recipient_before}"))
-            .replace("define transfer_amount := 0", &format!("define transfer_amount := {amount}"));
+            .replace("state sender_balance := 0", &format!("state sender_balance := {sender_before}"))
+            .replace("state recipient_balance := 0", &format!("state recipient_balance := {recipient_before}"))
+            .replace("state transfer_amount := 0", &format!("state transfer_amount := {amount}"));
 
         let bytecode = compile(&source).map_err(|e| format!("Zenvora compile error: {e}"))?;
         let mut output = Vec::new();
