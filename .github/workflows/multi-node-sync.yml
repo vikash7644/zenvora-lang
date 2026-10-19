@@ -71,9 +71,10 @@ jobs:
           sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.zvb" "$chain_id" 1
           test "$("$cli" --chain-store-balance "$tmp/node-a.zvb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.zvb" "$chain_id" bob)"
 
-          # A mismatched chain ID must be rejected, not silently synchronized.
-          if "$cli" --chain-p2p-sync "$tmp/node-b.zvb" 71002 "127.0.0.1:$port"; then
-            echo "Node B incorrectly accepted a peer with a mismatched chain ID" >&2
+          # A genuinely separate node configured for another chain must reject node A.
+          "$cli" --chain-store-init "$tmp/node-c.zvb" 71002 "$tmp/validator.zvk" 1000000
+          if "$cli" --chain-p2p-sync "$tmp/node-c.zvb" 71002 "127.0.0.1:$port"; then
+            echo "Node C incorrectly accepted a peer with a mismatched chain ID" >&2
             exit 1
           fi
 
