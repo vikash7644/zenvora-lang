@@ -20,7 +20,7 @@ This section records checks observed on the current main branch. It does not cer
 - **Dependency reproducibility:** root `Cargo.lock` is committed. Main compiler CI uses `--locked` for check, Clippy, tests, examples, and release CLI build.
 - **Source/compiler safety:** source is capped at 16 MiB before contract lowering and compilation; each expression is capped at 1,000,000 tokens; compiled output is capped at 1,000,000 instructions. Lexer/parser errors report one-based line/column diagnostics, including Unicode-aware column tests.
 - **Runtime safety:** documented limits include 1 MiB strings, 16 MiB estimated value/operand-stack budgets, a 64 MiB estimated live-state budget, and bounded nesting. Indexed collection writes update in place; collection builtins avoid redundant clones where ownership permits.
-- **CI:** the latest main compiler run passed 207 compiler/VM tests plus 5 and 40 auxiliary tests (252 total), and release CLI smoke checks passed. The release workflow validates locked compilation, Clippy, tests, and release CLI before platform builds; it also exports a dependency inventory. Stable-tag publication is blocked unless the tag is explicitly marked as a prototype. Treat the cross-platform matrix as complete only after all four target jobs finish successfully.
+- **CI:** main compiler CI passed 207 compiler/VM tests plus 5 and 40 auxiliary tests (252 total), and release CLI smoke checks passed on commit `400a2e0`. The release workflow's locked validation and all four Linux/macOS/Windows platform builds also passed on that commit; the publish step was skipped. The validation job exports a dependency inventory. Evidence: [main CI](https://github.com/vikash7644/zenvora-lang/actions/runs/39273075615), [release matrix](https://github.com/vikash7644/zenvora-lang/actions/runs/39273075701). Stable-tag publication is blocked unless the tag is explicitly marked as a prototype.
 - **Bytecode v2:** the design records metadata/control-flow/stack verification, adversarial tests, round-trip coverage, and four prior successful 300-second fuzz campaigns. Do not repeat fuzzing without a code change that specifically warrants it. Independent security review and format freeze remain pending; bytecode v1 remains the default.
 - **Contract execution:** `docs/contract-execution-v1.md` is a design proposal, not implemented protocol behavior. Persistent state, atomic rollback, caller authorization, charged deterministic gas, replay, and state-root commitments are not production-ready.
 - **Repository boundary:** chain runtime/protocol/storage code and chain-specific workflows still exist in this repository. They must be migrated to a separate `bhyvorix-chain` repository only after the destination repository and its tests are verified; do not silently delete the existing implementation.
@@ -28,11 +28,10 @@ This section records checks observed on the current main branch. It does not cer
 
 ### Current exit blockers
 
-1. Complete and record the current four-platform release matrix.
-2. Finish the stable language reference and semantics for values, errors, functions, and control flow.
-3. Obtain independent security review before freezing bytecode v2.
-4. Keep contract persistence, authorization, gas, and replay claims gated on implementation and tests.
-5. Complete the Zenvora Lang / BHYVORIX Chain repository boundary migration with both repositories green.
+1. Finish the stable language reference and semantics for values, errors, functions, and control flow.
+2. Obtain independent security review before freezing bytecode v2.
+3. Keep contract persistence, authorization, gas, and replay claims gated on implementation and tests.
+4. Complete the Zenvora Lang / BHYVORIX Chain repository boundary migration with both repositories green.
 
 ## Roadmap phases
 
