@@ -274,6 +274,108 @@ mod tests {
     }
 
     #[test]
+    fn block_candidate_rejects_nonce_gap_and_insufficient_balance_atomically() {
+        use super::execute_block_candidate;
+
+        let key = SigningKey::from_bytes(&[75; 32]);
+        let mut runtime = funded_runtime(&key);
+        let original_root = runtime.state_root();
+        let genesis = genesis_header(&runtime);
+        let parent_hash = genesis.header_hash().unwrap();
+
+        let valid = signed_transfer(&key, 0, 125);
+        let mut header = candidate_header(
+            &runtime, &valid, &key, 1, parent_hash, 1_800_000_001,
+        );
+
+        let mut nonce_gap = signed_transfer(&key, 1, 125);
+        nonce_gap.transaction.signature = key
+            .sign(&nonce_gap.transaction.signing_bytes().unwrap())
+            .to_bytes().to_vec();
+        header.transaction_root =
+            transaction_merkle_root(&[nonce_gap.transaction.clone()]).unwrap();
+        let nonce_error = execute_block_candidate(
+            &mut runtime, &header, &[nonce_gap], 71, Some(&genesis),
+        ).unwrap_err();
+        assert!(nonce_error.contains("nonce"), "unexpected nonce error: {nonce_error}");
+        assert_eq!(runtime.state_root(), original_root);
+        assert_eq!(runtime.balance("bob"), 0);
+
+        let mut overdraw = signed_transfer(&key, 0, 998);
+        overdraw.transaction.signature = key
+            .sign(&overdraw.transaction.signing_bytes().unwrap())
+            .to_bytes().to_vec();
+        header.transaction_root =
+            transaction_merkle_root(&[overdraw.transaction.clone()]).unwrap();
+        let balance_error = execute_block_candidate(
+            &mut runtime, &header, &[overdraw], 71, Some(&genesis),
+        ).unwrap_err();
+        assert!(
+            balance_error.contains("insufficient balance"),
+            "unexpected balance/fee error: {balance_error}"
+        );
+        assert_eq!(runtime.state_root(), original_root);
+        assert_eq!(runtime.balance("bob"), 0);
+        assert_eq!(runtime.account_nonce(&valid.transaction.sender), 0);
+    }
+
+    #[test]
+    fn block_candidate_rejects_each_mismatched_commitment_root() {
+        use super::execute_block_candidate;
+
+        let key = SigningKey::from_bytes(&[76; 32]);
+        let mut runtime = funded_runtime(&key);
+        let original_root = runtime.state_root();
+        let genesis = genesis_header(&runtime);
+        let envelope = signed_transfer(&key, 0, 125);
+        let base_header = candidate_header(
+            &runtime,
+            &envelope,
+            &key,
+            1,
+            genesis.header_hash().unwrap(),
+            1_800_000_001,
+        );
+
+        let mut bad_transaction_root = base_header.clone();
+        bad_transaction_root.transaction_root[0] ^= 1;
+        let tx_error = execute_block_candidate(
+            &mut runtime,
+            &bad_transaction_root,
+            &[envelope.clone()],
+            71,
+            Some(&genesis),
+        ).unwrap_err();
+        assert!(tx_error.contains("transaction root"));
+        assert_eq!(runtime.state_root(), original_root);
+
+        let mut bad_receipt_root = base_header.clone();
+        bad_receipt_root.receipt_root[0] ^= 1;
+        let receipt_error = execute_block_candidate(
+            &mut runtime,
+            &bad_receipt_root,
+            &[envelope.clone()],
+            71,
+            Some(&genesis),
+        ).unwrap_err();
+        assert!(receipt_error.contains("receipt root"));
+        assert_eq!(runtime.state_root(), original_root);
+
+        let mut bad_state_root = base_header;
+        bad_state_root.state_root[0] ^= 1;
+        let state_error = execute_block_candidate(
+            &mut runtime,
+            &bad_state_root,
+            &[envelope],
+            71,
+            Some(&genesis),
+        ).unwrap_err();
+        assert!(state_error.contains("state root"));
+        assert_eq!(runtime.state_root(), original_root);
+        assert_eq!(runtime.balance("bob"), 0);
+    }
+
+    #[test]
     fn block_parent_linkage_and_chain_id_are_enforced() {
         let key = SigningKey::from_bytes(&[73; 32]);
         let runtime = funded_runtime(&key);
