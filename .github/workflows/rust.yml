@@ -92,7 +92,12 @@ jobs:
         shell: bash
         run: |
           output="$(cargo run -- --run-bytecode /tmp/zenvora-functions.zv2b)"
-          expected=
+          printf -v expected '2026\n1\n2\n3\n42'
+          if [[ "$output" != "$expected" ]]; then
+            printf 'Unexpected Bytecode v2 output:\n%s\n' "$output"
+            exit 1
+          fi
+
       - name: Verify CLI version
         run: cargo run -- --version
 
