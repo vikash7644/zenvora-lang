@@ -67,7 +67,10 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                         });
                     }
                 }
-                content_length = Some(length.ok_or("Content-Length is required")?);
+                content_length = Some(match length {
+                    Some(length) => length,
+                    None => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"Content-Length is required"})),
+                });
                 header_end = Some(pos + 4);
                 if content_length.unwrap_or(0) > MAX_REQUEST_BYTES {
                     return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"request exceeds 64 KiB"}));
@@ -121,9 +124,43 @@ fn respond(stream: &mut TcpStream, status: &str, value: &Value) -> Result<(), St
 mod tests {
     use super::*;
 
+    fn response_for(raw_request: &str) -> String {
+        use std::net::Shutdown;
+        use std::thread;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        let worker = thread::spawn(move || handle(&mut server));
+        client.write_all(raw_request.as_bytes()).unwrap();
+        client.shutdown(Shutdown::Write).unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        worker.join().unwrap().unwrap();
+        response
+    }
+
     #[test]
     fn compiler_api_source_limit_is_reasonable() {
         assert!(MAX_SOURCE_BYTES < MAX_REQUEST_BYTES);
         assert!(MAX_SOURCE_BYTES >= 1024);
+    }
+
+    #[test]
+    fn malformed_content_length_receives_http_400_response() {
+        let response = response_for(
+            "POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: nope\r\n\r\n",
+        );
+        assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(response.contains("invalid Content-Length"));
+    }
+
+    #[test]
+    fn missing_content_length_receives_http_400_response() {
+        let response = response_for(
+            "POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n",
+        );
+        assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(response.contains("Content-Length is required"));
     }
 }
