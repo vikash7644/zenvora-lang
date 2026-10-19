@@ -229,7 +229,7 @@ pub fn serialize_v2_file(file: &ParsedV2File) -> Result<String, String> {
     }
     output.push_str("CODE\n");
     for instruction in &file.instructions {
-        if instruction.trim().is_empty() || instruction.contains(['\n', '\r']) {
+        if instruction.trim().is_empty() || (instruction.contains('\n') || instruction.contains('\r')) {
             return Err("bytecode v2: invalid instruction record".into());
         }
         output.push_str(instruction);
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn parses_and_round_trips_metadata_and_opaque_code() {
-        let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value amount\nFUNCTION 4 6 0 void -\nCODE\nPUSH 7\nHALT\nRET\nNOP\n";
+        let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value amount\nFUNCTION 4 6 0 void -\nCODE\nPUSH 7\nHALT\nRET\nNOP\nRET\nNOP\n";
         let parsed = parse_v2_file(source).unwrap();
         assert_eq!(parsed.layout.main_end, 2);
         assert_eq!(parsed.layout.functions[0].parameters, vec!["amount"]);
