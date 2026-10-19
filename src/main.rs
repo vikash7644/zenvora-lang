@@ -1008,10 +1008,30 @@ fn value_depth(value: &Value) -> usize {
     }
 }
 
+fn value_size(value: &Value) -> usize {
+    match value {
+        Value::Int(_) => std::mem::size_of::<i64>(),
+        Value::Bool(_) => std::mem::size_of::<bool>(),
+        Value::Str(text) => text.len(),
+        Value::Array(items) => items.iter().map(value_size).fold(
+            items.len().saturating_mul(std::mem::size_of::<Value>()),
+            |total, size| total.saturating_add(size),
+        ),
+        Value::Map(items) => items.iter().map(|(key, value)| key.len().saturating_add(value_size(value))).fold(
+            items.len().saturating_mul(64),
+            |total, size| total.saturating_add(size),
+        ),
+    }
+}
+
 fn ensure_value_depth(value: &Value) -> Result<(), String> {
     let depth = value_depth(value);
     if depth > MAX_VALUE_DEPTH {
         return Err(format!("value nesting exceeds safety limit ({MAX_VALUE_DEPTH} levels)"));
+    }
+    let size = value_size(value);
+    if size > MAX_VALUE_BYTES {
+        return Err(format!("value exceeds memory safety limit ({MAX_VALUE_BYTES} bytes)"));
     }
     Ok(())
 }
@@ -1694,6 +1714,7 @@ where
 const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_PARSE_NESTING: usize = 256;
 const MAX_VALUE_DEPTH: usize = 256;
+const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
@@ -3488,6 +3509,14 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn runtime_rejects_oversized_aggregate_collection_values() {
+        let large_text = super::Value::Str("x".repeat(super::MAX_BYTECODE_STRING_BYTES));
+        let values = vec![large_text; super::MAX_VALUE_BYTES / super::MAX_BYTECODE_STRING_BYTES + 1];
+        let error = super::builtin("array", values).unwrap_err();
+        assert!(error.contains("value exceeds memory safety limit"), "{error}");
     }
 
     #[test]
