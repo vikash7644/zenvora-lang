@@ -121,11 +121,11 @@ enum Op {
     Eq, Ne, Lt, Le, Gt, Ge, Index, SetIndex(String), JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
-struct Parser { tokens: Vec<Token>, columns: Vec<usize>, pos: usize, code: Vec<Op> }
+struct Parser { tokens: Vec<Token>, columns: Vec<usize>, pos: usize, nesting_depth: usize, error_column_override: Option<usize>, code: Vec<Op> }
 impl Parser {
     fn peek(&self) -> &Token { &self.tokens[self.pos] }
     fn take(&mut self) -> Token { let t = self.tokens[self.pos].clone(); self.pos += 1; t }
-    fn error_column(&self) -> usize { self.columns[self.pos.saturating_sub(1).min(self.columns.len() - 1)] }
+    fn error_column(&self) -> usize { self.error_column_override.unwrap_or(self.columns[self.pos.saturating_sub(1).min(self.columns.len() - 1)]) }
     fn current_column(&self) -> usize { self.columns[self.pos.min(self.columns.len() - 1)] }
 
     fn expression(&mut self) -> Result<(), String> {
@@ -203,6 +203,17 @@ impl Parser {
     }
 
     fn factor(&mut self) -> Result<(), String> {
+        if self.nesting_depth >= MAX_PARSE_NESTING {
+            self.error_column_override = Some(self.current_column());
+            return Err(format!("parser nesting exceeds safety limit ({MAX_PARSE_NESTING})"));
+        }
+        self.nesting_depth += 1;
+        let result = self.factor_inner();
+        self.nesting_depth -= 1;
+        result
+    }
+
+    fn factor_inner(&mut self) -> Result<(), String> {
         match self.take() {
             Token::Number(n) => self.code.push(Op::Push(n)),
             Token::String(value) => self.code.push(Op::PushString(value)),
@@ -325,7 +336,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
 
         if let Some(condition) = line.strip_prefix("if ").and_then(|s| s.strip_suffix('{')) {
             let (tokens, columns) = lex_with_columns(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
-            let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
+            let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
             parser.condition().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), format!("column {}: {e}", parser.error_column()))))?;
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), format!("column {}: unexpected token {:?}", parser.current_column(), parser.peek()))));
@@ -339,7 +350,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
 
         if let Some(condition) = line.strip_prefix("repeat ").and_then(|s| s.strip_suffix('{')) {
             let (tokens, columns) = lex_with_columns(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
-            let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
+            let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
             parser.condition().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), format!("column {}: {e}", parser.error_column()))))?;
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), format!("column {}: unexpected token {:?}", parser.current_column(), parser.peek()))));
@@ -364,7 +375,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             let args: Vec<&str> = if args_text.trim().is_empty() { Vec::new() } else { args };
             for arg in &args {
                 let (tokens, columns) = lex_with_columns(arg.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, arg.trim(), e)))?;
-                let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
+                let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
                 parser.expression().map_err(|e| format!("line {}: invalid function argument: {}", line_no + 1, with_source_column(raw, line, arg.trim(), format!("column {}: {e}", parser.error_column()))))?;
                 if parser.peek() != &Token::End {
                     return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, arg.trim(), format!("column {}: unexpected token in function argument {:?}", parser.current_column(), parser.peek()))));
@@ -377,7 +388,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         if line == "return" { code.push(Op::Return); continue; }
         if let Some(expr) = line.strip_prefix("return ") {
             let (tokens, columns) = lex_with_columns(expr.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, expr.trim(), e)))?;
-            let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
+            let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
             parser.expression().map_err(|e| format!("line {}: invalid return expression: {}", line_no + 1, with_source_column(raw, line, expr.trim(), format!("column {}: {e}", parser.error_column()))))?;
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, expr.trim(), format!("column {}: unexpected token in return expression {:?}", parser.current_column(), parser.peek()))));
@@ -463,14 +474,14 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                         return Err(format!("line {}: missing value in indexed assignment", line_no + 1));
                     }
                     let (index_tokens, index_columns) = lex_with_columns(index_expr.trim()).map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), e)))?;
-                    let mut index_parser = Parser { tokens: index_tokens, columns: index_columns, pos: 0, code: Vec::new() };
+                    let mut index_parser = Parser { tokens: index_tokens, columns: index_columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
                     index_parser.expression().map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), format!("column {}: {e}", index_parser.error_column()))))?;
                     if index_parser.peek() != &Token::End {
                         return Err(format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), format!("column {}: unexpected token in index {:?}", index_parser.current_column(), index_parser.peek()))));
                     }
                     append_code(&mut code, index_parser.code);
                     let (value_tokens, value_columns) = lex_with_columns(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
-                    let mut value_parser = Parser { tokens: value_tokens, columns: value_columns, pos: 0, code: Vec::new() };
+                    let mut value_parser = Parser { tokens: value_tokens, columns: value_columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
                     value_parser.expression().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: {e}", value_parser.error_column()))))?;
                     if value_parser.peek() != &Token::End {
                         return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: unexpected token in indexed assignment {:?}", value_parser.current_column(), value_parser.peek()))));
@@ -505,7 +516,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             return Err(format!("line {}: invalid variable name", line_no + 1));
         }
         let (tokens, columns) = lex_with_columns(statement.1).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, statement.1, e)))?;
-        let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
+        let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
         parser.expression().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, statement.1, format!("column {}: {e}", parser.error_column()))))?;
         if parser.peek() != &Token::End {
             return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, statement.1, format!("column {}: unexpected token {:?}", parser.current_column(), parser.peek()))));
@@ -1657,6 +1668,7 @@ where
 
 
 const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
+const MAX_PARSE_NESTING: usize = 256;
 const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
@@ -3091,6 +3103,17 @@ mod tests {
     fn repeat_condition_lexer_columns_include_source_prefix() {
         let err = compile_core("   repeat count < @ {").unwrap_err();
         assert!(err.contains("line 1: column 19: unexpected character"), "{err}");
+    }
+
+    #[test]
+    fn parser_rejects_excessive_expression_nesting_without_overflowing_the_stack() {
+        let nested = format!("show {}1{}\\n", "(".repeat(super::MAX_PARSE_NESTING + 8), ")".repeat(super::MAX_PARSE_NESTING + 8));
+        let error = compile_core(&nested).unwrap_err();
+        assert!(error.contains("parser nesting exceeds safety limit"), "{error}");
+
+        let unary = format!("show {}1\\n", "-".repeat(super::MAX_PARSE_NESTING + 8));
+        let error = compile_core(&unary).unwrap_err();
+        assert!(error.contains("parser nesting exceeds safety limit"), "{error}");
     }
 
     #[test]
