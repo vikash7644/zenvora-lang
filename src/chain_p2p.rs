@@ -942,7 +942,7 @@ mod tests {
             stream.write_all(&[0, 0]).unwrap();
         });
         let mut stream = TcpStream::connect(address).unwrap();
-        let error = super::super::chain_p2p::read_frame(&mut stream).unwrap_err();
+        let error = super::read_frame(&mut stream).unwrap_err();
         assert!(error.contains("cannot read peer frame length"));
         server.join().unwrap();
 
@@ -954,7 +954,7 @@ mod tests {
             stream.write_all(&[1, 2]).unwrap();
         });
         let mut stream = TcpStream::connect(address).unwrap();
-        let error = super::super::chain_p2p::read_frame(&mut stream).unwrap_err();
+        let error = super::read_frame(&mut stream).unwrap_err();
         assert!(error.contains("cannot read peer frame"));
         server.join().unwrap();
     }
