@@ -14,7 +14,8 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 
 - [x] Add regression tests for malformed instruction records, invalid jump operands, builtin stack underflow, `RETURN` in main, function fallthrough, invalid parameter identifiers, and parser/serializer round trips.
 - [x] Add source-vs-bytecode-v2 execution comparison tests for collections/builtins/functions and branch/loop output.
-- [x] Fix escaped newline sequences in the latest regression fixtures (commit `b340e2a02240943836d4e2325edb7ea96ade5445`).
+- [x] Fix escaped newline sequences in the regression fixtures (commit `b340e2a02240943836d4e2325edb7ea96ade5445`).
+- [x] Correct both source-vs-v2 regression tests to call the v2 decoder, not the legacy v1 decoder (commit `38b701ad9758f9a5fd85dc2a6ee20ed56ce1d67e`).
 - [ ] Run and inspect the **latest** main compiler/VM CI on the exact latest commit.
 - [ ] Run and inspect the **latest** Bytecode v2 fuzz workflow on the exact latest commit.
 - [ ] Fix every compile, Clippy, unit-test, fuzz, or example failure; rerun after fixes.
@@ -22,7 +23,7 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 - [ ] Review the differential suite for edge cases (errors, nested calls, strings, collections, short-circuit branches, loops, and function returns).
 - [ ] Do not call Bytecode v2 stable or production-safe; its format is experimental.
 
-Latest status when audited: GitHub Actions for commit `b340e2a` were **queued**, not passed. Queued runs are not evidence of test success.
+Latest status when audited: the newest GitHub Actions run for commit `38b701a` was **queued**, not passed. The Actions API had not produced job records yet, so there is no test result to report. Queued runs are not evidence of test success.
 
 ## Language feature and release checklist
 
