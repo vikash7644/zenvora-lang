@@ -3660,6 +3660,25 @@ mod tests {
     }
 
     #[test]
+    fn owned_collection_builtins_preserve_original_bindings() {
+        let source = "define numbers := array(10, 20, 30)\nshow reverse(numbers)\nshow numbers\nshow get(numbers, 1)\ndefine grown := push(numbers, 40)\nshow len(grown)\nshow len(numbers)\ndefine profile := map(\"name\", \"Zenvora\", \"level\", 6)\ndefine updated := put(profile, \"level\", 7)\nshow get(updated, \"level\")\nshow get(profile, \"level\")\nshow get(profile, \"name\")\nshow len(keys(profile))\nshow get(values(profile), 0)\nshow get(profile, \"level\")\n";
+        let output = execute(source).unwrap();
+        assert_eq!(output, vec![
+            "[30, 20, 10]",
+            "[10, 20, 30]",
+            "20",
+            "4",
+            "3",
+            "7",
+            "6",
+            "Zenvora",
+            "2",
+            "6",
+            "6",
+        ]);
+    }
+
+    #[test]
     fn live_runtime_bindings_enforce_aggregate_memory_budget() {
         let mut source = format!("define giant := \"{}\"\n", "x".repeat(super::MAX_BYTECODE_STRING_BYTES));
         for index in 0..80 {
