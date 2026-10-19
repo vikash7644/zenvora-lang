@@ -3078,6 +3078,18 @@ mod tests {
     }
 
     #[test]
+    fn parser_errors_include_one_based_source_columns() {
+        let err = compile_core("   show 1 +").unwrap_err();
+        assert!(err.contains("line 1: column 12: expected a number"), "{err}");
+
+        let err = compile_core("show foo(1, )").unwrap_err();
+        assert!(err.contains("line 1: column 13: invalid function argument"), "{err}");
+
+        let err = compile_core("show 1 2").unwrap_err();
+        assert!(err.contains("line 1: column 8: unexpected token"), "{err}");
+    }
+
+    #[test]
     fn lexer_errors_include_one_based_source_columns() {
         assert!(lex("show @").unwrap_err().contains("column 6: unexpected character"));
         assert!(lex("show \"bad\\q\"").unwrap_err().contains("column 11: unsupported string escape"));
