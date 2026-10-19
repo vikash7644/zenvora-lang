@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Run read-only RPC checks when configured
