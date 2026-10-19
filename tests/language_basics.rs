@@ -315,3 +315,48 @@ fn unterminated_function_reports_declaration_line() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("line 2: missing closing brace for function 'unfinished'"), "unexpected stderr: {stderr}");
 }
+
+#[test]
+fn contract_transfer_checks_amount_and_balance_without_partial_updates() {
+    let source = r#"
+contract DemoToken {
+    state alice := 100
+    state bob := 0
+
+    action transfer(amount) {
+        if amount > 0 {
+            if alice >= amount {
+                alice := alice - amount
+                bob := bob + amount
+                show "TRANSFER_ACCEPTED"
+            } otherwise {
+                show "TRANSFER_REJECTED_INSUFFICIENT_BALANCE"
+            }
+        } otherwise {
+            show "TRANSFER_REJECTED_INVALID_AMOUNT"
+        }
+    }
+
+    view alice_balance() {
+        return alice
+    }
+
+    view bob_balance() {
+        return bob
+    }
+}
+
+call transfer(30)
+call transfer(1000)
+call transfer(0)
+call transfer(-1)
+show alice_balance()
+show bob_balance()
+"#;
+    let output = run_program(source);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "TRANSFER_ACCEPTED\\nTRANSFER_REJECTED_INSUFFICIENT_BALANCE\\nTRANSFER_REJECTED_INVALID_AMOUNT\\nTRANSFER_REJECTED_INVALID_AMOUNT\\n70\\n30\\n"
+    );
+}
