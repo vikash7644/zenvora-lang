@@ -1,7 +1,7 @@
 # Zenvora Master Roadmap
 
-**Status date:** 2026-10-18  
-**Current milestone:** Zenvora Lang v0.6.0 prototype  
+**Status date:** 2026-10-19  
+**Current milestone:** Zenvora Lang v0.8.0 prototype (experimental; not production-ready)  
 **Principle:** Build, test, and document each layer before depending on it. This roadmap is a plan, not a claim that future milestones are already complete.
 
 ## The long-term vision
@@ -11,6 +11,18 @@ Zenvora aims to grow into an independent technology stack: a programming languag
 ## Where we are now
 
 The repository has a Rust-based compiler/VM prototype, a versioned text bytecode format, basic control flow and functions, a CLI, documentation, examples, and automated checks. The current VM is an early stack-based runtime. The bytecode format is readable text, not a compact raw-binary encoding. The browser playground is a limited JavaScript demo and is not the Rust compiler.
+
+### Verified progress update — 2026-10-19
+
+This section supersedes the stale milestone label above the older phase checklist; it records observed repository evidence and does not imply production readiness.
+
+- **Release label:** README and changelog identify a v0.8.0 prototype pre-release. Keep this as a prototype label, not a claim that every roadmap phase is complete.
+- **Collections / standard helpers / modules / contract syntax:** examples and implementation files exist. Their presence is not proof that every feature is complete or production-safe; continue validating behavior against tests and the language reference.
+- **Bytecode v2:** the design document records experimental text loading, metadata validation, control-flow and stack verification, VM execution, opt-in emission, adversarial tests, round-trip coverage, and four successful 300-second fuzz campaigns. Independent security review remains pending, and bytecode v1 remains the default. Treat Phase 2 as substantially implemented but not security-reviewed/frozen.
+- **CI:** the latest main-branch CI before the 2026-10-19 merge passed. PR #36 added compiler-API request-framing regressions; its four checks passed and it was merged as commit 2a73ee288b084d380e818e24a0df7998b5014cc4. The post-merge main CI was queued when this status was written; do not count that run as passing until it completes.
+- **Compiler API:** the HTTP endpoint is loopback-only development tooling, not a public hosted compiler service.
+- **Chain integration:** chain protocol/runtime/storage files and local smoke tests exist, but comments and docs describe a local execution prototype—not a production consensus network, live mainnet, wallet, or native coin.
+- **Next priorities:** verify post-merge CI; improve and test source diagnostics and runtime edge cases; align the language reference, README, changelog, and roadmap; then design binary bytecode only after the text format and CLI behavior are stable. Keep independent security review as a release gate.
 
 ## Roadmap phases
 
