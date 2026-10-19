@@ -364,7 +364,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn test_store() -> (String, String) {
-        let path = std::env::temp_dir().join(format!("zenvora-rpc-{}.zvb", std::process::id()));
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("zenvora-rpc-{}-{unique}.zvb", std::process::id()));
         let path_text = path.to_string_lossy().to_string();
         let mut allocations = BTreeMap::new();
         allocations.insert("alice".to_string(), 100);
