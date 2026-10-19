@@ -338,6 +338,9 @@ fn with_source_column(raw_line: &str, trimmed_line: &str, expression: &str, erro
 }
 
 fn compile_core(source: &str) -> Result<Vec<Op>, String> {
+    if source.len() > MAX_SOURCE_BYTES {
+        return Err(format!("source exceeds safety limit ({MAX_SOURCE_BYTES} bytes)"));
+    }
     let mut code = Vec::new();
     let mut blocks: Vec<BlockFrame> = Vec::new();
 
@@ -1794,6 +1797,7 @@ where
 
 
 const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
+const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
 const MAX_VALUE_DEPTH: usize = 256;
@@ -3271,6 +3275,13 @@ mod tests {
 
         let err = compile_core("repeat count < {\n}\n").unwrap_err();
         assert!(err.contains("line 1: column 15: expected a number"), "{err}");
+    }
+
+    #[test]
+    fn compiler_rejects_source_over_byte_limit_before_lexing() {
+        let source = " ".repeat(super::MAX_SOURCE_BYTES + 1);
+        let error = super::compile_core(&source).unwrap_err();
+        assert!(error.contains("source exceeds safety limit"), "{error}");
     }
 
     #[test]
