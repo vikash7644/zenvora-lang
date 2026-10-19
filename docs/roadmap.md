@@ -14,36 +14,46 @@ The repository has a Rust-based compiler/VM prototype, a versioned text bytecode
 
 ### Verified progress update — 2026-10-19
 
-This section supersedes the stale milestone label above the older phase checklist; it records observed repository evidence and does not imply production readiness.
+This section records checks observed on the current main branch. It does not certify production readiness.
 
-- **Release label:** README and changelog identify a v0.8.0 prototype pre-release. Keep this as a prototype label, not a claim that every roadmap phase is complete.
-- **Collections / standard helpers / modules / contract syntax:** examples and implementation files exist. Their presence is not proof that every feature is complete or production-safe; continue validating behavior against tests and the language reference.
-- **Bytecode v2:** the design document records experimental text loading, metadata validation, control-flow and stack verification, VM execution, opt-in emission, adversarial tests, round-trip coverage, and four successful 300-second fuzz campaigns. Independent security review remains pending, and bytecode v1 remains the default. Treat Phase 2 as substantially implemented but not security-reviewed/frozen.
-- **CI:** the latest main-branch CI before the 2026-10-19 merge passed. PR #36 added compiler-API request-framing regressions; its four checks passed and it was merged as commit 2a73ee288b084d380e818e24a0df7998b5014cc4. The post-merge main CI was queued when this status was written; do not count that run as passing until it completes.
+- **Release label:** the project remains v0.8.0 prototype/experimental. Do not describe it as a stable v1.0 language or production smart-contract runtime.
+- **Dependency reproducibility:** root `Cargo.lock` is committed. Main compiler CI uses `--locked` for check, Clippy, tests, examples, and release CLI build.
+- **Source/compiler safety:** source is capped at 16 MiB before contract lowering and compilation; each expression is capped at 1,000,000 tokens; compiled output is capped at 1,000,000 instructions. Lexer/parser errors report one-based line/column diagnostics, including Unicode-aware column tests.
+- **Runtime safety:** documented limits include 1 MiB strings, 16 MiB estimated value/operand-stack budgets, a 64 MiB estimated live-state budget, and bounded nesting. Indexed collection writes update in place; collection builtins avoid redundant clones where ownership permits.
+- **CI:** the latest main compiler run passed 207 compiler/VM tests plus 5 and 40 auxiliary tests (252 total), and release CLI smoke checks passed. The release workflow validates locked compilation, Clippy, tests, and release CLI before platform builds; it also exports a dependency inventory. Stable-tag publication is blocked unless the tag is explicitly marked as a prototype. Treat the cross-platform matrix as complete only after all four target jobs finish successfully.
+- **Bytecode v2:** the design records metadata/control-flow/stack verification, adversarial tests, round-trip coverage, and four prior successful 300-second fuzz campaigns. Do not repeat fuzzing without a code change that specifically warrants it. Independent security review and format freeze remain pending; bytecode v1 remains the default.
+- **Contract execution:** `docs/contract-execution-v1.md` is a design proposal, not implemented protocol behavior. Persistent state, atomic rollback, caller authorization, charged deterministic gas, replay, and state-root commitments are not production-ready.
+- **Repository boundary:** chain runtime/protocol/storage code and chain-specific workflows still exist in this repository. They must be migrated to a separate `bhyvorix-chain` repository only after the destination repository and its tests are verified; do not silently delete the existing implementation.
 - **Compiler API:** the HTTP endpoint is loopback-only development tooling, not a public hosted compiler service.
-- **Chain integration:** chain protocol/runtime/storage files and local smoke tests exist, but comments and docs describe a local execution prototype—not a production consensus network, live mainnet, wallet, or native coin.
-- **Next priorities:** verify post-merge CI; improve and test source diagnostics and runtime edge cases; align the language reference, README, changelog, and roadmap; then design binary bytecode only after the text format and CLI behavior are stable. Keep independent security review as a release gate.
+
+### Current exit blockers
+
+1. Complete and record the current four-platform release matrix.
+2. Finish the stable language reference and semantics for values, errors, functions, and control flow.
+3. Obtain independent security review before freezing bytecode v2.
+4. Keep contract persistence, authorization, gas, and replay claims gated on implementation and tests.
+5. Complete the Zenvora Lang / BHYVORIX Chain repository boundary migration with both repositories green.
 
 ## Roadmap phases
 
 ### Phase 1 — Stabilize the language and VM (next)
 
 - [ ] Make break, continue, return, recursion, and nested control flow behave consistently; add regression tests for every discovered bug.
-- [ ] Improve parser diagnostics with source file, line, column, and a helpful error message.
+- [x] Improve lexer/parser diagnostics with one-based line/column and Unicode-aware column regression tests (file-name context still depends on the caller).
 - [ ] Define language behavior for values, operators, function arguments, return values, and errors.
-- [ ] Add tests for malformed programs, huge inputs, invalid identifiers, and boundary cases.
-- [ ] Review and document VM limits; make runtime errors safe and understandable.
-- [ ] Keep CI running cargo check, cargo test, and all examples.
+- [x] Add tests for malformed programs, oversized source/token/instruction inputs, invalid identifiers, and boundary cases.
+- [x] Document VM limits and return bounded, deterministic runtime errors for the covered resource violations.
+- [x] CI runs locked compiler checks, Clippy, tests, examples, release CLI smoke checks, and release builds.
 
 **Exit criteria:** CI passes, documented language behavior matches tests, and invalid programs fail cleanly rather than crashing or hanging.
 
 ### Phase 2 — Secure bytecode verification
 
-- [ ] Define the bytecode instruction set and operand formats precisely.
-- [ ] Add a verifier that validates every instruction, constant, function entry, jump target, and control-flow path before execution.
-- [ ] Validate stack behavior and reject malformed or hostile bytecode before it runs.
-- [ ] Add fuzz/property-style tests for the parser, bytecode loader, verifier, and VM.
-- [ ] Document security boundaries and remaining limitations.
+- [x] Define the text bytecode v1/v2 instruction sets and operand formats in the bytecode design documents.
+- [x] Implement bytecode verification for instruction structure, function entries, jumps, and control-flow/stack invariants.
+- [x] Validate stack behavior and reject covered malformed bytecode before execution.
+- [x] Add adversarial and fuzz/property-style coverage; four prior 300-second fuzz campaigns completed successfully.
+- [x] Document bytecode security boundaries and remaining limitations; independent security review remains pending.
 
 **Exit criteria:** The VM refuses invalid bytecode before execution, with automated tests covering invalid instructions, jumps, function entries, and stack errors.
 
