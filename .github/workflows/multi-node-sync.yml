@@ -71,6 +71,16 @@ jobs:
           sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.zvb" "$chain_id" 1
           test "$("$cli" --chain-store-balance "$tmp/node-a.zvb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.zvb" "$chain_id" bob)"
 
+          # Stop the peer process, then reopen both persisted stores in fresh CLI processes.
+          # Replay verification after process shutdown exercises disk-backed restart recovery.
+          kill "$peer_pid"
+          wait "$peer_pid" 2>/dev/null || true
+          peer_pid=""
+          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-a.zvb" "$chain_id" 1
+          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.zvb" "$chain_id" 1
+          test "$("$cli" --chain-store-balance "$tmp/node-a.zvb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.zvb" "$chain_id" bob)"
+          echo "PASS: both stores survive peer shutdown and fresh-process replay verification."
+
           # A genuinely separate node configured for another chain must reject node A.
           "$cli" --chain-store-init "$tmp/node-c.zvb" 71002 "$tmp/validator.zvk" 1000000
           if "$cli" --chain-p2p-sync "$tmp/node-c.zvb" 71002 "127.0.0.1:$port"; then
