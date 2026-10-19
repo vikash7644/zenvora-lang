@@ -344,6 +344,9 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     for (line_no, raw) in source.lines().enumerate() {
         let line = raw.trim().trim_end_matches(';').trim();
         if line.is_empty() || line.starts_with('#') { continue; }
+        if code.len() >= MAX_BYTECODE_INSTRUCTIONS {
+            return Err(format!("line {}: compiled instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})", line_no + 1));
+        }
 
         if let Some(condition) = line.strip_prefix("if ").and_then(|s| s.strip_suffix('{')) {
             let (tokens, columns) = lex_with_columns(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
