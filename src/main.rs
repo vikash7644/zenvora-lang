@@ -3453,7 +3453,9 @@ show index_of(array(7, "x", true), false)
     #[test]
     fn bytecode_v2_loader_verifies_and_executes_metadata_driven_function() {
         let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 8 1 value amount\nCODE\nPUSH 41\nCALL 4 1\nPRINT\nJUMP 4\nLOAD amount\nPUSH 1\nADD\nRETURN_VALUE\n";
-        let decoded = super::deserialize_bytecode(source).unwrap();
+        let parsed = super::bytecode_v2::parse_v2_file(source).unwrap();
+        let serialized = super::bytecode_v2::serialize_v2_file(&parsed).unwrap();
+        let decoded = super::deserialize_bytecode(&serialized).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["42"]);
