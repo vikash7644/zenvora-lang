@@ -1,63 +1,56 @@
-# Zenvora Chain RPC smoke checks
+# Zenvora Chain verification and RPC tools
 
-These checks target the **current prototype**, not a production RPC API. The current server accepts JSON-RPC 2.0 requests at \`POST /\` and implements:
+These tools exercise the **current local-development prototype**. They do not establish production readiness or a public RPC endpoint.
 
-- \`chain_getInfo\` (required)
-- \`chain_getBalance\` (optional check with \`RPC_TEST_ADDRESS\`)
-- \`chain_getBlock\` (checks the current height by default, or \`RPC_TEST_HEIGHT\`)
-- Transaction submission/pending-transaction methods exist only when the node is started with the pool-enabled RPC mode; this smoke harness intentionally does not submit transactions.
+## 1. Replay-verify a block store
 
-**Not implemented by this RPC:** \`/status\`, \`/compile\`, \`/deploy\`, contract \`call\`, or \`view\` endpoints. The harness must not pretend these are available. Contract compilation is currently a local compiler feature, and the contract DSL is not yet blockchain deployment.
+The verifier invokes the real Zenvora CLI's `--chain-store-info` command. That command loads and replays the entire store, checking block linkage, signatures, transaction roots, receipt roots, and resulting state roots. The script also checks the expected chain ID, contiguous zero-based height/count, and 32-byte state/tip hashes.
 
-## Safety
+```sh
+cargo build --bin zv
+sh scripts/verify_chain_store.sh ./target/debug/zv dev.zvb 71
+# Optionally require an exact tip height:
+sh scripts/verify_chain_store.sh ./target/debug/zv dev.zvb 71 3
+```
 
-- The node deliberately binds to \`127.0.0.1\` and is not a public service. Keep it that way for local testing.
-- The current server uses plain HTTP. Do not send credentials across an untrusted network. \`RPC_TOKEN\` is an optional header for a trusted proxy or future auth layer; the current node itself does **not** validate bearer tokens.
-- The checks are read-only and do not create transactions, change balances, or produce blocks.
-- A passing result proves only that the endpoint answered the checked methods. It does not prove decentralization, consensus/finality, wallet safety, or production readiness.
+The file must already exist and be readable by the CLI. A successful check is local replay verification, not a distributed consensus or finality proof.
 
-## Option 1: Rust CLI
+## 2. RPC smoke checks
 
-Build and run from the repository root:
+The current server accepts JSON-RPC 2.0 requests at `POST /` and implements:
 
-\`\`\`sh
-RPC_URL=http://127.0.0.1:8545/ cargo run --bin check_node_rpc
-\`\`\`
+- `chain_getInfo`
+- `chain_getBalance` (optional check with `RPC_TEST_ADDRESS`)
+- `chain_getBlock` (tip height by default, or `RPC_TEST_HEIGHT`)
+- `chain_getTransaction`
+- Pool-enabled mode additionally exposes `chain_submitTransaction` and `chain_getPendingTransactions`; these smoke checks do not submit transactions.
 
-Optional checks:
-
-\`\`\`sh
-RPC_URL=http://127.0.0.1:8545/ \\
-RPC_TEST_ADDRESS=alice \\
-RPC_TEST_HEIGHT=0 \\
-cargo run --bin check_node_rpc
-\`\`\`
-
-\`RPC_TOKEN\` can add an \`Authorization: Bearer ...\` header for a trusted reverse proxy. It does not enable authentication in the current node.
-
-The Rust checker uses only existing dependencies and standard-library TCP, and supports plain HTTP only.
-
-## Option 2: curl script
-
-Requires \`curl\` and a running local node:
-
-\`\`\`sh
+```sh
 RPC_URL=http://127.0.0.1:8545/ sh scripts/check_rpc.sh
-\`\`\`
+```
 
-Optional balance and explicit block-height checks:
+Optional known-address and explicit-height checks:
 
-\`\`\`sh
-RPC_URL=http://127.0.0.1:8545/ \\
-RPC_TEST_ADDRESS=alice \\
-RPC_TEST_HEIGHT=0 \\
+```sh
+RPC_URL=http://127.0.0.1:8545/ \
+RPC_TEST_ADDRESS=alice \
+RPC_TEST_HEIGHT=0 \
 sh scripts/check_rpc.sh
-\`\`\`
+```
 
-Start a local read-only RPC in another terminal after initializing a local chain store:
+The Rust alternative is:
 
-\`\`\`sh
-cargo run -- --chain-rpc dev.zvb 71 8545
-\`\`\`
+```sh
+RPC_URL=http://127.0.0.1:8545/ cargo run --bin check_node_rpc
+```
 
-Use the actual store path and chain ID from your local test setup. Do not expose this prototype to the public internet.
+## 3. End-to-end CI
+
+The `.github/workflows/chain-smoke.yml` workflow creates a disposable local key and chain, signs and creates a transfer block, replay-verifies the resulting store, starts a loopback RPC server, then checks chain info, balance, and block retrieval. This tests a real local workflow inside GitHub Actions; it does **not** create a publicly reachable node URL.
+
+## Safety and limitations
+
+- RPC intentionally binds to `127.0.0.1`; it is not a public service. Do not expose it to the internet.
+- The current server uses plain HTTP and does not validate bearer tokens. `RPC_TOKEN` only adds a header for use with a trusted proxy/future auth layer; it does not enable node-side authentication.
+- `/status`, `/compile`, `/deploy`, contract `call`, and `view` endpoints are not implemented. Contract compilation is local and the contract DSL is not yet blockchain deployment.
+- Passing smoke checks does not prove decentralization, BFT consensus/finality, wallet safety, or production security. Do not use real funds.
