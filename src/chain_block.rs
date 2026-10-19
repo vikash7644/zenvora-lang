@@ -239,6 +239,41 @@ mod tests {
     }
 
     #[test]
+    fn block_candidate_rejects_invalid_transaction_signature_atomically() {
+        use super::execute_block_candidate;
+
+        let key = SigningKey::from_bytes(&[74; 32]);
+        let mut runtime = funded_runtime(&key);
+        let original_root = runtime.state_root();
+        let genesis = genesis_header(&runtime);
+        let mut envelope = signed_transfer(&key, 0, 125);
+        // Corrupt the signature while preserving the canonical transaction encoding.
+        envelope.transaction.signature[0] ^= 1;
+
+        let mut header = candidate_header(
+            &runtime,
+            &signed_transfer(&key, 0, 125),
+            &key,
+            1,
+            genesis.header_hash().unwrap(),
+            1_800_000_001,
+        );
+        header.transaction_root = transaction_merkle_root(&[envelope.transaction.clone()]).unwrap();
+
+        let error = execute_block_candidate(
+            &mut runtime,
+            &header,
+            &[envelope],
+            71,
+            Some(&genesis),
+        ).unwrap_err();
+
+        assert!(error.contains("signature"), "unexpected validation error: {error}");
+        assert_eq!(runtime.state_root(), original_root);
+        assert_eq!(runtime.balance("bob"), 0);
+    }
+
+    #[test]
     fn block_parent_linkage_and_chain_id_are_enforced() {
         let key = SigningKey::from_bytes(&[73; 32]);
         let runtime = funded_runtime(&key);
