@@ -108,7 +108,7 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 - [x] Reachable stack underflow and inconsistent stack depth at joins are rejected by the initial v2 verifier.
 - [x] Unreachable malformed opcodes and invalid jump targets are rejected structurally.
 - [x] Disconnected unreachable control-flow components are independently analyzed from an empty operand stack; this conservative policy is documented in the verifier.
-- [x] Compiler-generated output round-trips through v2 encode/decode and executes with the same observable output through `--emit-bytecode-v2`.
+- [x] Compiler-generated output round-trips through v2 encode/decode and executes with the same observable output; the opt-in CLI command uses this same compiler/emitter path.
 - [x] Existing v1 behavior and current regression suite continue to pass in GitHub Actions CI.
 - [x] Deterministic malformed-input tests cover header/metadata parsing, integer boundaries, invalid operands, region tables, and jump targets.
 - [x] A dependency-free bounded parser fuzz-smoke test exercises 4,096 generated ASCII inputs in CI.
