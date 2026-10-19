@@ -359,7 +359,7 @@ mod tests {
     use super::super::chain_block::execute_block;
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
     use super::super::chain_runtime::ChainRuntime;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use ed25519_dalek::{Signer, SigningKey};
     use std::collections::BTreeMap;
 
