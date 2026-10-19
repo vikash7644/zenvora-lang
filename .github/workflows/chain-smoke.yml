@@ -1,0 +1,69 @@
+name: Zenvora local chain smoke test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - chain-lang-integration
+      - tools/rpc-check
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-chain-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Zenvora CLI
+        run: cargo build --bin zv
+
+      - name: Create, produce, replay-verify, and query a local chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          rpc_pid=""
+          cleanup() {
+            if [ -n "$rpc_pid" ]; then kill "$rpc_pid" 2>/dev/null || true; fi
+            rm -rf "$tmp"
+          }
+          trap cleanup EXIT
+
+          ./target/debug/zv --chain-keygen "$tmp/owner.zvk"
+          ./target/debug/zv --chain-store-init "$tmp/dev.zvb" 71 "$tmp/owner.zvk" 1000000
+          ./target/debug/zv --chain-store-transfer "$tmp/dev.zvb" 71 "$tmp/owner.zvk" bob 125 3
+          sh scripts/verify_chain_store.sh ./target/debug/zv "$tmp/dev.zvb" 71 1
+
+          ./target/debug/zv --chain-rpc "$tmp/dev.zvb" 71 18545 >"$tmp/rpc.log" 2>&1 &
+          rpc_pid="$!"
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --silent --show-error --max-time 1 \
+              -H 'Content-Type: application/json' \
+              --data '{"jsonrpc":"2.0","id":0,"method":"chain_getInfo","params":[]}' \
+              http://127.0.0.1:18545/ >"$tmp/ready.json" 2>/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat "$tmp/rpc.log"
+            echo "RPC did not become ready" >&2
+            exit 1
+          fi
+
+          RPC_URL=http://127.0.0.1:18545/ \
+          RPC_TEST_ADDRESS=bob \
+          RPC_TEST_HEIGHT=1 \
+          sh scripts/check_rpc.sh
