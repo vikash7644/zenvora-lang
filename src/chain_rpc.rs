@@ -357,7 +357,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle_json_rpc, handle_json_rpc_with_pool, hex_encode};
+    use super::{handle_json_rpc, handle_json_rpc_with_pool, hex_encode, read_http_body};
     use super::super::block_store::BlockStore;
     use super::super::chain_block::execute_block;
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
@@ -442,6 +442,26 @@ mod tests {
         assert_eq!(runtime.balance("bob"), 0);
         std::fs::remove_file(store_path).unwrap();
         std::fs::remove_file(pool_path).unwrap();
+    }
+
+    #[test]
+    fn http_parser_rejects_duplicate_content_length_headers() {
+        use std::io::Write;
+        use std::net::{TcpListener, TcpStream};
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_http_body(&mut stream)
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        client.write_all(
+            b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n{}"
+        ).unwrap();
+        drop(client);
+        let error = server.join().unwrap().unwrap_err();
+        assert!(error.contains("duplicate Content-Length"), "unexpected error: {error}");
     }
 
     #[test]
