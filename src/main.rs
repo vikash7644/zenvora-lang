@@ -4101,4 +4101,51 @@ show index_of(array(7, "x", true), false)
         std::fs::remove_file(path).unwrap();
     }
 
+
+    #[test]
+    fn bytecode_v2_matches_source_execution_for_collections_builtins_and_functions() {
+        let source = r#"define values := array(2, 4, 6)
+show sum(values)
+show values[1]
+show twice(21)
+fn twice(value) {
+    return value * 2
+}
+"#;
+
+        let expected = execute(source).unwrap();
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec!["12", "4", "42"]);
+    }
+
+    #[test]
+    fn bytecode_v2_round_trip_preserves_branching_and_loop_results() {
+        let source = r#"define total := 0
+repeat i <= 4 {
+    if i > 2 {
+        define total := total + i
+    }
+}
+if total == 7 {
+    show "verified"
+} otherwise {
+    show "mismatch"
+}
+"#;
+        let expected = execute(source).unwrap();
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec!["verified"]);
+    }
 }
