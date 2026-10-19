@@ -1,0 +1,47 @@
+name: Bytecode v2 fuzzing
+
+on:
+  pull_request:
+    paths:
+      - "src/bytecode_v2.rs"
+      - "fuzz/**"
+      - ".github/workflows/bytecode-v2-fuzz.yml"
+  push:
+    branches:
+      - "spec/bytecode-v2-function-metadata"
+    paths:
+      - "src/bytecode_v2.rs"
+      - "fuzz/**"
+      - ".github/workflows/bytecode-v2-fuzz.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bytecode-v2-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz-parser-verifier:
+    name: Fuzz parser, verifier, and serializer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install nightly Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run bounded fuzz campaign
+        run: cargo fuzz run parse_v2 -- -max_total_time=60 -timeout=5 -rss_limit_mb=2048
+        working-directory: fuzz
