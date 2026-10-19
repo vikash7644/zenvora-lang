@@ -1,6 +1,6 @@
 # Zenvora Bytecode v2 — Function Metadata and Verification Design
 
-**Status:** design proposal with Phase 1 region-layout validation implemented and CI-tested. V2 file parsing, opcode/control-flow verification, compiler emission, and execution are not implemented. Bytecode v1 remains the only executable format supported by the current loader.
+**Status:** design proposal with Phase 1 region-layout validation and Phase 2 provisional metadata framing parser/round-trip helper implemented and CI-tested. Opcode decoding, control-flow/stack verification, compiler emission, and execution are not implemented. Bytecode v1 remains the only executable format supported by the current loader.
 
 ## Why v2 is needed
 
@@ -87,6 +87,8 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 ## Acceptance checklist for implementation
 
 - [x] Initial region-layout validator rejects empty programs, invalid main boundaries, gaps, overlaps/out-of-order regions, out-of-bounds regions, undeclared trailing instructions, invalid/duplicate parameter names, and excessive parameter counts.
+- [x] Provisional v2 framing parser checks the version header, main start, metadata record shape, parameter count/name consistency, return-kind tags, CODE terminator, instruction-count/size bounds, and region layout.
+- [x] Metadata framing round-trip tests cover a main region plus declared functions, including a zero-parameter function.
 - [ ] A declared but uncalled function is still region-checked.
 - [ ] Every region has exactly one declared entry and a valid end boundary.
 - [ ] Overlapping and out-of-bounds regions are rejected.
@@ -102,7 +104,7 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 
 ## Current implementation boundary
 
-The initial Rust module `src/bytecode_v2.rs` implements only `ProgramLayout`, `FunctionRegion`, `ReturnKind`, and `validate_layout`. Its unit tests run as part of the repository's normal Rust test suite. The existing v1 serializer and loader are unchanged; the v2 layout validator is not yet wired into bytecode file loading or execution.
+The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, and provisional `parse_v2_file`/`serialize_v2_file` framing helpers. Parsed instruction records remain opaque strings; they are not opcode-decoded, control-flow verified, or executable. These helpers are not wired into the production bytecode loader. The existing v1 serializer and loader remain unchanged, and v1 remains the only executable format.
 
 ## Security status
 
