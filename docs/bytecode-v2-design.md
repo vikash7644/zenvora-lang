@@ -1,6 +1,6 @@
 # Zenvora Bytecode v2 — Function Metadata and Verification Design
 
-**Status:** design proposal; not implemented. Bytecode v1 remains the only executable format supported by the current loader. This document must not be read as a claim that v2 files can already be compiled or executed.
+**Status:** design proposal with Phase 1 region-layout validation implemented and CI-tested. V2 file parsing, opcode/control-flow verification, compiler emission, and execution are not implemented. Bytecode v1 remains the only executable format supported by the current loader.
 
 ## Why v2 is needed
 
@@ -86,6 +86,7 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 
 ## Acceptance checklist for implementation
 
+- [x] Initial region-layout validator rejects empty programs, invalid main boundaries, gaps, overlaps/out-of-order regions, out-of-bounds regions, undeclared trailing instructions, invalid/duplicate parameter names, and excessive parameter counts.
 - [ ] A declared but uncalled function is still region-checked.
 - [ ] Every region has exactly one declared entry and a valid end boundary.
 - [ ] Overlapping and out-of-bounds regions are rejected.
@@ -99,6 +100,10 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 - [ ] Existing v1 fixtures and all current tests continue to pass.
 - [ ] Fuzz tests cover header parsing, metadata parsing, integer boundaries, region tables, and jump targets.
 
+## Current implementation boundary
+
+The initial Rust module `src/bytecode_v2.rs` implements only `ProgramLayout`, `FunctionRegion`, `ReturnKind`, and `validate_layout`. Its unit tests run as part of the repository's normal Rust test suite. The existing v1 serializer and loader are unchanged; the v2 layout validator is not yet wired into bytecode file loading or execution.
+
 ## Security status
 
-This is a design proposal, not an implementation, formal verification, audit, or production-readiness statement. V2 should not be announced as supported until its loader, verifier, compiler emission, negative tests, and CI checks are implemented and reviewed.
+This work is not formal verification, an audit, or a production-readiness statement. V2 should not be announced as supported until its loader, opcode/control-flow verifier, compiler emission, negative tests, and CI checks are implemented and reviewed.
