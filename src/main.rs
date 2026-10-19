@@ -22,11 +22,17 @@ enum Token {
 }
 
 fn lex(input: &str) -> Result<Vec<Token>, String> {
+    lex_with_columns(input).map(|(tokens, _)| tokens)
+}
+
+fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), String> {
     let mut out = Vec::new();
+    let mut columns = Vec::new();
     let chars: Vec<char> = input.chars().collect();
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
+        let token_column = i + 1;
         if c.is_whitespace() { i += 1; continue; }
         if c == '#' { break; }
         if c == '"' {
@@ -59,6 +65,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
                 return Err(format!("string literal exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
             }
             out.push(Token::String(value));
+            columns.push(token_column);
             continue;
         }
         if c.is_ascii_digit() {
@@ -66,6 +73,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
             while i < chars.len() && chars[i].is_ascii_digit() { i += 1; }
             let n: String = chars[start..i].iter().collect();
             out.push(Token::Number(n.parse().map_err(|_| format!("column {}: invalid integer: {n}", start + 1))?));
+            columns.push(start + 1);
             continue;
         }
         if c.is_ascii_alphabetic() || c == '_' {
@@ -80,6 +88,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
                 "not" => out.push(Token::Not),
                 _ => out.push(Token::Ident(ident)),
             }
+            columns.push(start + 1);
             continue;
         }
         // Handle two-character operators (==, !=, <=, >=) by peeking the next char
@@ -97,10 +106,12 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
             _ => return Err(format!("column {}: unexpected character '{c}'", i + 1)),
         };
         out.push(token);
+        columns.push(token_column);
         i += 1;
     }
     out.push(Token::End);
-    Ok(out)
+    columns.push(chars.len() + 1);
+    Ok((out, columns))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -109,10 +120,12 @@ enum Op {
     Eq, Ne, Lt, Le, Gt, Ge, Index, SetIndex(String), JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
-struct Parser { tokens: Vec<Token>, pos: usize, code: Vec<Op> }
+struct Parser { tokens: Vec<Token>, columns: Vec<usize>, pos: usize, code: Vec<Op> }
 impl Parser {
     fn peek(&self) -> &Token { &self.tokens[self.pos] }
     fn take(&mut self) -> Token { let t = self.tokens[self.pos].clone(); self.pos += 1; t }
+    fn error_column(&self) -> usize { self.columns[self.pos.saturating_sub(1).min(self.columns.len() - 1)] }
+    fn current_column(&self) -> usize { self.columns[self.pos.min(self.columns.len() - 1)] }
 
     fn expression(&mut self) -> Result<(), String> {
         self.logical_or()
@@ -310,8 +323,8 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         if line.is_empty() || line.starts_with('#') { continue; }
 
         if let Some(condition) = line.strip_prefix("if ").and_then(|s| s.strip_suffix('{')) {
-            let tokens = lex(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
-            let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
+            let (tokens, columns) = lex_with_columns(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
+            let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
             parser.condition().map_err(|e| format!("line {}: {e}", line_no + 1))?;
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: unexpected token {:?}", line_no + 1, parser.peek()));
@@ -324,8 +337,8 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         }
 
         if let Some(condition) = line.strip_prefix("repeat ").and_then(|s| s.strip_suffix('{')) {
-            let tokens = lex(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
-            let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
+            let (tokens, columns) = lex_with_columns(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
+            let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
             parser.condition().map_err(|e| format!("line {}: {e}", line_no + 1))?;
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: unexpected token {:?}", line_no + 1, parser.peek()));
@@ -349,8 +362,8 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             let args = split_arguments(args_text);
             let args: Vec<&str> = if args_text.trim().is_empty() { Vec::new() } else { args };
             for arg in &args {
-                let tokens = lex(arg.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, arg.trim(), e)))?;
-                let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
+                let (tokens, columns) = lex_with_columns(arg.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, arg.trim(), e)))?;
+                let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
                 parser.expression().map_err(|e| format!("line {}: invalid function argument: {e}", line_no + 1))?;
                 if parser.peek() != &Token::End {
                     return Err(format!("line {}: unexpected token in function argument {:?}", line_no + 1, parser.peek()));
@@ -362,8 +375,8 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         }
         if line == "return" { code.push(Op::Return); continue; }
         if let Some(expr) = line.strip_prefix("return ") {
-            let tokens = lex(expr.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, expr.trim(), e)))?;
-            let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
+            let (tokens, columns) = lex_with_columns(expr.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, expr.trim(), e)))?;
+            let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
             parser.expression().map_err(|e| format!("line {}: invalid return expression: {e}", line_no + 1))?;
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: unexpected token in return expression {:?}", line_no + 1, parser.peek()));
@@ -448,15 +461,15 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                     if right.trim().is_empty() {
                         return Err(format!("line {}: missing value in indexed assignment", line_no + 1));
                     }
-                    let index_tokens = lex(index_expr.trim()).map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), e)))?;
-                    let mut index_parser = Parser { tokens: index_tokens, pos: 0, code: Vec::new() };
+                    let (index_tokens, index_columns) = lex_with_columns(index_expr.trim()).map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), e)))?;
+                    let mut index_parser = Parser { tokens: index_tokens, columns: index_columns, pos: 0, code: Vec::new() };
                     index_parser.expression().map_err(|e| format!("line {}: invalid index: {e}", line_no + 1))?;
                     if index_parser.peek() != &Token::End {
                         return Err(format!("line {}: unexpected token in index {:?}", line_no + 1, index_parser.peek()));
                     }
                     append_code(&mut code, index_parser.code);
-                    let value_tokens = lex(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
-                    let mut value_parser = Parser { tokens: value_tokens, pos: 0, code: Vec::new() };
+                    let (value_tokens, value_columns) = lex_with_columns(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
+                    let mut value_parser = Parser { tokens: value_tokens, columns: value_columns, pos: 0, code: Vec::new() };
                     value_parser.expression().map_err(|e| format!("line {}: {e}", line_no + 1))?;
                     if value_parser.peek() != &Token::End {
                         return Err(format!("line {}: unexpected token in indexed assignment {:?}", line_no + 1, value_parser.peek()));
@@ -490,8 +503,8 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         if !statement.2 && !valid_identifier(&statement.0) {
             return Err(format!("line {}: invalid variable name", line_no + 1));
         }
-        let tokens = lex(statement.1).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, statement.1, e)))?;
-        let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
+        let (tokens, columns) = lex_with_columns(statement.1).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, statement.1, e)))?;
+        let mut parser = Parser { tokens, columns, pos: 0, code: Vec::new() };
         parser.expression().map_err(|e| format!("line {}: {e}", line_no + 1))?;
         if parser.peek() != &Token::End {
             return Err(format!("line {}: unexpected token {:?}", line_no + 1, parser.peek()));
