@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Live variable bindings and saved call-frame environments now share a 64 MiB estimated-memory budget, with regression coverage that aliases a large string until the limit is reached.
+
 - The VM now caps the combined estimated size of operand-stack values at 16 MiB, with accounting on stack pushes/pops and a regression test for oversized argument/expression stacks.
 
 - Runtime collection values now have an estimated 16 MiB aggregate-size budget in addition to item-count and nesting limits, with regression coverage for oversized arrays.
