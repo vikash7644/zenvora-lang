@@ -728,6 +728,7 @@ mod tests {
             let response = json!({
                 "ok": true,
                 "result": {
+                    "protocolVersion": 1,
                     "chainId": 71,
                     "genesisHash": "00".repeat(32),
                     "genesisStateRoot": "00".repeat(32),
@@ -776,6 +777,7 @@ mod tests {
             let response = json!({
                 "ok": true,
                 "result": {
+                    "protocolVersion": 1,
                     "chainId": 71,
                     "genesisHash": local_genesis_hash,
                     "genesisStateRoot": "00".repeat(32),
@@ -824,6 +826,7 @@ mod tests {
             let response = json!({
                 "ok": true,
                 "result": {
+                    "protocolVersion": 1,
                     "chainId": 71,
                     "genesisHash": local_genesis_hash,
                     "height": 0
