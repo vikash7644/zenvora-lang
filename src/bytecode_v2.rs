@@ -856,7 +856,7 @@ mod tests {
     #[test]
     fn verifier_accepts_nested_metadata_driven_calls_with_consistent_stack_effects() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 7 1 value x\nFUNCTION 7 11 1 value y\nCODE\nPUSH 40\nCALL 4 1\nPRINT\nJUMP 4\nLOAD x\nCALL 8 1\nRETURN_VALUE\nLOAD y\nPUSH 2\nMUL\nRETURN_VALUE\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 7 1 value x\nFUNCTION 7 11 1 value y\nCODE\nPUSH 40\nCALL 4 1\nPRINT\nJUMP 4\nLOAD x\nCALL 7 1\nRETURN_VALUE\nLOAD y\nPUSH 2\nMUL\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
     }
