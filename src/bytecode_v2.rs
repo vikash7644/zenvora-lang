@@ -414,10 +414,12 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
         let mut depths: HashMap<usize, usize> = HashMap::new();
         let mut pending = vec![(start, 0usize)];
         let mut reached_exit = false;
+        let mut entry_walk = true;
 
+        loop {
         while let Some((pc, incoming_depth)) = pending.pop() {
             if pc == end && is_main {
-                reached_exit = true;
+                if entry_walk { reached_exit = true; }
                 if incoming_depth != 0 {
                     return Err(format!("bytecode v2: main exits with {incoming_depth} operand value(s)"));
                 }
@@ -472,7 +474,7 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
             match instruction {
                 V2Instruction::Jump(target) => {
                     if is_main && pc + 1 == end && *target == end {
-                        reached_exit = true;
+                        if entry_walk { reached_exit = true; }
                         if outgoing_depth != 0 {
                             return Err(format!("bytecode v2: main exits with {outgoing_depth} operand value(s)"));
                         }
@@ -520,8 +522,18 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
                 }
             }
         }
-        if is_main && !reached_exit {
+        if is_main && entry_walk && !reached_exit {
             return Err("bytecode v2: main region has no reachable exit".into());
+        }
+        entry_walk = false;
+        if let Some(unreachable_entry) = (start..end).find(|pc| !depths.contains_key(pc)) {
+            // Explicit policy: each disconnected unreachable component starts with an
+            // empty operand stack. This rejects dead blocks that rely on imaginary
+            // incoming values while still checking their stack/control-flow safety.
+            pending.push((unreachable_entry, 0));
+        } else {
+            break;
+        }
         }
     }
     Ok(())
