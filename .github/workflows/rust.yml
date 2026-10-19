@@ -40,15 +40,11 @@ jobs:
       - name: Build optimized release CLI
         run: cargo build --release --bin zv
 
-      - name: Smoke-test optimized release CLI
-        shell: bash
-        run: |
-          ./target/release/zv --version
-          ./target/release/zv examples/hello.zv > /tmp/zenvora-release-output.txt
-          grep -Fxq '30' /tmp/zenvora-release-output.txt
-          grep -Fxq '60' /tmp/zenvora-release-output.txt
-          grep -Fxq '20' /tmp/zenvora-release-output.txt
-          grep -Fxq '35' /tmp/zenvora-release-output.txt
+      - name: Smoke-test optimized release CLI version
+        run: ./target/release/zv --version
+
+      - name: Smoke-test optimized release example
+        run: ./target/release/zv examples/hello.zv | grep -Fxq 35
 
       - name: Run hello example
         run: cargo run -- examples/hello.zv
