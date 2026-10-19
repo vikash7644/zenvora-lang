@@ -49,8 +49,15 @@ pub struct ParsedV2File {
 
 fn valid_identifier(name: &str) -> bool {
     let mut chars = name.chars();
-    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    let syntax_ok = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    syntax_ok && !matches!(
+        name,
+        "true" | "false" | "and" | "or" | "not" |
+        "define" | "show" | "print" | "if" | "otherwise" | "repeat" |
+        "break" | "continue" | "return" | "call" | "fn" | "use" |
+        "contract" | "state" | "action" | "view"
+    )
 }
 
 /// Validate the region table before any opcode control-flow verification.
