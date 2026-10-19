@@ -1,19 +1,22 @@
 # Zenvora Lang
 
-Zenvora Lang is an independent programming-language project for the Zenvora ecosystem. The repository includes an early runnable compiler and stack-based bytecode virtual machine written in Rust.
+Zenvora Lang is an independent programming-language project for the Zenvora ecosystem, with a Rust compiler and stack-based bytecode virtual machine. The current release line is v0.8.0 prototype/experimental; it is not a stable v1.0 language or a production smart-contract toolchain.
 
-## Zenvora Chain design documents
+## Legacy blockchain material — migration pending
 
-- [Zenvora Technical Specification v1 — working draft](docs/zenvora-technical-spec-v1.md): ecosystem scope, proposed differentiator, measurable goals, phase gates, and unresolved decisions.
-- [Chain protocol specification draft](docs/chain-protocol-specification-draft.md): consensus-critical protocol, networking, tokenomics, security, and test requirements.
-- [Chain implementation roadmap](docs/chain-implementation-roadmap.md): 12 staged phases, engineering order, explicit exit gates, and security release criteria.
+A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the Zenvora Lang release scope** and must be moved to the separate BHYVORIX Chain repository only after that destination and its tests are verified.
 
-These are design drafts, not proof that listed features are implemented. Consensus and tokenomics are not locked, and Zenvora Chain remains a prototype/local-development project.
+- [Legacy chain technical specification draft](docs/zenvora-technical-spec-v1.md)
+- [Legacy chain protocol specification draft](docs/chain-protocol-specification-draft.md)
+- [Legacy chain implementation roadmap](docs/chain-implementation-roadmap.md)
+
+These files describe proposals and a local-development prototype, not a production network, mainnet, wallet, or native coin. The blockchain branding is planned to be BHYVORIX Chain; Zenvora Lang itself is not being renamed.
 
 ## Repository contents
 
-- `Cargo.toml` — Rust package manifest for the `zv` command.
+- `Cargo.toml` and `Cargo.lock` — Rust package manifest and locked dependency versions for the `zv` command.
 - `CHANGELOG.md` — v0.8.0 release notes and current feature status.
+- `docs/language-grammar.md` — current parser grammar draft and unresolved v1.0 semantics.
 - `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM, CLI, and automated regression tests.
 - `src/chain_protocol.rs` — canonical transaction/header encodings, SHA-256 IDs, Merkle roots, and Ed25519 signature verification.
 - `src/chain_runtime.rs` — Zenvora-VM transfer execution, V3 ledger persistence, signed nonce tracking, and state/receipt roots.
