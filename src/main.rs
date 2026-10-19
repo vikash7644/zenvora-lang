@@ -3570,6 +3570,22 @@ mod tests {
     }
 
     #[test]
+    fn equality_compares_values_structurally_and_different_types_are_unequal() {
+        let output = execute(
+            "show 1 == true\nshow 1 != \"1\"\nshow array(1, 2) == array(1, 2)\nshow map(\"a\", 1) == map(\"a\", 1)\n"
+        ).unwrap();
+        assert_eq!(output, vec!["false", "true", "true", "true"]);
+    }
+
+    #[test]
+    fn integer_conditions_treat_zero_as_false_and_nonzero_as_true() {
+        let output = execute(
+            "if 0 {\nshow 1\n} otherwise {\nshow 2\n}\nif -1 {\nshow 3\n} otherwise {\nshow 4\n}\nrepeat 0 {\nshow 5\n}\nrepeat 1 {\nshow 6\nbreak\n}\n"
+        ).unwrap();
+        assert_eq!(output, vec!["2", "3", "6"]);
+    }
+
+    #[test]
     fn repeat_break_and_continue() {
         let output = execute(
             "define count := 0\nrepeat count < 5 {\n count := count + 1\n if count == 2 {\n continue\n }\n show count\n if count == 4 {\n break\n }\n}\n"
