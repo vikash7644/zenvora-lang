@@ -83,6 +83,9 @@ pub fn validate_layout(layout: &ProgramLayout) -> Result<(), String> {
     if layout.instruction_count == 0 {
         return Err("bytecode v2: instruction stream must not be empty".into());
     }
+    if layout.instruction_count > MAX_V2_INSTRUCTIONS {
+        return Err("bytecode v2: instruction count exceeds safety limit".into());
+    }
     if layout.main_end == 0 || layout.main_end > layout.instruction_count {
         return Err("bytecode v2: invalid main-program region boundary".into());
     }
@@ -613,6 +616,13 @@ mod tests {
         assert!(validate_layout(&layout(0, 0, vec![])).unwrap_err().contains("must not be empty"));
         assert!(validate_layout(&layout(4, 0, vec![])).unwrap_err().contains("main-program region"));
         assert!(validate_layout(&layout(4, 5, vec![])).unwrap_err().contains("main-program region"));
+    }
+
+    #[test]
+    fn rejects_instruction_count_above_safety_limit() {
+        let count = super::MAX_V2_INSTRUCTIONS + 1;
+        let error = validate_layout(&layout(count, count, vec![])).unwrap_err();
+        assert!(error.contains("instruction count exceeds safety limit"));
     }
 
     #[test]
