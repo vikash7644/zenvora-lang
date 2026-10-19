@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: zenvora-lang-ci-v2-${{ github.workflow }}-${{ github.ref }}
+  group: zenvora-lang-ci-v3-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
