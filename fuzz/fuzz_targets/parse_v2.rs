@@ -14,11 +14,11 @@ fuzz_target!(|data: &[u8]| {
 
         // Exercise the serializer and parser as a round-trip property: every
         // structurally parsed file must serialize and parse back identically.
-        if let Ok(serialized) = bytecode_v2::serialize_v2_file(&parsed) {
-            let reparsed = bytecode_v2::parse_v2_file(&serialized)
-                .expect("serialized v2 bytecode must parse successfully");
-            assert_eq!(reparsed, parsed, "v2 serialize/parse round-trip changed the file");
-            let _ = bytecode_v2::verify_v2_file(&reparsed);
-        }
+        let serialized = bytecode_v2::serialize_v2_file(&parsed)
+            .expect("every structurally parsed v2 file must serialize successfully");
+        let reparsed = bytecode_v2::parse_v2_file(&serialized)
+            .expect("serialized v2 bytecode must parse successfully");
+        assert_eq!(reparsed, parsed, "v2 serialize/parse round-trip changed the file");
+        let _ = bytecode_v2::verify_v2_file(&reparsed);
     }
 });

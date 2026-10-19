@@ -933,7 +933,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" | "to_int" | "index_of" | "unique" | "assert_eq" | "gcd" | "lcm" | "factorial" | "is_prime" | "fibonacci" | "pow_int" | "mean" | "speed" | "density" | "molarity" | "force" | "kinetic_energy" | "bmi_x10" | "molar_mass" | "dna_complement" | "gc_content_percent") }
+fn is_builtin(name: &str) -> bool { bytecode_v2::is_supported_builtin(name) }
 
 fn value_to_string(value: &Value) -> String {
     match value {

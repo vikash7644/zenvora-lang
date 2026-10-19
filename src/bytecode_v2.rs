@@ -47,6 +47,21 @@ pub struct ParsedV2File {
     pub instructions: Vec<String>,
 }
 
+/// Return whether a builtin name is part of the currently supported VM surface.
+/// Keep this list shared with the compiler and loader so verifier acceptance matches execution.
+pub fn is_supported_builtin(name: &str) -> bool {
+    matches!(name,
+        "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" |
+        "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" |
+        "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" |
+        "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" |
+        "to_int" | "index_of" | "unique" | "assert_eq" | "gcd" | "lcm" | "factorial" |
+        "is_prime" | "fibonacci" | "pow_int" | "mean" | "speed" | "density" | "molarity" |
+        "force" | "kinetic_energy" | "bmi_x10" | "molar_mass" | "dna_complement" |
+        "gc_content_percent"
+    )
+}
+
 fn valid_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     let syntax_ok = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
@@ -189,6 +204,11 @@ pub fn parse_v2_file(input: &str) -> Result<ParsedV2File, String> {
 
     let mut instructions = Vec::new();
     for line in lines {
+        // The lines iterator removes normal LF/CRLF terminators, so any remaining
+        // CR is embedded in the record and would make serialization fail.
+        if line.contains('\r') {
+            return Err("bytecode v2: embedded carriage return in instruction record".into());
+        }
         let instruction = line.trim();
         if instruction.is_empty() {
             return Err("bytecode v2: blank instruction record is not allowed".into());
@@ -343,7 +363,7 @@ fn parse_v2_instruction(line: &str) -> Result<V2Instruction, String> {
             }
             V2Instruction::Call { target, argument_count }
         }
-        ["BUILTIN", name, count] if valid_identifier(name) => {
+        ["BUILTIN", name, count] if is_supported_builtin(name) => {
             let argument_count = parse_operand_usize(count, "builtin argument count")?;
             if argument_count > MAX_FUNCTION_PARAMETERS {
                 return Err(format!("bytecode v2: builtin argument count exceeds safety limit ({MAX_FUNCTION_PARAMETERS})"));
@@ -655,6 +675,12 @@ mod tests {
     }
 
     #[test]
+    fn rejects_embedded_carriage_return_in_instruction_record() {
+        let input = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\r JUMP 2\nJUMP 2\n";
+        assert!(parse_v2_file(input).unwrap_err().contains("embedded carriage return"));
+    }
+
+    #[test]
     fn rejects_blank_code_and_uncovered_regions() {
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\n\n").unwrap_err().contains("blank instruction"));
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\nNOP\n").unwrap_err().contains("undeclared instruction region"));
@@ -675,6 +701,19 @@ mod tests {
             "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
+    }
+
+    #[test]
+    fn verifier_rejects_unknown_builtin_and_accepts_supported_builtin() {
+        let unknown = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN not_a_real_builtin 0\nJUMP 2\n",
+        ).unwrap();
+        assert!(verify_v2_file(&unknown).unwrap_err().contains("malformed instruction"));
+
+        let known = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nCODE\nPUSH_STRING_HEX 61\nBUILTIN len 1\nPRINT\nJUMP 4\n",
+        ).unwrap();
+        assert!(verify_v2_file(&known).is_ok());
     }
 
     #[test]
