@@ -747,4 +747,52 @@ mod tests {
         std::fs::remove_file(local_path).unwrap();
     }
 
+
+    #[test]
+    fn peer_sync_rejects_mismatched_genesis_state_fingerprint() {
+        let local_path = std::env::temp_dir().join(format!(
+            "zenvora-peer-genesis-state-mismatch-{}.zvb",
+            std::process::id()
+        ));
+        let local_text = local_path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&local_path);
+        let (_runtime, store, _key) = build_store(&local_text, false);
+        let local_genesis_hash = super::super::chain_protocol::hex_encode(
+            &store.blocks().first().unwrap().header.header_hash().unwrap()
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut length_bytes = [0_u8; 4];
+            stream.read_exact(&mut length_bytes).unwrap();
+            let length = u32::from_be_bytes(length_bytes) as usize;
+            let mut request_bytes = vec![0_u8; length];
+            stream.read_exact(&mut request_bytes).unwrap();
+            let request: serde_json::Value = serde_json::from_slice(&request_bytes).unwrap();
+            assert_eq!(request["method"], "status");
+
+            let response = json!({
+                "ok": true,
+                "result": {
+                    "chainId": 71,
+                    "genesisHash": local_genesis_hash,
+                    "genesisStateRoot": "00".repeat(32),
+                    "height": 0
+                }
+            }).to_string();
+            stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+
+        let error = sync_from_peer(&local_text, 71, &peer.to_string()).unwrap_err();
+        server.join().unwrap();
+        assert!(
+            error.contains("genesis state does not match"),
+            "unexpected error: {error}"
+        );
+        std::fs::remove_file(local_path).unwrap();
+    }
+
 }
