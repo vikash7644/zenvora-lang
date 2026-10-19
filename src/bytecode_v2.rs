@@ -1,9 +1,9 @@
 //! Experimental Zenvora Bytecode v2 framing, metadata, and control-flow verification.
 //!
-//! The v2 parser/verifier is called by the production bytecode loader before instructions
-//! are passed to the existing VM. The compiler can emit v2 text on an opt-in CLI path.
-//! V1 remains the default format. V2 is experimental and has not received fuzzing or an
-//! independent security audit; its grammar and opcode set may change.
+//! The v2 parser/verifier is called by the bytecode loader before instructions are passed
+//! to the existing VM. The compiler can emit v2 text on an opt-in CLI path. V1 remains
+//! the default format. V2 is experimental: bounded libFuzzer campaigns and deterministic
+//! malformed-input tests exist, but no independent security audit has been completed.
 
 use std::collections::{HashMap, HashSet};
 
