@@ -19,6 +19,8 @@ EVM compatibility is **undecided**. It may be evaluated for tooling reach, but m
 
 Use these maturity labels in status updates: **Specified → Prototype → Tested → Reviewed → Production-ready**. A phase advances only when its exit criteria are met.
 
+The current contract execution design proposal is documented in [`contract-execution-v1.md`](contract-execution-v1.md). It specifies intended state, authorization, gas, rollback, persistence, replay, and test gates; it is **not yet implemented protocol behavior**.
+
 ## Phase plan
 
 ### Phase 0 — Stabilize the language-to-chain boundary (current prerequisite)
