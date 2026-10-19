@@ -89,6 +89,11 @@ pub fn sync_from_peer(store_path: &str, chain_id: u64, peer: &str) -> Result<usi
         .map_err(|_| "peer must be an IP:port socket address")?;
     let (mut store, mut runtime) = BlockStore::load_from_file(store_path, chain_id)?;
     let status = request_peer(peer_address, &json!({"method":"status"}))?;
+    let remote_protocol_version = status.get("protocolVersion").and_then(Value::as_u64)
+        .ok_or_else(|| "peer status has no valid protocol version".to_string())?;
+    if remote_protocol_version != PROTOCOL_VERSION {
+        return Err("peer uses an incompatible protocol version".into());
+    }
     let remote_chain_id = status.get("chainId").and_then(Value::as_u64)
         .ok_or_else(|| "peer status has no valid chain ID".to_string())?;
     if remote_chain_id != chain_id {
@@ -842,6 +847,67 @@ mod tests {
             error.contains("peer status has no genesis state fingerprint"),
             "unexpected error: {error}"
         );
+        std::fs::remove_file(local_path).unwrap();
+    }
+
+
+    #[test]
+    fn peer_sync_rejects_incompatible_protocol_version_before_syncing() {
+        let local_path = std::env::temp_dir().join(format!("zenvora-peer-protocol-version-{}.zvb", std::process::id()));
+        let local_text = local_path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&local_path);
+        let (_, store, _) = build_store(&local_text, false);
+        let genesis = store.blocks().first().unwrap();
+        let genesis_hash = super::hex_encode(&genesis.header.header_hash().unwrap());
+        let genesis_state_root = super::hex_encode(&genesis.header.state_root);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut length_bytes = [0_u8; 4];
+            stream.read_exact(&mut length_bytes).unwrap();
+            let length = u32::from_be_bytes(length_bytes) as usize;
+            let mut request_bytes = vec![0_u8; length];
+            stream.read_exact(&mut request_bytes).unwrap();
+            let request: serde_json::Value = serde_json::from_slice(&request_bytes).unwrap();
+            assert_eq!(request["method"], "status");
+            let response = json!({"ok":true,"result":{"protocolVersion":2,"chainId":71,"height":0,"genesisHash":genesis_hash,"genesisStateRoot":genesis_state_root}}).to_string();
+            stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        let error = sync_from_peer(&local_text, 71, &peer.to_string()).unwrap_err();
+        server.join().unwrap();
+        assert!(error.contains("incompatible protocol version"), "unexpected error: {error}");
+        std::fs::remove_file(local_path).unwrap();
+    }
+
+    #[test]
+    fn peer_sync_rejects_status_without_protocol_version() {
+        let local_path = std::env::temp_dir().join(format!("zenvora-peer-protocol-missing-{}.zvb", std::process::id()));
+        let local_text = local_path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&local_path);
+        let (_, store, _) = build_store(&local_text, false);
+        let genesis = store.blocks().first().unwrap();
+        let genesis_hash = super::hex_encode(&genesis.header.header_hash().unwrap());
+        let genesis_state_root = super::hex_encode(&genesis.header.state_root);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut length_bytes = [0_u8; 4];
+            stream.read_exact(&mut length_bytes).unwrap();
+            let length = u32::from_be_bytes(length_bytes) as usize;
+            let mut request_bytes = vec![0_u8; length];
+            stream.read_exact(&mut request_bytes).unwrap();
+            let request: serde_json::Value = serde_json::from_slice(&request_bytes).unwrap();
+            assert_eq!(request["method"], "status");
+            let response = json!({"ok":true,"result":{"chainId":71,"height":0,"genesisHash":genesis_hash,"genesisStateRoot":genesis_state_root}}).to_string();
+            stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        let error = sync_from_peer(&local_text, 71, &peer.to_string()).unwrap_err();
+        server.join().unwrap();
+        assert!(error.contains("peer status has no valid protocol version"), "unexpected error: {error}");
         std::fs::remove_file(local_path).unwrap();
     }
 
