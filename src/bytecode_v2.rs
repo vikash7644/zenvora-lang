@@ -529,7 +529,7 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_v2_file, serialize_v2_file, validate_layout, FunctionRegion, ParsedV2File, ProgramLayout, ReturnKind};
+    use super::{parse_v2_file, serialize_v2_file, validate_layout, verify_v2_file, FunctionRegion, ParsedV2File, ProgramLayout, ReturnKind};
 
     fn function(entry: usize, end: usize, parameters: &[&str]) -> FunctionRegion {
         FunctionRegion {
@@ -633,4 +633,55 @@ mod tests {
         };
         assert!(serialize_v2_file(&file).unwrap_err().contains("vector length"));
     }
+
+    #[test]
+    fn verifier_accepts_metadata_driven_function_call_and_return() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).is_ok());
+    }
+
+    #[test]
+    fn verifier_rejects_unknown_opcode_and_bad_call_target() {
+        let unknown = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nMAGIC\nJUMP 2\n").unwrap();
+        assert!(verify_v2_file(&unknown).unwrap_err().contains("malformed instruction"));
+
+        let bad_call = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nCALL 2 0\nJUMP 2\n").unwrap();
+        assert!(verify_v2_file(&bad_call).unwrap_err().contains("undeclared function"));
+    }
+
+    #[test]
+    fn verifier_rejects_cross_region_jumps_and_wrong_argument_count() {
+        let cross_jump = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 3\nPUSH 1\nJUMP 3\n").unwrap();
+        assert!(verify_v2_file(&cross_jump).unwrap_err().contains("escapes its region"));
+
+        let wrong_args = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value item\nCODE\nCALL 2 0\nJUMP 2\nPUSH 1\nRETURN_VALUE\n",
+        ).unwrap();
+        assert!(verify_v2_file(&wrong_args).unwrap_err().contains("passes 0 argument(s)"));
+    }
+
+    #[test]
+    fn verifier_rejects_stack_underflow_inconsistent_joins_and_main_residue() {
+        let underflow = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n").unwrap();
+        assert!(verify_v2_file(&underflow).unwrap_err().contains("stack underflow"));
+
+        let join = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 7\nCODE\nPUSH_BOOL true\nJUMP_IF_FALSE 5\nPUSH 1\nJUMP 5\nPUSH 2\nPRINT\nJUMP 7\n",
+        ).unwrap();
+        assert!(verify_v2_file(&join).unwrap_err().contains("inconsistent stack depth"));
+
+        let residue = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\nJUMP 2\n").unwrap();
+        assert!(verify_v2_file(&residue).unwrap_err().contains("main exits with 1 operand value(s)"));
+    }
+
+    #[test]
+    fn verifier_rejects_function_return_kind_mismatch() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 void -\nCODE\nJUMP 1\nPUSH 1\nRETURN_VALUE\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).unwrap_err().contains("return kind does not match"));
+    }
+
 }
