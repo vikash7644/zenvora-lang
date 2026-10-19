@@ -1,16 +1,34 @@
-# A local contract-DSL prototype: state lives only for this program run.
-contract Counter {
-    state count := 0
+# Executable contract-DSL example. State persists only for this single local VM run.
+# This is a teaching prototype, not a deployed or consensus-backed smart contract.
+contract DemoToken {
+    state alice := 100
+    state bob := 0
 
-    action increment(amount) {
-        count := count + amount
+    action transfer(amount) {
+        if amount > 0 {
+            if alice >= amount {
+                alice := alice - amount
+                bob := bob + amount
+                show "TRANSFER_ACCEPTED"
+            } otherwise {
+                show "TRANSFER_REJECTED_INSUFFICIENT_BALANCE"
+            }
+        } otherwise {
+            show "TRANSFER_REJECTED_INVALID_AMOUNT"
+        }
     }
 
-    view current() {
-        return count
+    view alice_balance() {
+        return alice
+    }
+
+    view bob_balance() {
+        return bob
     }
 }
 
-call increment(5)
-call increment(2)
-show current()
+call transfer(30)
+call transfer(1000)
+call transfer(-1)
+show alice_balance()
+show bob_balance()
