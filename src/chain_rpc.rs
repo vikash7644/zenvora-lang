@@ -101,6 +101,9 @@ fn read_http_body(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
                     return Err("chunked transfer encoding is not supported".into());
                 }
                 if name.eq_ignore_ascii_case("content-length") {
+                    if content_length.is_some() {
+                        return Err("duplicate Content-Length is not supported".into());
+                    }
                     content_length = Some(value.trim().parse::<usize>()
                         .map_err(|_| "invalid Content-Length")?);
                 }
@@ -354,17 +357,18 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle_json_rpc, handle_json_rpc_with_pool, hex_encode};
+    use super::{handle_json_rpc, handle_json_rpc_with_pool, hex_encode, read_http_body};
     use super::super::block_store::BlockStore;
     use super::super::chain_block::execute_block;
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
     use super::super::chain_runtime::ChainRuntime;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use ed25519_dalek::{Signer, SigningKey};
     use std::collections::BTreeMap;
 
     fn test_store() -> (String, String) {
-        let path = std::env::temp_dir().join(format!("zenvora-rpc-{}.zvb", std::process::id()));
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("zenvora-rpc-{}-{unique}.zvb", std::process::id()));
         let path_text = path.to_string_lossy().to_string();
         let mut allocations = BTreeMap::new();
         allocations.insert("alice".to_string(), 100);
@@ -438,6 +442,74 @@ mod tests {
         assert_eq!(runtime.balance("bob"), 0);
         std::fs::remove_file(store_path).unwrap();
         std::fs::remove_file(pool_path).unwrap();
+    }
+
+    #[test]
+    fn http_parser_rejects_duplicate_content_length_headers() {
+        use std::io::Write;
+        use std::net::{TcpListener, TcpStream};
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_http_body(&mut stream)
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        client.write_all(
+            b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n{}"
+        ).unwrap();
+        drop(client);
+        let error = server.join().unwrap().unwrap_err();
+        assert!(error.contains("duplicate Content-Length"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn malformed_json_and_invalid_json_rpc_envelopes_return_protocol_errors() {
+        let malformed = handle_json_rpc(b"{", "/no-store-needed-for-parse-error", 71);
+        assert_eq!(malformed["error"]["code"], -32700);
+        assert_eq!(malformed["id"], Value::Null);
+
+        let wrong_version = handle_json_rpc(
+            br#"{"jsonrpc":"1.0","id":7,"method":"chain_getInfo","params":[]}"#,
+            "/no-store-needed-for-invalid-envelope", 71,
+        );
+        assert_eq!(wrong_version["error"]["code"], -32600);
+        assert_eq!(wrong_version["id"], 7);
+
+        let missing_method = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":"bad","params":[]}"#,
+            "/no-store-needed-for-invalid-envelope", 71,
+        );
+        assert_eq!(missing_method["error"]["code"], -32600);
+        assert_eq!(missing_method["id"], "bad");
+    }
+
+    #[test]
+    fn read_only_rpc_rejects_transaction_submission_explicitly() {
+        let (path, cleanup_path) = test_store();
+        let response = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":9,"method":"chain_submitTransaction","params":[]}"#,
+            &path, 71,
+        );
+        assert_eq!(response["error"]["code"], -32601);
+        assert_eq!(
+            response["error"]["message"],
+            "transaction submission is disabled on read-only RPC"
+        );
+        std::fs::remove_file(cleanup_path).unwrap();
+    }
+
+    #[test]
+    fn block_lookup_rejects_missing_height_parameter() {
+        let (path, cleanup_path) = test_store();
+        let response = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":10,"method":"chain_getBlock","params":[]}"#,
+            &path, 71,
+        );
+        assert_eq!(response["error"]["code"], -32602);
+        assert_eq!(response["id"], 10);
+        std::fs::remove_file(cleanup_path).unwrap();
     }
 
     #[test]
