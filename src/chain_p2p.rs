@@ -757,7 +757,7 @@ mod tests {
         let local_text = local_path.to_string_lossy().to_string();
         let _ = std::fs::remove_file(&local_path);
         let (_runtime, store, _key) = build_store(&local_text, false);
-        let local_genesis_hash = super::super::chain_protocol::hex_encode(
+        let local_genesis_hash = super::hex_encode(
             &store.blocks().first().unwrap().header.header_hash().unwrap()
         );
 
