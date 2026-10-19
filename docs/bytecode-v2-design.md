@@ -98,14 +98,14 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 - [x] Void/value return mismatches are rejected by the initial v2 verifier.
 - [x] Reachable stack underflow and inconsistent stack depth at joins are rejected by the initial v2 verifier.
 - [ ] Unreachable malformed instructions are rejected structurally.
-- [ ] Disconnected unreachable control-flow components follow the documented stack-entry policy.
+- [x] Disconnected unreachable control-flow components are independently analyzed from an empty operand stack; this conservative policy is documented in the verifier.
 - [ ] Valid compiler output round-trips through v2 encode/decode and executes with the same observable output.
 - [ ] Existing v1 fixtures and all current tests continue to pass.
 - [ ] Fuzz tests cover header parsing, metadata parsing, integer boundaries, region tables, and jump targets.
 
 ## Current implementation boundary
 
-The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, provisional `parse_v2_file`/`serialize_v2_file` framing helpers, and `verify_v2_file`. The verifier parses a defined opcode subset, checks metadata-driven calls and region-local jumps, and analyzes reachable stack depths/returns. It remains a foundation rather than a complete production verifier: disconnected unreachable control-flow components are not yet stack-analyzed, the opcode set is provisional, and the v2 parser/verifier are not wired into the production loader. The existing v1 serializer and loader remain unchanged, and v1 remains the only executable format.
+The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, provisional `parse_v2_file`/`serialize_v2_file` framing helpers, and `verify_v2_file`. The verifier parses a defined opcode subset, checks metadata-driven calls and region-local jumps, and analyzes reachable stack depths/returns. It remains a foundation rather than a complete production verifier: disconnected unreachable control-flow components are analyzed with a conservative empty-stack entry policy, the opcode set is provisional, and the v2 parser/verifier are not wired into the production loader. The existing v1 serializer and loader remain unchanged, and v1 remains the only executable format.
 
 ## Security status
 
