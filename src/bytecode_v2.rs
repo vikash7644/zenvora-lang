@@ -1115,4 +1115,36 @@ JUMP 2
         let encoded = serialize_v2_file(&file).unwrap();
         assert_eq!(parse_v2_file(&encoded).unwrap(), file);
     }
+
+    #[test]
+    fn verifier_enforces_exact_stack_shape_for_void_and_value_returns() {
+        let void_with_residue = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 4 0 void -\\nCODE\\nJUMP 2\\nJUMP 2\\nPUSH 9\\nRETURN\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&void_with_residue).unwrap_err().contains("return at instruction 3 has 1 operand value(s), expected 0"));
+
+        let valid_void = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 3 0 void -\\nCODE\\nJUMP 2\\nJUMP 2\\nRETURN\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&valid_void).is_ok());
+
+        let valid_value = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 4 0 value -\\nCODE\\nJUMP 2\\nJUMP 2\\nPUSH 9\\nRETURN_VALUE\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&valid_value).is_ok());
+    }
+
+    #[test]
+    fn verifier_rejects_value_return_without_a_value_and_call_into_function_body() {
+        let missing_value = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 3 0 value -\\nCODE\\nJUMP 2\\nJUMP 2\\nRETURN_VALUE\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&missing_value).unwrap_err().contains("operand stack underflow"));
+
+        let call_into_body = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 3\\nFUNCTION 3 5 0 value -\\nCODE\\nCALL 4 0\\nPRINT\\nJUMP 3\\nPUSH 1\\nRETURN_VALUE\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&call_into_body).unwrap_err().contains("undeclared function"));
+    }
+
 }
