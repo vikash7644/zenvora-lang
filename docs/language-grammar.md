@@ -101,7 +101,7 @@ action-declaration   = "action", identifier, "(", [ parameters ], ")", "{", { st
 view-declaration     = "view", identifier, "(", [ parameters ], ")", "{", { statement | block-line }, "}" ;
 ```
 
-This is a **local execution prototype**: state is initialized for a single VM run and is not persisted as a consensus-backed ledger. Durable state transitions, atomic rollback, caller authorization, deterministic gas, replay, and state-root commitments are not implemented production guarantees. See `contract-execution-v1.md` for the proposed host/runtime design.
+Only one contract block per source file is currently supported. This is a **local execution prototype**: state is lowered to ordinary VM variables and initialized for a single VM run; it is not persisted as a consensus-backed ledger. Durable state transitions, atomic rollback, caller authorization, deterministic gas, replay, and state-root commitments are not implemented production guarantees. See `contract-execution-v1.md` for the proposed host/runtime design.
 
 ## Diagnostics and resource limits
 
