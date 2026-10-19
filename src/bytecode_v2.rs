@@ -333,7 +333,7 @@ mod tests {
     fn rejects_malformed_metadata_and_parameter_mismatch() {
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 1 2\nCODE\nHALT\n").unwrap_err().contains("start at instruction zero"));
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 x\nCODE\nHALT\n").unwrap_err().contains("main end"));
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 1 value -\nCODE\nHALT\n").unwrap_err().contains("parameter count"));
+        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 2 value only\nCODE\nHALT\n").unwrap_err().contains("parameter count"));
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 maybe -\nCODE\nHALT\n").unwrap_err().contains("return kind"));
     }
 
