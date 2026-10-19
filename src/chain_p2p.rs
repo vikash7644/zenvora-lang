@@ -915,7 +915,7 @@ mod tests {
 
     #[test]
     fn peer_frame_rejects_zero_and_oversized_lengths_before_reading_payload() {
-        for invalid_length in [0_u32, (super::super::chain_p2p::MAX_FRAME_BYTES as u32) + 1] {
+        for invalid_length in [0_u32, (super::MAX_FRAME_BYTES as u32) + 1] {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let address = listener.local_addr().unwrap();
             let server = thread::spawn(move || {
@@ -924,7 +924,7 @@ mod tests {
             });
 
             let mut stream = TcpStream::connect(address).unwrap();
-            let error = super::super::chain_p2p::read_frame(&mut stream).unwrap_err();
+            let error = super::read_frame(&mut stream).unwrap_err();
             assert!(
                 error.contains("peer frame size is outside the permitted range"),
                 "unexpected error for length {invalid_length}: {error}"
