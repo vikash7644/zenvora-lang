@@ -40,7 +40,10 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
         }
         if header_end.is_none() {
             if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                let headers = std::str::from_utf8(&buffer[..pos]).map_err(|_| "invalid HTTP headers")?;
+                let headers = match std::str::from_utf8(&buffer[..pos]) {
+                    Ok(headers) => headers,
+                    Err(_) => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"invalid HTTP headers"})),
+                };
                 let mut lines = headers.split("\r\n");
                 let request_line = lines.next().unwrap_or("");
                 if request_line == "OPTIONS /compile-run HTTP/1.1" || request_line == "OPTIONS /compile-run HTTP/1.0" {
