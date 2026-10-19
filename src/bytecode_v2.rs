@@ -899,7 +899,14 @@ mod tests {
     #[test]
     fn verifier_accepts_unary_negation_without_losing_the_stack_value() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nCODE\\nPUSH 1\\nNEG\\nPRINT\\nJUMP 4\\n",
+            r#"ZENVORA_BYTECODE 2
+PROGRAM 0 4
+CODE
+PUSH 1
+NEG
+PRINT
+JUMP 4
+"#,
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
     }
@@ -907,7 +914,14 @@ mod tests {
     #[test]
     fn verifier_accepts_boolean_not_without_losing_the_stack_value() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nCODE\\nPUSH_BOOL true\\nNOT\\nPRINT\\nJUMP 4\\n",
+            r#"ZENVORA_BYTECODE 2
+PROGRAM 0 4
+CODE
+PUSH_BOOL true
+NOT
+PRINT
+JUMP 4
+"#,
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
     }
