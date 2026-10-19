@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- The VM now caps the combined estimated size of operand-stack values at 16 MiB, with accounting on stack pushes/pops and a regression test for oversized argument/expression stacks.
+
 - Runtime collection values now have an estimated 16 MiB aggregate-size budget in addition to item-count and nesting limits, with regression coverage for oversized arrays.
 
 - Runtime arrays/maps are now limited to 256 nested collection levels, preventing dynamically constructed nested values from exhausting the stack during validation or display. Added a loop-built nesting regression test.
