@@ -732,6 +732,27 @@ mod tests {
     }
 
     #[test]
+    fn parser_survives_deterministic_bounded_fuzz_smoke_inputs() {
+        // Deterministic, dependency-free parser fuzz smoke test for CI. This is
+        // not a substitute for longer-running cargo-fuzz/property-based campaigns.
+        const ALPHABET: &[u8] = b"ZENVORA_BYTECODE 2\nPROGRAM FUNCTION CODE PUSH CALL JUMP RETURN_VALUE true false -_0123456789";
+        let mut state = 0x5eed_u64;
+        for case_index in 0..4_096usize {
+            state ^= (case_index as u64).wrapping_mul(0x9e37_79b9);
+            let length = (state as usize) % 192;
+            let mut input = String::with_capacity(length + 32);
+            if case_index % 3 == 0 {
+                input.push_str("ZENVORA_BYTECODE 2\n");
+            }
+            for _ in 0..length {
+                state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                input.push(ALPHABET[(state as usize) % ALPHABET.len()] as char);
+            }
+            let _ = super::parse_v2_file(&input);
+        }
+    }
+
+    #[test]
     fn rejects_integer_boundaries_and_malformed_instruction_operands() {
         let too_large = "ZENVORA_BYTECODE 2\nPROGRAM 0 184467440737095516160\nCODE\nJUMP 1\n";
         assert!(parse_v2_file(too_large).unwrap_err().contains("invalid main end"));
