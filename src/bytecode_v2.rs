@@ -698,11 +698,18 @@ mod tests {
 
     #[test]
     fn serializer_rejects_noncanonical_instruction_edge_whitespace() {
-        let file = ParsedV2File {
-            layout: layout(2, 2, vec![]),
-            instructions: vec![" PUSH 1".into(), "JUMP 2".into()],
-        };
-        assert!(serialize_v2_file(&file).unwrap_err().contains("invalid instruction record"));
+        for instruction in [" PUSH 1", "PUSH 1 ", "\\tPUSH 1", "PUSH 1\\t"] {
+            let file = ParsedV2File {
+                layout: layout(2, 2, vec![]),
+                instructions: vec![instruction.into(), "JUMP 2".into()],
+            };
+            assert!(
+                serialize_v2_file(&file)
+                    .unwrap_err()
+                    .contains("invalid instruction record"),
+                "accepted non-canonical instruction {instruction:?}"
+            );
+        }
     }
 
     #[test]
