@@ -1088,7 +1088,7 @@ JUMP 2
     #[test]
     fn verifier_rejects_conditional_function_fallthrough_and_bad_parameter_names() {
         let fallthrough = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nFUNCTION 1 4 1 value flag\\nCODE\\nJUMP 1\\nLOAD flag\\nJUMP_IF_FALSE 3\\nRETURN_VALUE\\n",
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nFUNCTION 1 4 1 value flag\\nCODE\\nJUMP 1\\nLOAD flag\\nJUMP_IF_FALSE 3\\nPUSH 1\\n",
         ).unwrap();
         assert!(verify_v2_file(&fallthrough).unwrap_err().contains("function falls through"));
 
