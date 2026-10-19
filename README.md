@@ -1,5 +1,13 @@
 # Zenvora Lang
 
+## Official website
+
+- **Zenvora website:** https://vikash7644.github.io/zenvora-lang/
+- **Browser playground:** https://vikash7644.github.io/zenvora-lang/playground.html
+- **Source repository:** https://github.com/vikash7644/zenvora-lang
+
+The static site is in `website/` and is deployed by the GitHub Pages workflow when website files change on `main`. If the links do not open yet, check the latest [Pages deployment workflow](https://github.com/vikash7644/zenvora-lang/actions/workflows/pages.yml).
+
 Zenvora Lang is an independent programming-language project for the Zenvora ecosystem, with a Rust compiler and stack-based bytecode virtual machine. The current release line is v0.8.0 prototype/experimental; it is not a stable v1.0 language or a production smart-contract toolchain.
 
 ## Legacy blockchain material — migration pending
