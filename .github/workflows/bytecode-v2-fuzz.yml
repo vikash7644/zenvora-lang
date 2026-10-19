@@ -8,7 +8,7 @@ on:
       - ".github/workflows/bytecode-v2-fuzz.yml"
   push:
     branches:
-      - "spec/bytecode-v2-function-metadata"
+      - "main"
     paths:
       - "src/bytecode_v2.rs"
       - "fuzz/**"
