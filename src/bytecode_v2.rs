@@ -851,4 +851,30 @@ mod tests {
     }
 
 
+
+
+    #[test]
+    fn verifier_accepts_nested_metadata_driven_calls_with_consistent_stack_effects() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nFUNCTION 4 8 1 value x\\nFUNCTION 8 12 1 value y\\nCODE\\nPUSH 40\\nCALL 4 1\\nPRINT\\nJUMP 4\\nLOAD x\\nCALL 8 1\\nRETURN_VALUE\\nLOAD y\\nPUSH 2\\nMUL\\nRETURN_VALUE\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).is_ok());
+    }
+
+    #[test]
+    fn verifier_rejects_call_when_metadata_matches_but_operand_stack_lacks_arguments() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 4 1 value x\\nCODE\\nCALL 2 1\\nJUMP 2\\nLOAD x\\nRETURN_VALUE\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).unwrap_err().contains("stack underflow"));
+    }
+
+    #[test]
+    fn verifier_rejects_value_return_with_extra_stack_values_on_one_branch() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 8 1 value flag\\nCODE\\nJUMP 2\\nJUMP 3\\nLOAD flag\\nJUMP_IF_FALSE 6\\nPUSH 7\\nRETURN_VALUE\\nPUSH 8\\nRETURN_VALUE\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).unwrap_err().contains("return at instruction"));
+    }
+
 }
