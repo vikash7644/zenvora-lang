@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Collection builtins `push`, `put`, `keys`, and `values` now move owned collection data where possible instead of cloning it a second time, reducing temporary allocations.
+
 - Indexed array/map assignment now updates the bound collection in place instead of cloning the entire collection for every write, while preserving bounds, type, depth, and memory checks.
 
 - Compiler entry points now reject source larger than 16 MiB before contract lowering or lexing, with a regression test through the public compile path.
