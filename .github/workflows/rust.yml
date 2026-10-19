@@ -25,27 +25,20 @@ jobs:
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Generate lockfile for reproducibility audit
-        run: |
-          cargo generate-lockfile
-          printf '%s\n' 'LOCKFILE_BASE64_BEGIN'
-          base64 -w0 Cargo.lock
-          printf '\n%s\n' 'LOCKFILE_BASE64_END'
-
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
       - name: Check compilation
-        run: cargo check --all-targets
+        run: cargo check --locked --all-targets
 
       - name: Run Clippy lint checks
-        run: cargo clippy --all-targets
+        run: cargo clippy --locked --all-targets
 
       - name: Run all tests
-        run: cargo test --all-targets
+        run: cargo test --locked --all-targets
 
       - name: Build optimized release CLI
-        run: cargo build --release --bin zv
+        run: cargo build --locked --release --bin zv
 
       - name: Smoke-test optimized release CLI version
         run: ./target/release/zv --version
@@ -54,75 +47,75 @@ jobs:
         run: ./target/release/zv examples/hello.zv | grep -Fxq 35
 
       - name: Run hello example
-        run: cargo run -- examples/hello.zv
+        run: cargo run --locked -- examples/hello.zv
 
       - name: Run Zenvora Lang language tour
-        run: cargo run -- examples/zenvora-language-tour.zv
+        run: cargo run --locked -- examples/zenvora-language-tour.zv
 
       - name: Run loop-control example
-        run: cargo run -- examples/loops.zv
+        run: cargo run --locked -- examples/loops.zv
 
       - name: Run functions example
-        run: cargo run -- examples/functions.zv
+        run: cargo run --locked -- examples/functions.zv
 
       - name: Run basic functions example #35
-        run: cargo run -- examples/functions-basic.zv
+        run: cargo run --locked -- examples/functions-basic.zv
 
       - name: Run functions summary example #36
-        run: cargo run -- examples/functions-summary.zv
+        run: cargo run --locked -- examples/functions-summary.zv
 
       - name: Run booleans example
-        run: cargo run -- examples/booleans.zv
+        run: cargo run --locked -- examples/booleans.zv
 
       - name: Run strings example
-        run: cargo run -- examples/strings.zv
+        run: cargo run --locked -- examples/strings.zv
 
       - name: Run collections example
-        run: cargo run -- examples/collections.zv
+        run: cargo run --locked -- examples/collections.zv
 
       - name: Run direct indexing example
-        run: cargo run -- examples/indexing.zv
+        run: cargo run --locked -- examples/indexing.zv
 
       - name: Run standard library example
-        run: cargo run -- examples/stdlib.zv
+        run: cargo run --locked -- examples/stdlib.zv
 
       - name: Run string standard library example
-        run: cargo run -- examples/stdlib-strings.zv
+        run: cargo run --locked -- examples/stdlib-strings.zv
 
       - name: Run contract DSL example
-        run: cargo run -- examples/contracts.zv
+        run: cargo run --locked -- examples/contracts.zv
 
       - name: Run Zenvora Lang transaction-rule checks
-        run: cargo run -- examples/chain_transfer.zv
+        run: cargo run --locked -- examples/chain_transfer.zv
 
       - name: Run module import example
-        run: cargo run -- examples/modules.zv
+        run: cargo run --locked -- examples/modules.zv
 
       - name: Compile example to bytecode v1
-        run: cargo run -- --emit-bytecode examples/functions.zv /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --emit-bytecode examples/functions.zv /tmp/zenvora-functions.zvb
 
       - name: Execute compiled bytecode v1
-        run: cargo run -- --run-bytecode /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zvb
 
       - name: Compile example to experimental bytecode v2
-        run: cargo run -- --emit-bytecode-v2 examples/functions.zv /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.zv /tmp/zenvora-functions.zv2b
 
       - name: Check bytecode v2 header
         run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.zv2b
 
       - name: Execute verified bytecode v2
-        run: cargo run -- --run-bytecode /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zv2b
 
       - name: Verify CLI version
-        run: cargo run -- --version
+        run: cargo run --locked -- --version
 
       - name: Verify CLI help
-        run: cargo run -- --help
+        run: cargo run --locked -- --help
 
       - name: Smoke-test Rust compiler HTTP API
         shell: bash
         run: |
-          cargo run -- --compiler-api 18787 > /tmp/zenvora-compiler-api.log 2>&1 &
+          cargo run --locked -- --compiler-api 18787 > /tmp/zenvora-compiler-api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
