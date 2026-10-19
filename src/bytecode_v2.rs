@@ -698,7 +698,7 @@ mod tests {
 
     #[test]
     fn serializer_rejects_noncanonical_instruction_edge_whitespace() {
-        for instruction in [" PUSH 1", "PUSH 1 ", "\\tPUSH 1", "PUSH 1\\t"] {
+        for instruction in [" PUSH 1", "PUSH 1 ", "\tPUSH 1", "PUSH 1\t"] {
             let file = ParsedV2File {
                 layout: layout(2, 2, vec![]),
                 instructions: vec![instruction.into(), "JUMP 2".into()],
