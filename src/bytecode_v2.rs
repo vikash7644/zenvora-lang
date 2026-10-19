@@ -261,7 +261,13 @@ pub fn serialize_v2_file(file: &ParsedV2File) -> Result<String, String> {
     }
     output.push_str("CODE\n");
     for instruction in &file.instructions {
-        if instruction.trim().is_empty() || (instruction.contains('\n') || instruction.contains('\r')) {
+        // Keep serialization canonical: the parser trims record edges, so accepting
+        // edge whitespace here would make serialize/parse change the stored records.
+        if instruction.trim().is_empty()
+            || instruction.trim() != instruction
+            || instruction.contains('\n')
+            || instruction.contains('\r')
+        {
             return Err("bytecode v2: invalid instruction record".into());
         }
         output.push_str(instruction);
@@ -688,6 +694,22 @@ mod tests {
     fn rejects_embedded_carriage_return_in_instruction_record() {
         let input = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\r JUMP 2\nJUMP 2\n";
         assert!(parse_v2_file(input).unwrap_err().contains("embedded carriage return"));
+    }
+
+    #[test]
+    fn serializer_rejects_noncanonical_instruction_edge_whitespace() {
+        for instruction in [" PUSH 1", "PUSH 1 ", "\tPUSH 1", "PUSH 1\t"] {
+            let file = ParsedV2File {
+                layout: layout(2, 2, vec![]),
+                instructions: vec![instruction.into(), "JUMP 2".into()],
+            };
+            assert!(
+                serialize_v2_file(&file)
+                    .unwrap_err()
+                    .contains("invalid instruction record"),
+                "accepted non-canonical instruction {instruction:?}"
+            );
+        }
     }
 
     #[test]
