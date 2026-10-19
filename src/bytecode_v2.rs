@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn rejects_blank_code_and_uncovered_regions() {
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\n\n").unwrap_err().contains("blank instruction"));
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 void -\nCODE\nHALT\n").unwrap_err().contains("undeclared instruction region"));
+        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\nNOP\n").unwrap_err().contains("undeclared instruction region"));
     }
 
     #[test]
