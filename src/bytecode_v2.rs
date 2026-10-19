@@ -1036,4 +1036,39 @@ JUMP 2
         assert!(verify_v2_file(&file).unwrap_err().contains("inconsistent stack depth"));
     }
 
+
+    #[test]
+    fn verifier_survives_deterministic_bounded_instruction_fuzz_smoke() {
+        // Exercise opcode parsing, structural validation, and control-flow analysis
+        // together. This is a fast CI smoke test, not a replacement for cargo-fuzz.
+        const RECORDS: &[&str] = &[
+            "PUSH 0", "PUSH -1", "PUSH 9223372036854775807",
+            "PUSH_STRING_HEX -", "PUSH_STRING_HEX 4142", "PUSH_STRING_HEX xyz",
+            "PUSH_BOOL true", "PUSH_BOOL false", "PUSH_BOOL maybe",
+            "LOAD value", "STORE value", "DECLARE value", "PRINT",
+            "ADD", "SUB", "MUL", "DIV", "NEG", "NOT", "AND", "OR",
+            "EQ", "NE", "LT", "LE", "GT", "GE", "INDEX", "SET_INDEX value",
+            "JUMP 0", "JUMP 1", "JUMP 999999", "JUMP 18446744073709551615",
+            "JUMP_IF_FALSE 0", "JUMP_IF_FALSE_KEEP 2", "JUMP_IF_TRUE_KEEP 3",
+            "CALL 0 0", "CALL 1 1025", "BUILTIN len 1", "BUILTIN unknown 0",
+            "RETURN", "RETURN_VALUE", "MAGIC", "", "PUSH nope",
+        ];
+        let mut state = 0x51a7_2026_u64;
+        for case_index in 0..2_048usize {
+            state ^= (case_index as u64).wrapping_mul(0x9e37_79b9);
+            let count = (state as usize % 16) + 1;
+            let mut instructions = Vec::with_capacity(count);
+            for _ in 0..count {
+                state = state.wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                instructions.push(RECORDS[(state as usize) % RECORDS.len()].to_string());
+            }
+            let file = ParsedV2File {
+                layout: layout(count, count, vec![]),
+                instructions,
+            };
+            let _ = verify_v2_file(&file);
+        }
+    }
+
 }
