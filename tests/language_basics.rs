@@ -360,3 +360,57 @@ show bob_balance()
         "TRANSFER_ACCEPTED\nTRANSFER_REJECTED_INSUFFICIENT_BALANCE\nTRANSFER_REJECTED_INVALID_AMOUNT\nTRANSFER_REJECTED_INVALID_AMOUNT\n70\n30\n"
     );
 }
+
+
+#[test]
+fn logical_operators_short_circuit_without_evaluating_the_right_operand() {
+    let output = run_program(
+        "if false and (1 / 0 == 0) {\nshow 0\n} otherwise {\nshow 1\n}\nif true or (1 / 0 == 0) {\nshow 2\n}\n",
+    );
+    assert!(
+        output.status.success(),
+        "short-circuit evaluation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "1\n2\n");
+}
+
+#[test]
+fn arrays_maps_and_collection_helpers_preserve_expected_values() {
+    let output = run_program(
+        "define values := array(10, 20, 30)\nshow values[1]\nshow len(values)\nshow sum(values)\ndefine profile := map(\"name\", \"Zenvora\", \"level\", 6)\nshow get(profile, \"name\")\ndefine changed := put(profile, \"level\", 7)\nshow get(changed, \"level\")\nshow get(profile, \"level\")\n",
+    );
+    assert!(
+        output.status.success(),
+        "collection program failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "20\n3\n60\nZenvora\n7\n6\n"
+    );
+}
+
+#[test]
+fn string_helpers_handle_unicode_and_integer_conversion() {
+    let output = run_program(
+        "show char_count(\"hé🙂\")\nshow to_int(\"  -42 \")\nshow upper(\"Zenvora\")\nshow trim(\"  Lang  \")\n",
+    );
+    assert!(
+        output.status.success(),
+        "string helper program failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "3\n-42\nZENVORA\nLang\n");
+}
+
+#[test]
+fn checked_integer_overflow_is_reported_as_a_runtime_error() {
+    let output = run_program("show 9223372036854775807 + 1\n");
+    assert!(!output.status.success(), "overflowing arithmetic unexpectedly succeeded");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).to_lowercase().contains("overflow"),
+        "expected an overflow diagnostic, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
