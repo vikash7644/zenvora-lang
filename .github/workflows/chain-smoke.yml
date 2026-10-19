@@ -73,7 +73,14 @@ jobs:
             exit 1
           fi
 
+          echo "Running shell RPC smoke checks..."
           RPC_URL=http://127.0.0.1:18545/ \
           RPC_TEST_ADDRESS=bob \
           RPC_TEST_HEIGHT=1 \
           sh scripts/check_rpc.sh
+
+          echo "Running Rust RPC smoke checker..."
+          RPC_URL=http://127.0.0.1:18545/ \
+          RPC_TEST_ADDRESS=bob \
+          RPC_TEST_HEIGHT=1 \
+          cargo run --quiet --bin check_node_rpc
