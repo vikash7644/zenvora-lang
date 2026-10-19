@@ -756,4 +756,52 @@ mod tests {
         std::fs::remove_file(local_path).unwrap();
     }
 
+
+    #[test]
+    fn peer_sync_rejects_status_without_protocol_version() {
+        let local_path = std::env::temp_dir().join(format!(
+            "zenvora-peer-protocol-missing-{}.zvb",
+            std::process::id()
+        ));
+        let local_text = local_path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&local_path);
+        let (_, store, _) = build_store(&local_text, false);
+        let genesis = store.blocks().first().unwrap();
+        let genesis_hash = super::hex_encode(&genesis.header.header_hash().unwrap());
+        let genesis_state_root = super::hex_encode(&genesis.header.state_root);
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut length_bytes = [0_u8; 4];
+            stream.read_exact(&mut length_bytes).unwrap();
+            let length = u32::from_be_bytes(length_bytes) as usize;
+            let mut request_bytes = vec![0_u8; length];
+            stream.read_exact(&mut request_bytes).unwrap();
+            let request: serde_json::Value = serde_json::from_slice(&request_bytes).unwrap();
+            assert_eq!(request["method"], "status");
+
+            let response = json!({
+                "ok": true,
+                "result": {
+                    "chainId": 71,
+                    "height": 0,
+                    "genesisHash": genesis_hash,
+                    "genesisStateRoot": genesis_state_root
+                }
+            }).to_string();
+            stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+
+        let error = sync_from_peer(&local_text, 71, &peer.to_string()).unwrap_err();
+        server.join().unwrap();
+        assert!(
+            error.contains("peer status has no valid protocol version"),
+            "unexpected error: {error}"
+        );
+        std::fs::remove_file(local_path).unwrap();
+    }
+
 }
