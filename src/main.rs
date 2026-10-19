@@ -37,6 +37,9 @@ fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), String> {
         let token_column = i + 1;
         if c.is_whitespace() { i += 1; continue; }
         if c == '#' { break; }
+        if out.len() >= MAX_SOURCE_TOKENS {
+            return Err(format!("column {}: token count exceeds safety limit ({MAX_SOURCE_TOKENS})", token_column));
+        }
         if c == '"' {
             i += 1;
             let mut value = String::new();
@@ -110,6 +113,9 @@ fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), String> {
         out.push(token);
         columns.push(token_column);
         i += 1;
+    }
+    if out.len() >= MAX_SOURCE_TOKENS {
+        return Err(format!("column {}: token count exceeds safety limit ({MAX_SOURCE_TOKENS})", chars.len() + 1));
     }
     out.push(Token::End);
     columns.push(chars.len() + 1);
@@ -297,7 +303,10 @@ fn split_arguments(input: &str) -> Vec<&str> {
     args
 }
 
-fn append_code(code: &mut Vec<Op>, mut appended: Vec<Op>) {
+fn append_code(code: &mut Vec<Op>, mut appended: Vec<Op>) -> Result<(), String> {
+    if code.len().saturating_add(appended.len()) > MAX_BYTECODE_INSTRUCTIONS {
+        return Err(format!("compiled instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
+    }
     let offset = code.len();
     for op in &mut appended {
         match op {
@@ -310,6 +319,7 @@ fn append_code(code: &mut Vec<Op>, mut appended: Vec<Op>) {
         }
     }
     code.extend(appended);
+    Ok(())
 }
 
 fn with_source_column(raw_line: &str, trimmed_line: &str, expression: &str, error: String) -> String {
@@ -342,7 +352,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), format!("column {}: unexpected token {:?}", parser.current_column(), parser.peek()))));
             }
-            append_code(&mut code, parser.code);
+            append_code(&mut code, parser.code)?;
             let jump = code.len();
             code.push(Op::JumpIfFalse(usize::MAX));
             blocks.push(BlockFrame::If { false_jump: Some(jump), end_jump: None });
@@ -357,7 +367,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                 return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), format!("column {}: unexpected token {:?}", parser.current_column(), parser.peek()))));
             }
             let start = code.len();
-            append_code(&mut code, parser.code);
+            append_code(&mut code, parser.code)?;
             let exit_jump = code.len();
             code.push(Op::JumpIfFalse(usize::MAX));
             blocks.push(BlockFrame::Repeat { start, exit_jump, breaks: Vec::new() });
@@ -381,7 +391,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                 if parser.peek() != &Token::End {
                     return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, arg.trim(), format!("column {}: unexpected token in function argument {:?}", parser.current_column(), parser.peek()))));
                 }
-                append_code(&mut code, parser.code);
+                append_code(&mut code, parser.code)?;
             }
             code.push(Op::Call(name.to_string(), args.len()));
             continue;
@@ -394,7 +404,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             if parser.peek() != &Token::End {
                 return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, expr.trim(), format!("column {}: unexpected token in return expression {:?}", parser.current_column(), parser.peek()))));
             }
-            append_code(&mut code, parser.code);
+            append_code(&mut code, parser.code)?;
             code.push(Op::ReturnValue);
             continue;
         }
@@ -480,14 +490,14 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                     if index_parser.peek() != &Token::End {
                         return Err(format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), format!("column {}: unexpected token in index {:?}", index_parser.current_column(), index_parser.peek()))));
                     }
-                    append_code(&mut code, index_parser.code);
+                    append_code(&mut code, index_parser.code)?;
                     let (value_tokens, value_columns) = lex_with_columns(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
                     let mut value_parser = Parser { tokens: value_tokens, columns: value_columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
                     value_parser.expression().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: {e}", value_parser.error_column()))))?;
                     if value_parser.peek() != &Token::End {
                         return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: unexpected token in indexed assignment {:?}", value_parser.current_column(), value_parser.peek()))));
                     }
-                    append_code(&mut code, value_parser.code);
+                    append_code(&mut code, value_parser.code)?;
                     code.push(Op::SetIndex(name.trim().to_string()));
                     continue;
                 }
@@ -522,13 +532,16 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         if parser.peek() != &Token::End {
             return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, statement.1, format!("column {}: unexpected token {:?}", parser.current_column(), parser.peek()))));
         }
-        append_code(&mut code, parser.code);
+        append_code(&mut code, parser.code)?;
         if statement.2 { code.push(Op::Print); } else if is_declaration { code.push(Op::Declare(statement.0)); } else { code.push(Op::Store(statement.0)); }
     }
 
     if let Some(frame) = blocks.last() {
         let kind = match frame { BlockFrame::If { .. } => "if", BlockFrame::Repeat { .. } => "repeat" };
         return Err(format!("missing closing brace for {kind} block"));
+    }
+    if code.len() > MAX_BYTECODE_INSTRUCTIONS {
+        return Err(format!("compiled instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
     }
     Ok(code)
 }
@@ -1778,6 +1791,7 @@ where
 
 
 const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
+const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
 const MAX_VALUE_DEPTH: usize = 256;
 const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
@@ -3257,6 +3271,13 @@ mod tests {
     }
 
     #[test]
+    fn lexer_rejects_excessive_token_count() {
+        let source = "1+".repeat(super::MAX_SOURCE_TOKENS / 2 + 1);
+        let error = super::lex(&source).unwrap_err();
+        assert!(error.contains("token count exceeds safety limit"), "{error}");
+    }
+
+    #[test]
     fn lexer_errors_include_one_based_source_columns() {
         assert!(lex("show @").unwrap_err().contains("column 6: unexpected character"));
         assert!(lex("show \"bad\\q\"").unwrap_err().contains("column 11: unsupported string escape"));
@@ -3433,6 +3454,14 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&restored, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["42", "true", "42"]);
+    }
+
+    #[test]
+    fn compiler_instruction_append_enforces_limit_before_growth() {
+        let mut code = vec![super::Op::Push(0); super::MAX_BYTECODE_INSTRUCTIONS];
+        let error = super::append_code(&mut code, vec![super::Op::Push(1)]).unwrap_err();
+        assert!(error.contains("compiled instruction count exceeds safety limit"), "{error}");
+        assert_eq!(code.len(), super::MAX_BYTECODE_INSTRUCTIONS);
     }
 
     #[test]
