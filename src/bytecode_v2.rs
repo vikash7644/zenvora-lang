@@ -47,6 +47,21 @@ pub struct ParsedV2File {
     pub instructions: Vec<String>,
 }
 
+/// Return whether a builtin name is part of the currently supported VM surface.
+/// Keep this list shared with the compiler and loader so verifier acceptance matches execution.
+pub fn is_supported_builtin(name: &str) -> bool {
+    matches!(name,
+        "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" |
+        "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" |
+        "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" |
+        "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" |
+        "to_int" | "index_of" | "unique" | "assert_eq" | "gcd" | "lcm" | "factorial" |
+        "is_prime" | "fibonacci" | "pow_int" | "mean" | "speed" | "density" | "molarity" |
+        "force" | "kinetic_energy" | "bmi_x10" | "molar_mass" | "dna_complement" |
+        "gc_content_percent"
+    )
+}
+
 fn valid_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     let syntax_ok = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
@@ -343,7 +358,7 @@ fn parse_v2_instruction(line: &str) -> Result<V2Instruction, String> {
             }
             V2Instruction::Call { target, argument_count }
         }
-        ["BUILTIN", name, count] if valid_identifier(name) => {
+        ["BUILTIN", name, count] if is_supported_builtin(name) => {
             let argument_count = parse_operand_usize(count, "builtin argument count")?;
             if argument_count > MAX_FUNCTION_PARAMETERS {
                 return Err(format!("bytecode v2: builtin argument count exceeds safety limit ({MAX_FUNCTION_PARAMETERS})"));
@@ -675,6 +690,19 @@ mod tests {
             "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
+    }
+
+    #[test]
+    fn verifier_rejects_unknown_builtin_and_accepts_supported_builtin() {
+        let unknown = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nBUILTIN not_a_real_builtin 0\\nJUMP 2\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&unknown).unwrap_err().contains("malformed instruction"));
+
+        let known = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nCODE\\nPUSH_STRING_HEX 61\\nBUILTIN len 1\\nPRINT\\nJUMP 4\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&known).is_ok());
     }
 
     #[test]
