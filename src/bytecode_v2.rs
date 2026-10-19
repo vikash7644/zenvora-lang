@@ -204,6 +204,11 @@ pub fn parse_v2_file(input: &str) -> Result<ParsedV2File, String> {
 
     let mut instructions = Vec::new();
     for line in lines {
+        // The lines iterator removes normal LF/CRLF terminators, so any remaining
+        // CR is embedded in the record and would make serialization fail.
+        if line.contains('\r') {
+            return Err("bytecode v2: embedded carriage return in instruction record".into());
+        }
         let instruction = line.trim();
         if instruction.is_empty() {
             return Err("bytecode v2: blank instruction record is not allowed".into());
@@ -667,6 +672,12 @@ mod tests {
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 x\nCODE\nHALT\n").unwrap_err().contains("main end"));
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 2 value only\nCODE\nHALT\n").unwrap_err().contains("parameter count"));
         assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 maybe -\nCODE\nHALT\n").unwrap_err().contains("return kind"));
+    }
+
+    #[test]
+    fn rejects_embedded_carriage_return_in_instruction_record() {
+        let input = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\r JUMP 2\nJUMP 2\n";
+        assert!(parse_v2_file(input).unwrap_err().contains("embedded carriage return"));
     }
 
     #[test]
