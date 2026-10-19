@@ -101,6 +101,9 @@ fn read_http_body(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
                     return Err("chunked transfer encoding is not supported".into());
                 }
                 if name.eq_ignore_ascii_case("content-length") {
+                    if content_length.is_some() {
+                        return Err("duplicate Content-Length is not supported".into());
+                    }
                     content_length = Some(value.trim().parse::<usize>()
                         .map_err(|_| "invalid Content-Length")?);
                 }
