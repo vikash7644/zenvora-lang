@@ -1,8 +1,38 @@
 use std::collections::HashSet;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const MAX_MODULE_DEPTH: usize = 64;
+const MAX_MODULE_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_EXPANDED_SOURCE_BYTES: usize = 16 * 1024 * 1024;
+
+fn read_module_source(path: &Path) -> Result<String, String> {
+    let file = fs::File::open(path)
+        .map_err(|error| format!("cannot read module {}: {error}", path.display()))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_MODULE_SOURCE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("cannot read module {}: {error}", path.display()))?;
+    if bytes.len() as u64 > MAX_MODULE_SOURCE_BYTES {
+        return Err(format!(
+            "module source exceeds safety limit ({MAX_MODULE_SOURCE_BYTES} bytes): {}",
+            path.display()
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|error| format!("module source is not valid UTF-8 at {}: {error}", path.display()))
+}
+
+fn append_bounded(expanded: &mut String, text: &str) -> Result<(), String> {
+    let next_len = expanded.len().checked_add(text.len())
+        .ok_or_else(|| "expanded module source size overflow".to_string())?;
+    if next_len > MAX_EXPANDED_SOURCE_BYTES {
+        return Err(format!("expanded module source exceeds safety limit ({MAX_EXPANDED_SOURCE_BYTES} bytes)"));
+    }
+    expanded.push_str(text);
+    Ok(())
+}
 
 /// Loads a .zv program and expands use "relative/path.zv" directives.
 /// Paths are resolved relative to the file containing the directive.
@@ -41,8 +71,7 @@ fn load_recursive(
         return Ok(String::new());
     }
 
-    let source = fs::read_to_string(&canonical)
-        .map_err(|error| format!("cannot read module {}: {error}", canonical.display()))?;
+    let source = read_module_source(&canonical)?;
     active.push(canonical.clone());
 
     let mut expanded = String::new();
@@ -59,13 +88,13 @@ fn load_recursive(
             let child_source = load_recursive(&child_path, loaded, active).map_err(|error| {
                 format!("{}:{}: {error}", canonical.display(), line_index + 1)
             })?;
-            expanded.push_str(&child_source);
+            append_bounded(&mut expanded, &child_source).map_err(|error| format!("{}:{}: {error}", canonical.display(), line_index + 1))?;
             if !child_source.is_empty() && !child_source.ends_with('\n') {
-                expanded.push('\n');
+                append_bounded(&mut expanded, "\n").map_err(|error| format!("{}:{}: {error}", canonical.display(), line_index + 1))?;
             }
         } else {
-            expanded.push_str(line);
-            expanded.push('\n');
+            append_bounded(&mut expanded, line).map_err(|error| format!("{}:{}: {error}", canonical.display(), line_index + 1))?;
+            append_bounded(&mut expanded, "\n").map_err(|error| format!("{}:{}: {error}", canonical.display(), line_index + 1))?;
         }
     }
 
@@ -123,6 +152,23 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn rejects_oversized_module_source_before_unbounded_reading() {
+        let temp = TempDir::new();
+        let path = temp.0.join("large.zv");
+        fs::write(&path, "x".repeat(super::MAX_MODULE_SOURCE_BYTES as usize + 1)).unwrap();
+        let error = load(&path).unwrap_err();
+        assert!(error.contains("module source exceeds safety limit"), "{error}");
+    }
+
+    #[test]
+    fn expanded_source_size_is_bounded() {
+        let mut expanded = "x".repeat(super::MAX_EXPANDED_SOURCE_BYTES);
+        let error = super::append_bounded(&mut expanded, "y").unwrap_err();
+        assert!(error.contains("expanded module source exceeds safety limit"), "{error}");
+        assert_eq!(expanded.len(), super::MAX_EXPANDED_SOURCE_BYTES);
     }
 
     #[test]
