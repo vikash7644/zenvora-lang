@@ -1160,27 +1160,34 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
         }
         "push" => {
             arity(2)?;
-            let original = match &args[0] { Value::Array(items) => items, _ => return Err("type error: push expects an array as its first argument".into()) };
-            if original.len() >= MAX_COLLECTION_ITEMS {
+            let mut values = args.into_iter();
+            let original = values.next().ok_or("push expects an array and a value")?;
+            let value = values.next().ok_or("push expects an array and a value")?;
+            let Value::Array(mut items) = original else { return Err("type error: push expects an array as its first argument".into()); };
+            if items.len() >= MAX_COLLECTION_ITEMS {
                 return Err(format!("array exceeds safety limit ({MAX_COLLECTION_ITEMS} items)"));
             }
-            let mut items = original.clone();
-            items.push(args[1].clone());
+            items.push(value);
             Ok(Value::Array(items))
         }
         "put" => {
             arity(3)?;
-            let original = match &args[0] { Value::Map(items) => items, _ => return Err("type error: put expects a map as its first argument".into()) };
-            let Value::Str(key) = &args[1] else { return Err("type error: put key must be a string".into()); };
-            check_map_capacity(original, key)?;
-            let mut items = original.clone();
-            items.insert(key.clone(), args[2].clone());
+            let mut values = args.into_iter();
+            let original = values.next().ok_or("put expects a map, key, and value")?;
+            let key = values.next().ok_or("put expects a map, key, and value")?;
+            let value = values.next().ok_or("put expects a map, key, and value")?;
+            let Value::Map(mut items) = original else { return Err("type error: put expects a map as its first argument".into()); };
+            let Value::Str(key) = key else { return Err("type error: put key must be a string".into()); };
+            check_map_capacity(&items, &key)?;
+            items.insert(key, value);
             Ok(Value::Map(items))
         }
         "keys" | "values" => {
             arity(1)?;
-            let Value::Map(items) = &args[0] else { return Err(format!("type error: {name} expects a map")); };
-            let values = if name == "keys" { items.keys().cloned().map(Value::Str).collect() } else { items.values().cloned().collect() };
+            let mut values = args.into_iter();
+            let original = values.next().ok_or("keys/values expects a map")?;
+            let Value::Map(items) = original else { return Err(format!("type error: {name} expects a map")); };
+            let values = if name == "keys" { items.into_keys().map(Value::Str).collect() } else { items.into_values().collect() };
             Ok(Value::Array(values))
         }
         "type_of" => {
