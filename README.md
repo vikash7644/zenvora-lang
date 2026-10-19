@@ -183,9 +183,15 @@ The compiler can write and run versioned stack-machine bytecode files:
 ```sh
 cargo run -- --emit-bytecode examples/functions.zv functions.zvb
 cargo run -- --run-bytecode functions.zvb
+
+# Experimental opt-in v2 output:
+cargo run -- --emit-bytecode-v2 examples/functions.zv functions.zv2b
+cargo run -- --run-bytecode functions.zv2b
 ```
 
-The current text format starts with `ZENVORA_BYTECODE 1`. The loader checks the format version, instruction syntax, jump targets, and function-entry targets. It also limits bytecode files to 16 MiB, programs to 1,000,000 instructions, strings to 1 MiB, and call arguments to 1,024; VM execution has instruction, call-depth, and operand-stack limits. Version 1 is an early format and is not yet promised to remain compatible forever.
+Version 1 remains the default and its serializer/loader behavior is unchanged. The experimental v2 format starts with `ZENVORA_BYTECODE 2` and includes explicit main/function regions, parameter names, and return-kind metadata. The v2 compiler emission path verifies the generated file before writing it; the loader verifies a v2 file again before passing its instructions to the VM. The verifier checks region boundaries, opcodes/operands, jumps, calls/argument counts, return kinds, stack underflow/joins, and main exit stack cleanliness. Both versions are bounded by bytecode-size, instruction-count, string-size, argument-count, call-depth, and operand-stack limits.
+
+**V2 stability warning:** v2 is experimental and its text grammar/opcode set may change. Deterministic malformed-input tests exist, but dedicated fuzz/property-based testing and independent security review remain pending. This is not a formal verification or audit; do not use v2 for real funds or production contracts.
 
 ## Current language syntax
 

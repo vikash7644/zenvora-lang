@@ -13,6 +13,7 @@ mod chain_rpc;
 mod compiler_api;
 mod chain_p2p;
 mod tx_pool;
+mod bytecode_v2;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -769,7 +770,45 @@ fn lower_contracts(source: &str) -> Result<String, String> {
     Ok(output)
 }
 
+fn function_body_can_fall_through(code: &[Op]) -> bool {
+    if code.is_empty() {
+        return true;
+    }
+    let mut visited = HashSet::new();
+    let mut pending = vec![0usize];
+    while let Some(pc) = pending.pop() {
+        if pc == code.len() {
+            return true;
+        }
+        if pc > code.len() || !visited.insert(pc) {
+            continue;
+        }
+        match &code[pc] {
+            Op::Return | Op::ReturnValue => {}
+            Op::Jump(target) => {
+                if *target >= code.len() {
+                    return true;
+                }
+                pending.push(*target);
+            }
+            Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
+                if *target >= code.len() {
+                    return true;
+                }
+                pending.push(*target);
+                pending.push(pc + 1);
+            }
+            _ => pending.push(pc + 1),
+        }
+    }
+    false
+}
+
 fn compile(source: &str) -> Result<Vec<Op>, String> {
+    compile_with_layout(source).map(|(code, _)| code)
+}
+
+fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLayout), String> {
     let lowered_source = lower_contracts(source)?;
     let source = lowered_source.as_str();
     let mut main_source = String::new();
@@ -820,7 +859,9 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
     let mut code = compile_core(&main_source)?;
     let main_exit = code.len();
     code.push(Op::Jump(usize::MAX));
+    let main_end = code.len();
     let mut entries: HashMap<String, (usize, Vec<String>)> = HashMap::new();
+    let mut regions: Vec<(usize, usize, String, Vec<String>)> = Vec::new();
     for (name, params, body) in &functions {
         let entry = code.len();
         entries.insert(name.clone(), (entry, params.clone()));
@@ -831,8 +872,12 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
                 _ => {}
             }
         }
+        let can_fall_through = function_body_can_fall_through(&body_code);
         code.extend(body_code);
-        code.push(Op::Return);
+        if can_fall_through {
+            code.push(Op::Return);
+        }
+        regions.push((entry, code.len(), name.clone(), params.clone()));
     }
     let end = code.len();
     code[main_exit] = Op::Jump(end);
@@ -845,16 +890,38 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             *op = Op::CallTarget { target, params, arg_count: *arg_count };
         }
     }
-    // Keep source compilation and bytecode loading consistent on reachable function
-    // return kinds without applying v1's conservative stack analysis to compiler-generated
-    // disconnected instruction islands.
-    let mut function_entries: Vec<usize> = code.iter().filter_map(|op| {
+
+    // Preserve v1's existing validation for functions that are called, while
+    // deriving explicit v2 return metadata for every declared function, including
+    // functions that are never called by this source program.
+    let mut called_entries: Vec<usize> = code.iter().filter_map(|op| {
         if let Op::CallTarget { target, .. } = op { Some(*target) } else { None }
     }).collect();
-    function_entries.sort_unstable();
-    function_entries.dedup();
-    infer_function_return_kinds(&code, &function_entries)?;
-    Ok(code)
+    called_entries.sort_unstable();
+    called_entries.dedup();
+    infer_function_return_kinds(&code, &called_entries)?;
+
+    let all_entries: Vec<usize> = regions.iter().map(|region| region.0).collect();
+    let value_returns = infer_function_return_kinds(&code, &all_entries)?;
+    let function_regions = regions.into_iter().map(|(entry, region_end, _name, parameters)| {
+        bytecode_v2::FunctionRegion {
+            entry,
+            end: region_end,
+            parameters,
+            return_kind: if value_returns.contains(&entry) {
+                bytecode_v2::ReturnKind::Value
+            } else {
+                bytecode_v2::ReturnKind::Void
+            },
+        }
+    }).collect();
+    let layout = bytecode_v2::ProgramLayout {
+        instruction_count: code.len(),
+        main_end,
+        functions: function_regions,
+    };
+    bytecode_v2::validate_layout(&layout)?;
+    Ok((code, layout))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1804,9 +1871,77 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
     Ok(())
 }
 
+fn deserialize_bytecode_v2(source: &str) -> Result<Vec<Op>, String> {
+    let file = bytecode_v2::parse_v2_file(source)?;
+    bytecode_v2::verify_v2_file(&file)?;
+    let mut code = Vec::with_capacity(file.instructions.len());
+
+    for (pc, line) in file.instructions.iter().enumerate() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let invalid = || format!("bytecode v2: malformed instruction at index {pc}");
+        let op = match parts.as_slice() {
+            ["PUSH", value] => Op::Push(value.parse().map_err(|_| invalid())?),
+            ["PUSH_STRING_HEX", value] => Op::PushString(hex_decode(value)?),
+            ["PUSH_BOOL", "true"] => Op::PushBool(true),
+            ["PUSH_BOOL", "false"] => Op::PushBool(false),
+            ["LOAD", name] if valid_identifier(name) => Op::Load((*name).into()),
+            ["STORE", name] if valid_identifier(name) => Op::Store((*name).into()),
+            ["DECLARE", name] if valid_identifier(name) => Op::Declare((*name).into()),
+            ["ADD"] => Op::Add,
+            ["SUB"] => Op::Sub,
+            ["MUL"] => Op::Mul,
+            ["DIV"] => Op::Div,
+            ["NEG"] => Op::Neg,
+            ["NOT"] => Op::Not,
+            ["AND"] => Op::And,
+            ["OR"] => Op::Or,
+            ["PRINT"] => Op::Print,
+            ["EQ"] => Op::Eq,
+            ["NE"] => Op::Ne,
+            ["LT"] => Op::Lt,
+            ["LE"] => Op::Le,
+            ["GT"] => Op::Gt,
+            ["GE"] => Op::Ge,
+            ["INDEX"] => Op::Index,
+            ["SET_INDEX", name] if valid_identifier(name) => Op::SetIndex((*name).into()),
+            ["JUMP_IF_FALSE", target] => Op::JumpIfFalse(target.parse().map_err(|_| invalid())?),
+            ["JUMP_IF_FALSE_KEEP", target] => Op::JumpIfFalseKeep(target.parse().map_err(|_| invalid())?),
+            ["JUMP_IF_TRUE_KEEP", target] => Op::JumpIfTrueKeep(target.parse().map_err(|_| invalid())?),
+            ["JUMP", target] => {
+                let target: usize = target.parse().map_err(|_| invalid())?;
+                // In v2 the main exit targets main_end; the shared VM must skip
+                // the function regions when the main program finishes.
+                if pc + 1 == file.layout.main_end && target == file.layout.main_end {
+                    Op::Jump(file.layout.instruction_count)
+                } else {
+                    Op::Jump(target)
+                }
+            }
+            ["CALL", target, count] => {
+                let target: usize = target.parse().map_err(|_| invalid())?;
+                let arg_count: usize = count.parse().map_err(|_| invalid())?;
+                let function = file.layout.functions.iter().find(|function| function.entry == target)
+                    .ok_or_else(|| format!("bytecode v2: call at instruction {pc} targets undeclared function {target}"))?;
+                Op::CallTarget { target, params: function.parameters.clone(), arg_count }
+            }
+            ["BUILTIN", name, count] if valid_identifier(name) && is_builtin(name) => {
+                Op::Builtin((*name).into(), count.parse().map_err(|_| invalid())?)
+            }
+            ["RETURN"] => Op::Return,
+            ["RETURN_VALUE"] => Op::ReturnValue,
+            _ => return Err(invalid()),
+        };
+        code.push(op);
+    }
+    Ok(code)
+}
+
 fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_BYTECODE_BYTES {
         return Err(format!("bytecode file exceeds safety limit ({} bytes)", MAX_BYTECODE_BYTES));
+    }
+    if source.lines().next().map(str::trim) == Some("ZENVORA_BYTECODE 2") {
+        return deserialize_bytecode_v2(source);
     }
     let mut lines = source.lines();
     if lines.next() != Some(BYTECODE_HEADER) {
@@ -1948,6 +2083,63 @@ fn read_program(path: &str) -> Result<String, String> {
 fn check_program(path: &str) -> Result<(), String> {
     let source = read_program(path)?;
     compile(&source).map(|_| ())
+}
+
+fn serialize_bytecode_v2(code: &[Op], layout: &bytecode_v2::ProgramLayout) -> Result<String, String> {
+    if code.len() != layout.instruction_count {
+        return Err("bytecode v2: compiler layout does not match instruction count".into());
+    }
+    bytecode_v2::validate_layout(layout)?;
+    let mut instructions = Vec::with_capacity(code.len());
+    for (pc, op) in code.iter().enumerate() {
+        let line = match op {
+            Op::Push(value) => format!("PUSH {value}"),
+            Op::PushString(value) => format!("PUSH_STRING_HEX {}", hex_encode(value)),
+            Op::PushBool(value) => format!("PUSH_BOOL {value}"),
+            Op::Load(name) if valid_identifier(name) => format!("LOAD {name}"),
+            Op::Store(name) if valid_identifier(name) => format!("STORE {name}"),
+            Op::Declare(name) if valid_identifier(name) => format!("DECLARE {name}"),
+            Op::Add => "ADD".into(),
+            Op::Sub => "SUB".into(),
+            Op::Mul => "MUL".into(),
+            Op::Div => "DIV".into(),
+            Op::Neg => "NEG".into(),
+            Op::Not => "NOT".into(),
+            Op::And => "AND".into(),
+            Op::Or => "OR".into(),
+            Op::Print => "PRINT".into(),
+            Op::Eq => "EQ".into(),
+            Op::Ne => "NE".into(),
+            Op::Lt => "LT".into(),
+            Op::Le => "LE".into(),
+            Op::Gt => "GT".into(),
+            Op::Ge => "GE".into(),
+            Op::Index => "INDEX".into(),
+            Op::SetIndex(name) if valid_identifier(name) => format!("SET_INDEX {name}"),
+            Op::JumpIfFalse(target) => format!("JUMP_IF_FALSE {target}"),
+            Op::JumpIfFalseKeep(target) => format!("JUMP_IF_FALSE_KEEP {target}"),
+            Op::JumpIfTrueKeep(target) => format!("JUMP_IF_TRUE_KEEP {target}"),
+            Op::Jump(target) if pc + 1 == layout.main_end && *target == code.len() => format!("JUMP {}", layout.main_end),
+            Op::Jump(target) => format!("JUMP {target}"),
+            Op::Call(name, _) => return Err(format!("bytecode v2: unresolved function call '{name}'")),
+            Op::Builtin(name, count) if valid_identifier(name) && is_builtin(name) => format!("BUILTIN {name} {count}"),
+            Op::CallTarget { target, arg_count, .. } => format!("CALL {target} {arg_count}"),
+            Op::Return => "RETURN".into(),
+            Op::ReturnValue => "RETURN_VALUE".into(),
+            _ => return Err(format!("bytecode v2: unsupported or invalid operand at instruction {pc}")),
+        };
+        instructions.push(line);
+    }
+    let file = bytecode_v2::ParsedV2File { layout: layout.clone(), instructions };
+    bytecode_v2::verify_v2_file(&file)?;
+    bytecode_v2::serialize_v2_file(&file)
+}
+
+fn write_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String> {
+    let source = read_program(source_path)?;
+    let (code, layout) = compile_with_layout(&source)?;
+    let serialized = serialize_bytecode_v2(&code, &layout)?;
+    fs::write(output_path, serialized).map_err(|error| format!("cannot write {output_path}: {error}"))
 }
 
 fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
@@ -2545,7 +2737,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--compiler-api") {
@@ -2564,6 +2756,7 @@ fn main() {
         [_, mode, name] if mode == "--new" => create_project(name),
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
+        [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
             let source = read_program(path).unwrap_or_else(|error| {
@@ -2573,7 +2766,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
@@ -3030,7 +3223,7 @@ mod tests {
 
     #[test]
     fn bytecode_rejects_unknown_instructions_and_invalid_jumps() {
-        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 2\n").unwrap_err().contains("unsupported bytecode version"));
+        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 9\n").unwrap_err().contains("unsupported bytecode version"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nMAGIC\n").unwrap_err().contains("invalid bytecode instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nJUMP 99\n").unwrap_err().contains("invalid instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nCALL_TARGET 9 0 -\n").unwrap_err().contains("invalid function entry"));
@@ -3379,6 +3572,67 @@ show index_of(array(7, "x", true), false)
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["10", "30", "Zenvora", "9"]);
+    }
+
+    #[test]
+    fn v2_file_writer_creates_a_loadable_executable_file() {
+        let base = std::env::temp_dir().join(format!("zenvora-v2-smoke-{}", std::process::id()));
+        let source_path = base.with_extension("zv");
+        let bytecode_path = base.with_extension("zv2b");
+        std::fs::write(
+            &source_path,
+            "show double(21)\nfn double(value) {\n return value * 2\n}\n",
+        ).unwrap();
+
+        super::write_bytecode_v2(
+            source_path.to_str().unwrap(),
+            bytecode_path.to_str().unwrap(),
+        ).unwrap();
+
+        let encoded = std::fs::read_to_string(&bytecode_path).unwrap();
+        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+
+        std::fs::remove_file(source_path).unwrap();
+        std::fs::remove_file(bytecode_path).unwrap();
+    }
+
+    #[test]
+    fn compiler_emits_v2_for_called_and_uncalled_functions() {
+        let source = "show twice(21)\nfn twice(value) {\n return value * 2\n}\nfn never(value) {\n show value\n}\n";
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        assert_eq!(layout.functions.len(), 2);
+        assert_eq!(layout.functions[0].return_kind, super::bytecode_v2::ReturnKind::Value);
+        assert_eq!(layout.functions[1].return_kind, super::bytecode_v2::ReturnKind::Void);
+
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert!(encoded.contains("FUNCTION 4 8 1 value value"));
+        assert!(encoded.contains("FUNCTION 8 11 1 void value"));
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn bytecode_v2_loader_verifies_and_executes_metadata_driven_function() {
+        let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 8 1 value amount\nCODE\nPUSH 41\nCALL 4 1\nPRINT\nJUMP 4\nLOAD amount\nPUSH 1\nADD\nRETURN_VALUE\n";
+        let parsed = super::bytecode_v2::parse_v2_file(source).unwrap();
+        let serialized = super::bytecode_v2::serialize_v2_file(&parsed).unwrap();
+        let decoded = super::deserialize_bytecode(&serialized).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn bytecode_v2_loader_rejects_invalid_code_before_execution() {
+        let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n";
+        assert!(super::deserialize_bytecode(source).unwrap_err().contains("stack underflow"));
     }
 
     #[test]
