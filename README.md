@@ -31,6 +31,8 @@ These are design drafts, not proof that listed features are implemented. Consens
 - `examples/science.zv` — checked integer mathematics and introductory physics/science helper functions.
 - `examples/contracts.zv` — experimental `contract`, `state`, `action`, and `view` syntax.
 - `examples/modules.zv` — relative module imports and reusable functions.
+- `docs/getting-started.md` — developer setup, first program, syntax tour, bytecode workflow, and testing guide.
+- `CONTRIBUTING.md` — contributor checklist and validation commands.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
 - `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
@@ -209,7 +211,7 @@ cargo run -- --run-bytecode functions.zv2b
 
 Version 1 remains the default and its serializer/loader behavior is unchanged. The experimental v2 format starts with `ZENVORA_BYTECODE 2` and includes explicit main/function regions, parameter names, and return-kind metadata. The v2 compiler emission path verifies the generated file before writing it; the loader verifies a v2 file again before passing its instructions to the VM. The verifier checks region boundaries, opcodes/operands, jumps, calls/argument counts, return kinds, stack underflow/joins, and main exit stack cleanliness. Both versions are bounded by bytecode-size, instruction-count, string-size, argument-count, call-depth, and operand-stack limits.
 
-**V2 stability warning:** v2 is experimental and its text grammar/opcode set may change. Deterministic malformed-input tests exist, but dedicated fuzz/property-based testing and independent security review remain pending. This is not a formal verification or audit; do not use v2 for real funds or production contracts.
+**V2 stability warning:** v2 is experimental and its text grammar/opcode set may change. Deterministic adversarial tests, round-trip/property checks, and dedicated fuzz campaigns are covered by CI; independent security review remains pending. This is not formal verification or an audit; do not use v2 for real funds or production contracts.
 
 ## Current language syntax
 
