@@ -78,6 +78,16 @@ jobs:
             exit 1
           fi
 
+          # A same-chain node with a conflicting block at the same height must not
+          # silently overwrite local history; fork choice is intentionally not implemented.
+          "$cli" --chain-store-init "$tmp/node-d.zvb" "$chain_id" "$tmp/validator.zvk" 1000000
+          "$cli" --chain-store-transfer "$tmp/node-d.zvb" "$chain_id" "$tmp/validator.zvk" alice 200 3
+          if "$cli" --chain-p2p-sync "$tmp/node-d.zvb" "$chain_id" "127.0.0.1:$port"; then
+            echo "Node D incorrectly accepted a conflicting same-height chain" >&2
+            exit 1
+          fi
+          echo "PASS: same-height conflicting tip is rejected without implicit fork choice."
+
           # Stop the peer process, then reopen both persisted stores in fresh CLI processes.
           # Replay verification after process shutdown exercises disk-backed restart recovery.
           kill "$peer_pid"
