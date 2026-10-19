@@ -459,7 +459,9 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
             let (required, delta): (usize, isize) = match instruction {
                 V2Instruction::Push | V2Instruction::PushString | V2Instruction::PushBool | V2Instruction::Load => (0, 1),
                 V2Instruction::Store | V2Instruction::Declare | V2Instruction::Print
-                | V2Instruction::Neg | V2Instruction::Not | V2Instruction::JumpIfFalse(_) => (1, -1),
+                | V2Instruction::JumpIfFalse(_) => (1, -1),
+                // Unary operators replace the popped value, so stack depth is unchanged.
+                V2Instruction::Neg | V2Instruction::Not => (1, 0),
                 V2Instruction::SetIndex => (2, -2),
                 V2Instruction::Index => (2, -1),
                 V2Instruction::Add | V2Instruction::Sub | V2Instruction::Mul | V2Instruction::Div
@@ -893,6 +895,22 @@ mod tests {
         assert!(verify_v2_file(&reparsed).is_ok());
     }
 
+
+    #[test]
+    fn verifier_accepts_unary_negation_without_losing_the_stack_value() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nCODE\\nPUSH 1\\nNEG\\nPRINT\\nJUMP 4\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).is_ok());
+    }
+
+    #[test]
+    fn verifier_accepts_boolean_not_without_losing_the_stack_value() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nCODE\\nPUSH_BOOL true\\nNOT\\nPRINT\\nJUMP 4\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).is_ok());
+    }
 
     #[test]
     fn verifier_preserves_stack_depth_on_keep_branches_and_accepts_balanced_join() {
