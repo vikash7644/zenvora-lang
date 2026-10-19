@@ -307,3 +307,11 @@ fn logical_operators_reject_integer_operands() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("type error: 'and' expects booleans"));
 }
+
+#[test]
+fn unterminated_function_reports_declaration_line() {
+    let output = run_program("show 1\nfn unfinished(value) {\nshow value\n");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("line 2: missing closing brace for function 'unfinished'"), "unexpected stderr: {stderr}");
+}
