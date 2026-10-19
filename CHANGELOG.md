@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Compiler diagnostics now track lexer token columns and report source-relative columns for parser errors, including malformed expressions and block conditions. Added regression tests for indentation, function calls, trailing tokens, and `if`/`repeat` conditions.
+
 - Bytecode v2 serialization rejects non-canonical leading/trailing instruction whitespace, with a regression test to preserve serializer/parser round-trip consistency.
 
 - Hardened bytecode v1 function-call metadata validation: argument counts must match parameter lists, parameter names must be valid and unique, and call sites targeting the same function entry must agree on the exact parameter list. Added malformed-bytecode regression tests and updated the bytecode specification.
