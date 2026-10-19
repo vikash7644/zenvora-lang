@@ -14,8 +14,34 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    name: Validate release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check compilation
+        run: cargo check --locked --all-targets
+
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets
+
+      - name: Run tests
+        run: cargo test --locked --all-targets
+
+      - name: Build optimized CLI
+        run: cargo build --locked --release --bin zv
+
+      - name: Smoke-test release CLI
+        run: ./target/release/zv examples/hello.zv | grep -Fxq 35
+
   build:
     name: Build ${{ matrix.name }}
+    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -43,7 +69,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build CLI
-        run: cargo build --release --bin zv --target ${{ matrix.target }}
+        run: cargo build --locked --release --bin zv --target ${{ matrix.target }}
 
       - name: Package Unix binary
         if: runner.os != 'Windows'
