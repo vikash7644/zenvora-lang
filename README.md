@@ -49,6 +49,28 @@ Each archive includes the `zv` CLI, README, and MIT license. These binaries were
 
 **Prototype warning:** this is not a production smart-contract toolchain. Do not use real funds or deploy production contracts with it.
 
+## Local Rust compiler HTTP API (development preview)
+
+The CLI can start a loopback-only HTTP service that uses the actual Rust compiler and VM (not the browser demo interpreter):
+
+```sh
+cargo run -- --compiler-api
+# listens on http://127.0.0.1:8787
+```
+
+- `GET /health` reports the service identity.
+- `POST /compile-run` accepts JSON such as `{"source":"define a := 10\\nshow a * 3"}` and returns `ok`, output lines, or a compile/runtime error.
+- Requests are limited to 64 KiB and source programs to 48 KiB.
+- The service binds to `127.0.0.1` only. It is a local development API, **not a public hosted endpoint**, and should not be exposed to the internet. The GitHub Pages Playground remains a browser demo until a separately secured hosting/deployment plan is implemented.
+
+Example request:
+
+```sh
+curl -sS http://127.0.0.1:8787/compile-run \
+  -H 'Content-Type: application/json' \
+  --data '{"source":"define a := 10\\ndefine b := 20\\nshow a + b"}'
+```
+
 ## Build and run
 
 Requires Rust and Cargo (including on Android through Termux if the Rust toolchain is installed).
