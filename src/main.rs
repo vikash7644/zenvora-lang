@@ -869,6 +869,9 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
 }
 
 fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLayout), String> {
+    if source.len() > MAX_SOURCE_BYTES {
+        return Err(format!("source exceeds safety limit ({MAX_SOURCE_BYTES} bytes)"));
+    }
     let lowered_source = lower_contracts(source)?;
     let source = lowered_source.as_str();
     let mut main_source = String::new();
@@ -3280,7 +3283,7 @@ mod tests {
     #[test]
     fn compiler_rejects_source_over_byte_limit_before_lexing() {
         let source = " ".repeat(super::MAX_SOURCE_BYTES + 1);
-        let error = super::compile_core(&source).unwrap_err();
+        let error = super::compile(&source).unwrap_err();
         assert!(error.contains("source exceeds safety limit"), "{error}");
     }
 
