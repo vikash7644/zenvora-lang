@@ -995,6 +995,28 @@ fn value_to_string(value: &Value) -> String {
 }
 
 fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
+    let value = builtin_unchecked(name, args)?;
+    ensure_value_depth(&value)?;
+    Ok(value)
+}
+
+fn value_depth(value: &Value) -> usize {
+    match value {
+        Value::Int(_) | Value::Str(_) | Value::Bool(_) => 0,
+        Value::Array(items) => 1 + items.iter().map(value_depth).max().unwrap_or(0),
+        Value::Map(items) => 1 + items.values().map(value_depth).max().unwrap_or(0),
+    }
+}
+
+fn ensure_value_depth(value: &Value) -> Result<(), String> {
+    let depth = value_depth(value);
+    if depth > MAX_VALUE_DEPTH {
+        return Err(format!("value nesting exceeds safety limit ({MAX_VALUE_DEPTH} levels)"));
+    }
+    Ok(())
+}
+
+fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let arg_len = args.len();
     let arity = |expected: usize| if arg_len == expected { Ok(()) } else { Err(format!("builtin '{name}' expects {expected} argument(s), got {arg_len}")) };
     match name {
@@ -1527,6 +1549,7 @@ where
                     (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
                     _ => return Err("type error: indexed assignment expects an array or map".into()),
                 };
+                ensure_value_depth(&updated)?;
                 if vars.contains_key(name) { vars.insert(name.clone(), updated); }
                 else { globals.insert(name.clone(), updated); }
             }
@@ -1670,6 +1693,7 @@ where
 
 const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_PARSE_NESTING: usize = 256;
+const MAX_VALUE_DEPTH: usize = 256;
 const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
@@ -3464,6 +3488,19 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+    }
+
+    #[test]
+    fn runtime_rejects_excessive_nested_collection_depth() {
+        let source = "define count := 0\ndefine value := array()\nrepeat count < 300 {\n value := array(value)\n count := count + 1\n}\n";
+        let error = execute(source).unwrap_err();
+        assert!(error.contains("value nesting exceeds safety limit"), "{error}");
+
+        let mut nested = super::Value::Int(0);
+        for _ in 0..=super::MAX_VALUE_DEPTH {
+            nested = super::Value::Array(vec![nested]);
+        }
+        assert!(super::ensure_value_depth(&nested).unwrap_err().contains("value nesting exceeds safety limit"));
     }
 
     #[test]
