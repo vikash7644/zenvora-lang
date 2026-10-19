@@ -25,6 +25,8 @@ The current server accepts JSON-RPC 2.0 requests at `POST /` and implements:
 - `chain_getTransaction`
 - Pool-enabled mode additionally exposes `chain_submitTransaction` and `chain_getPendingTransactions`; these smoke checks do not submit transactions.
 
+Shell checker:
+
 ```sh
 RPC_URL=http://127.0.0.1:8545/ sh scripts/check_rpc.sh
 ```
@@ -38,15 +40,17 @@ RPC_TEST_HEIGHT=0 \
 sh scripts/check_rpc.sh
 ```
 
-The Rust alternative is:
+The Rust checker validates HTTP status, JSON response parsing, matching JSON-RPC IDs, JSON-RPC errors, and expected result fields:
 
 ```sh
 RPC_URL=http://127.0.0.1:8545/ cargo run --bin check_node_rpc
 ```
 
+Set `RPC_TEST_ADDRESS` and `RPC_TEST_HEIGHT` in the environment to check a known address and explicit block height.
+
 ## 3. End-to-end CI
 
-The `.github/workflows/chain-smoke.yml` workflow creates a disposable local key and chain, signs and creates a transfer block, replay-verifies the resulting store, starts a loopback RPC server, then checks chain info, balance, and block retrieval. This tests a real local workflow inside GitHub Actions; it does **not** create a publicly reachable node URL.
+The `.github/workflows/chain-smoke.yml` workflow creates a disposable local key and chain, signs and creates a transfer block, replay-verifies the resulting store, and checks that wrong chain IDs and wrong expected heights are rejected. It starts a loopback RPC server and runs **both** the shell and Rust RPC smoke checkers against chain info, balance, and block retrieval. This tests a real local workflow inside GitHub Actions; it does **not** create a publicly reachable node URL.
 
 ## Safety and limitations
 
