@@ -798,7 +798,7 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
                 }
             }
             for (j, param) in params.iter().enumerate() {
-                if params[..j].contains(param) { return Err(format!("line {}: duplicate parameter '{param}'\", i + 1)); }
+                if params[..j].contains(param) { return Err(format!("line {}: duplicate parameter '{param}'", i + 1)); }
             }
             if functions.iter().any(|(existing, _, _)| existing == name) {
                 return Err(format!("line {}: duplicate function '{name}'", i + 1));
