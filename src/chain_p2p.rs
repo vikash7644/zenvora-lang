@@ -734,6 +734,116 @@ mod tests {
     }
 
     #[test]
+    fn peer_sync_rejects_invalid_block_without_persisting_partial_state() {
+        let local_path = std::env::temp_dir().join(format!(
+            "zenvora-peer-invalid-block-{}.zvb",
+            std::process::id()
+        ));
+        let local_text = local_path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&local_path);
+        let (runtime, store, key) = build_store(&local_text, false);
+        let genesis = store.blocks().first().unwrap().clone();
+        let public_key = key.verifying_key().to_bytes();
+        let sender = address_from_public_key(&public_key).unwrap();
+        let mut transaction = TransactionV1 {
+            chain_id: 71,
+            sender,
+            nonce: 0,
+            recipient: "bob".into(),
+            amount: 125,
+            max_fee: 3,
+            gas_limit: 21_000,
+            valid_until_height: None,
+            signature: Vec::new(),
+        };
+        transaction.signature = key
+            .sign(&transaction.signing_bytes().unwrap())
+            .to_bytes()
+            .to_vec();
+        let envelope = SignedTransactionEnvelope {
+            transaction: transaction.clone(),
+            public_key: public_key.to_vec(),
+        };
+        let mut candidate = runtime.clone();
+        let receipt = candidate
+            .apply_signed_transaction(&transaction, &public_key, 71, 1)
+            .unwrap();
+        let mut invalid_header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: genesis.header.header_hash().unwrap(),
+            transaction_root: transaction_merkle_root(&[transaction.clone()]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[receipt]).unwrap(),
+            state_root: candidate.state_root(),
+            proposer: address_from_public_key(&public_key).unwrap(),
+            consensus_proof: Vec::new(),
+        };
+        // Keep the proposer proof valid, but make the transaction commitment incorrect.
+        invalid_header.transaction_root[0] ^= 1;
+        sign_header_as_proposer(&mut invalid_header, &key).unwrap();
+
+        let genesis_hash = super::hex_encode(&genesis.header.header_hash().unwrap());
+        let genesis_state_root = super::hex_encode(&genesis.header.state_root);
+        let header_bytes = super::hex_encode(&invalid_header.canonical_bytes().unwrap());
+        let transaction_bytes = super::hex_encode(&transaction.canonical_bytes().unwrap());
+        let encoded_public_key = super::hex_encode(&public_key);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut length_bytes = [0_u8; 4];
+                stream.read_exact(&mut length_bytes).unwrap();
+                let length = u32::from_be_bytes(length_bytes) as usize;
+                let mut request_bytes = vec![0_u8; length];
+                stream.read_exact(&mut request_bytes).unwrap();
+                let request: serde_json::Value =
+                    serde_json::from_slice(&request_bytes).unwrap();
+                let response = if request["method"] == "status" {
+                    json!({
+                        "ok": true,
+                        "result": {
+                            "protocolVersion": 1,
+                            "chainId": 71,
+                            "genesisHash": genesis_hash,
+                            "genesisStateRoot": genesis_state_root,
+                            "height": 1
+                        }
+                    })
+                } else {
+                    assert_eq!(request["method"], "get_block");
+                    json!({
+                        "ok": true,
+                        "result": {
+                            "header": header_bytes,
+                            "transactions": [{
+                                "publicKey": encoded_public_key,
+                                "transaction": transaction_bytes
+                            }]
+                        }
+                    })
+                };
+                let response_bytes = response.to_string().into_bytes();
+                stream.write_all(&(response_bytes.len() as u32).to_be_bytes()).unwrap();
+                stream.write_all(&response_bytes).unwrap();
+            }
+        });
+
+        let error = sync_from_peer(&local_text, 71, &peer.to_string()).unwrap_err();
+        server.join().unwrap();
+        assert!(
+            error.contains("transaction root"),
+            "unexpected sync error: {error}"
+        );
+        let (stored, stored_runtime) = BlockStore::load_from_file(&local_text, 71).unwrap();
+        assert_eq!(stored.blocks().last().unwrap().header.height, 0);
+        assert_eq!(stored_runtime.state_root(), runtime.state_root());
+        assert_eq!(stored_runtime.balance("bob"), 0);
+        std::fs::remove_file(local_path).unwrap();
+    }
+
+    #[test]
     fn peer_sync_rejects_same_chain_id_with_different_genesis_identity() {
         let local_path = std::env::temp_dir().join(format!(
             "zenvora-peer-genesis-mismatch-{}.zvb",
