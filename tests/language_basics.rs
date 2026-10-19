@@ -357,6 +357,6 @@ show bob_balance()
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        "TRANSFER_ACCEPTED\\nTRANSFER_REJECTED_INSUFFICIENT_BALANCE\\nTRANSFER_REJECTED_INVALID_AMOUNT\\nTRANSFER_REJECTED_INVALID_AMOUNT\\n70\\n30\\n"
+        "TRANSFER_ACCEPTED\nTRANSFER_REJECTED_INSUFFICIENT_BALANCE\nTRANSFER_REJECTED_INVALID_AMOUNT\nTRANSFER_REJECTED_INVALID_AMOUNT\n70\n30\n"
     );
 }
