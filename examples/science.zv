@@ -1,0 +1,23 @@
+# Zenvora scientific computing (integer arithmetic only)
+show gcd(48, 18)
+show lcm(12, 18)
+show factorial(5)
+show is_prime(97)
+show fibonacci(10)
+show pow_int(3, 4)
+show mean([2, 4, 9])
+
+# Introductory physics formulas; units must be consistent.
+show speed(100, 5)             # distance / time
+show force(10, 9)              # mass * acceleration
+show kinetic_energy(2, 5)      # mass * velocity^2 / 2
+show density(12, 3)            # mass / volume
+show molarity(6, 2)            # amount / volume
+show bmi_x10(70, 175)           # BMI multiplied by 10; mass kg, height cm
+
+# Chemistry: sum supplied integer atomic masses (unit/scale chosen by caller).
+show molar_mass([12, 16, 1, 1, 1, 1])
+
+# Biology: DNA complement and integer GC-content percentage.
+show dna_complement("ACGT")
+show gc_content_percent("ATGC")

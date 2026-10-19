@@ -4,7 +4,7 @@
 
 ## File framing
 
-A file begins with this exact first line:
+The source compiler checks reachable function return-kind consistency; the loader runs the full v1 control-flow and stack verifier after decoding a file. A file begins with this exact first line:
 
 ```text
 ZENVORA_BYTECODE 1
@@ -51,12 +51,12 @@ All jump and function targets are zero-based instruction indices, not source lin
 
 The loader checks the header/version, opcode names, operand counts and types, identifiers, function parameter counts, jump bounds, and function-entry bounds. It then runs a control-flow verifier before returning the decoded program:
 
-- Rejects unresolved calls, out-of-region jumps, invalid function-entry locations, and returns reached from the main-program region.
-- Performs a work-list traversal of reachable instructions and calculates each instruction's required operand depth and stack effect.
-- Rejects reachable stack underflow, stack growth beyond the configured limit, and control-flow joins where incoming stack depths disagree.
+- Rejects unresolved calls, out-of-region jumps, invalid function-entry locations, and returns reached from the main-program region. Each `CALL_TARGET` must declare the same number of parameter names as its argument count; names must be valid and unique, and every call site referring to one entry must agree on the parameter list.
+- Performs a work-list traversal from each inferred region entry and checks stack effects along reachable control-flow paths.
+- Rejects reachable stack underflow, stack growth beyond the configured limit, control-flow joins where incoming stack depths disagree, and function returns with leftover or missing operand values. Structural operand and jump checks still scan every instruction, including unreachable code.
 - Checks that the main program exits with an empty operand stack and that reachable function paths do not fall through into another region.
 
-The v1 format does not encode a function table or return types. Function regions are inferred from call targets, and call stack effects infer value returns from the target's instructions. Consequently, the verifier is an important hardening layer, not a proof that arbitrary bytecode is safe: unreachable instructions and uncalled function bodies are not fully validated, type safety is not proven, and malformed control flow may still expose gaps. Runtime checks remain necessary.
+The v1 format does not encode a function table or return types. Function regions are inferred from call targets; return behavior is inferred from reachable control flow, and mixed reachable void/value return paths are rejected. Because uncalled function bodies have no explicit entry metadata, v1 cannot reliably partition and fully verify every unreferenced body or orphan instruction region. Consequently, the verifier is an important hardening layer, not a proof that arbitrary bytecode is safe: function regions and return-value effects are inferred rather than declared in metadata, type safety is not proven, and stack effects in unreachable code and unreferenced function bodies are not fully verified. Runtime checks remain necessary. A future bytecode version should include an explicit function table, parameter counts, and return-kind metadata.
 
 The loader enforces a 16 MiB bytecode-file limit, a 1,000,000-instruction limit, a 1 MiB decoded-string limit, and a 1,024-argument limit for calls and built-ins. The VM also enforces instruction-count, function-call-depth, and operand-stack limits.
 

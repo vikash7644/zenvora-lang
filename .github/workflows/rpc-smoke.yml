@@ -1,0 +1,29 @@
+name: Zenvora RPC smoke check (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rpc-smoke:
+    name: Read-only RPC smoke check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run read-only RPC checks when configured
+        env:
+          RPC_URL: \${{ secrets.RPC_URL }}
+          RPC_TOKEN: \${{ secrets.RPC_TOKEN }}
+          RPC_TEST_ADDRESS: \${{ vars.RPC_TEST_ADDRESS }}
+          RPC_TEST_HEIGHT: \${{ vars.RPC_TEST_HEIGHT }}
+        run: |
+          if [ -z "$RPC_URL" ]; then
+            echo "::warning::Set the RPC_URL repository secret before running this optional workflow."
+            exit 0
+          fi
+          cargo run --bin check_node_rpc

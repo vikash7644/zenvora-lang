@@ -4,10 +4,45 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Hardened bytecode v1 function-call metadata validation: argument counts must match parameter lists, parameter names must be valid and unique, and call sites targeting the same function entry must agree on the exact parameter list. Added malformed-bytecode regression tests and updated the bytecode specification.
+
+- The loopback JSON-RPC listener now logs per-client response write failures and continues serving instead of terminating the entire service when a client disconnects mid-response.
+
+- Block-store and transaction-pool loaders now cap the bytes read from the opened file itself, not only its earlier metadata size, so concurrent file growth/replacement cannot bypass their configured input limits.
+
+- Ledger loading now caps bytes read from the open file itself, in addition to checking metadata, preventing a file that grows or is replaced during the read from bypassing the configured 64 MiB allocation limit.
+
+- Added signed-transaction admission regression coverage for wrong chain IDs, expired transactions, nonce gaps, and insufficient amount-plus-fee reserves; each rejection is checked for zero state, nonce, or receipt mutation.
+
+- The source compiler now checks reachable function return-kind consistency before returning compiled instructions, so mixed void/value return paths are rejected during source compilation instead of only when serialized bytecode is loaded. Added a source-level regression test for a value-returning function with a reachable void path.
+
+- Extended contract-view checks with conservative call-graph analysis: views now reject calls to helper functions that directly assign declared contract state or transitively call detected state-mutating functions. Regression coverage verifies a view cannot reach a mutating helper. This is not a complete effect system; complex dynamic or indirect behaviors remain outside the current language model.
+
+- Contract view lowering now rejects direct calls to declared `action` functions, including calls used in expressions, while ignoring matching text inside string literals and comments. Added regression tests for both call forms and the string-literal case; indirect mutation through arbitrary helper functions remains a known limitation.
+
+- Hardened block-store appends by independently executing each candidate against a verified tip-runtime cache before persistence; loading still rebuilds state by replaying the complete stored chain. Added regression coverage proving that state/receipt commitments from unrelated transactions are rejected without altering the stored tip. The verified cache avoids replaying the entire chain on every append.
+
+- Added `zv --new <project-name>` to create a safe starter project with a runnable `main.zv` and project README; existing paths are never overwritten. Added CLI dispatch and regression coverage.
+- Documented the beginner starter-project workflow in the README.
+- Added DNA complement and GC-content helpers plus an integer atomic-mass summation helper, with input validation and regression tests.
+- Added checked integer mathematics helpers (`gcd`, `lcm`, `factorial`, `is_prime`, `fibonacci`, `pow_int`, `mean`) and introductory integer-only science formula helpers (`speed`, `force`, `kinetic_energy`, `density`, `molarity`, `bmi_x10`), with regression tests and `examples/science.zv`.
+
+- Added `zv --check <file.zv>` to compile source and relative imports without executing the program; added regression coverage for successful compile-only validation and syntax errors.
+
+- Rejected language keywords as variable, function, parameter, and contract-state identifiers, with regression coverage for declaration and function headers.
+
+- Added `unique(array)` with stable first-occurrence ordering and `assert_eq(actual, expected[, message])` for test and contract-invariant assertions.
+- Added regression tests for mixed-value deduplication, empty arrays, equality, arity errors, and custom assertion messages.
+
+- Added `starts_with`, `ends_with`, `replace`, `split`, and `join` string helpers, plus overflow-checked `sum` for integer arrays.
+- Added `first`, `last`, and `reverse` collection/text helpers, `is_empty` checks for arrays/maps/strings, and range-validated integer `clamp`.
+- Added whitespace trimming, Unicode-aware lowercase/uppercase conversion, Unicode scalar counting, checked string-to-`i64` conversion, and zero-based `index_of` for strings and arrays.
+- Added argument/type validation, empty-separator/search rejection, and result-size/item-count limits for the new standard-library functions.
+- Added runnable `examples/stdlib-strings.zv` and regression tests for successful operations, invalid input, and overflow.
 - Hardened bytecode loading with file-size, instruction-count, decoded-string, and call-argument limits.
 - Added a VM operand-stack limit alongside existing instruction and call-depth limits.
 - Added regression assertions for oversized bytecode payloads and excessive argument counts.
-- Added a control-flow bytecode verifier for reachable stack underflow, inconsistent stack depths at branch joins, invalid region jumps, and main-program exit stack balance.
+- Added a control-flow bytecode verifier for reachable stack underflow, inconsistent stack depths at branch joins, invalid region jumps, function return stack balance and reachable return-kind consistency, and main-program exit stack balance. Structural operand and jump checks still cover unreachable instructions.
 - Documented the verifier's current v1 format limitations; arbitrary bytecode is still not considered production-safe or audited.
 
 ## v0.8.0 — Contract DSL prototype

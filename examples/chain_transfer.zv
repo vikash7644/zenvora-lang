@@ -1,0 +1,35 @@
+# Zenvora Lang as the first executable transaction-rule prototype.
+# This runs in the Zenvora VM. It is NOT yet wired into the JavaScript node.
+
+define alice := 1000
+define bob := 0
+
+fn transfer(amount) {
+    if amount > 0 {
+        if alice >= amount {
+            alice := alice - amount
+            bob := bob + amount
+            return true
+        } otherwise {
+            return false
+        }
+    } otherwise {
+        return false
+    }
+}
+
+# A valid transfer changes both balances.
+show assert(transfer(125), "valid transfer should succeed")
+show assert(alice == 875, "sender balance should be 875")
+show assert(bob == 125, "recipient balance should be 125")
+
+# Overspending must fail without changing balances.
+show assert(not transfer(10000), "overspending must fail")
+show assert(alice == 875, "failed transfer must not debit sender")
+show assert(bob == 125, "failed transfer must not credit recipient")
+
+# Zero and negative amounts must fail too.
+show assert(not transfer(0), "zero transfer must fail")
+show assert(not transfer(-1), "negative transfer must fail")
+
+show "Zenvora Lang transaction-rule checks passed"

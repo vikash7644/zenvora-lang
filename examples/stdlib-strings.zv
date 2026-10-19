@@ -1,0 +1,23 @@
+# String utilities and checked integer aggregation in Zenvora Lang
+define phrase := "zenvora-lang"
+show starts_with(phrase, "zen")
+show ends_with(phrase, "lang")
+show replace("a-b-a", "a", "x")
+define colors := split("red,green,blue", ",")
+show colors
+show join(array("Zenvora", "Lang"), " ")
+show sum(array(10, 20, 22))
+show first(array(7, 8, 9))
+show last(array(7, 8, 9))
+show reverse(array(1, 2, 3))
+show reverse("héllo")
+show is_empty(array())
+show is_empty(map())
+show clamp(12, 0, 10)
+show trim("  Zenvora Lang  ")
+show lower("ZENvora")
+show upper("Zenvora")
+show char_count("hé🙂")
+show to_int("  -42 ")
+show unique(array(3, 1, 3, 2, 1))
+show assert_eq(sum(array(10, 20, 12)), 42)

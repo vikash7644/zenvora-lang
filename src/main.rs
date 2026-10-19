@@ -1,8 +1,17 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::{env, fs, process};
 use std::path::Path;
+use ed25519_dalek::{Signer, SigningKey};
 
 mod module_loader;
+mod chain_runtime;
+mod chain_protocol;
+mod chain_consensus;
+mod chain_block;
+mod block_store;
+mod chain_rpc;
+mod chain_p2p;
+mod tx_pool;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -71,6 +80,9 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
             }
             continue;
         }
+        // Handle two-character operators (==, !=, <=, >=) by peeking the next char
+        // and advancing `i` one extra position inside the branch so the final
+        // `i += 1` after the match moves past both characters.
         let token = match c {
             '+' => Token::Plus, '-' => Token::Minus, '*' => Token::Star, '/' => Token::Slash,
             '(' => Token::LParen, ')' => Token::RParen, '[' => Token::LBracket, ']' => Token::RBracket, ',' => Token::Comma,
@@ -314,7 +326,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             let (name, args_with_close) = call_text.split_once('(').ok_or_else(|| format!("line {}: expected 'call function_name(...)'", line_no + 1))?;
             let args_text = args_with_close.strip_suffix(')').ok_or_else(|| format!("line {}: expected ')' after function arguments", line_no + 1))?;
             let name = name.trim();
-            if name.is_empty() || !name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || !c.is_ascii_digit())) {
+            if !valid_identifier(name) {
                 return Err(format!("line {}: invalid function name", line_no + 1));
             }
             let args = split_arguments(args_text);
@@ -443,7 +455,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         let statement = if let Some(rest) = line.strip_prefix("define ") {
             let (name, expr) = rest.split_once(":=").ok_or_else(|| format!("line {}: expected 'define name := expression'", line_no + 1))?;
             let name = name.trim();
-            if name.is_empty() || !name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || !c.is_ascii_digit())) {
+            if !valid_identifier(name) {
                 return Err(format!("line {}: invalid variable name", line_no + 1));
             }
             (name.to_string(), expr.trim(), false)
@@ -514,6 +526,120 @@ fn count_block_braces(line: &str) -> (i32, i32) {
 // Lowers the first-generation contract DSL into the existing compiler's
 // global declarations and functions. This is a local language prototype,
 // not a persistent blockchain contract runtime.
+fn calls_named_function(statement: &str, name: &str) -> bool {
+    let bytes = statement.as_bytes();
+    let mut index = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'#' {
+            while index < bytes.len() && bytes[index] != b'\n' { index += 1; }
+            continue;
+        }
+        if byte == b'"' {
+            in_string = true;
+            index += 1;
+            continue;
+        }
+        if byte.is_ascii_alphabetic() || byte == b'_' {
+            let start = index;
+            index += 1;
+            while index < bytes.len() && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_') {
+                index += 1;
+            }
+            if &statement[start..index] == name {
+                let mut next = index;
+                while next < bytes.len() && bytes[next].is_ascii_whitespace() { next += 1; }
+                if next < bytes.len() && bytes[next] == b'(' { return true; }
+            }
+            continue;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn mutating_functions(source: &str, state_names: &HashSet<String>, action_names: &HashSet<String>) -> HashSet<String> {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut bodies: Vec<(String, String)> = Vec::new();
+    let mut index = 0usize;
+    while index < lines.len() {
+        let line = lines[index].trim();
+        let declaration = line.strip_prefix("fn ").map(|rest| ("fn", rest))
+            .or_else(|| line.strip_prefix("action ").map(|rest| ("action", rest)))
+            .or_else(|| line.strip_prefix("view ").map(|rest| ("view", rest)));
+        if let Some((_kind, header)) = declaration.and_then(|(kind, rest)| rest.strip_suffix('{').map(|h| (kind, h.trim()))) {
+            let Some((name, _)) = header.split_once('(') else {
+                index += 1;
+                continue;
+            };
+            let name = name.trim();
+            if !valid_identifier(name) {
+                index += 1;
+                continue;
+            }
+            index += 1;
+            let mut depth = 1i32;
+            let mut body = String::new();
+            while index < lines.len() && depth > 0 {
+                let current = lines[index];
+                let (opens, closes) = count_block_braces(current);
+                depth += opens - closes;
+                if depth > 0 {
+                    body.push_str(current);
+                    body.push('\n');
+                }
+                index += 1;
+            }
+            if depth == 0 {
+                bodies.push((name.to_string(), body));
+            }
+            continue;
+        }
+        index += 1;
+    }
+
+    let mut mutating = action_names.clone();
+    for (name, body) in &bodies {
+        for line in body.lines() {
+            let statement = line.trim();
+            if statement.starts_with('#') { continue; }
+            if let Some((left, _)) = statement.split_once(":=") {
+                let base = left.trim().split('[').next().unwrap_or(left.trim()).trim();
+                if state_names.contains(base) {
+                    mutating.insert(name.clone());
+                }
+            }
+        }
+    }
+
+    loop {
+        let newly_mutating: Vec<String> = bodies.iter().filter_map(|(name, body)| {
+            if mutating.contains(name) { return None; }
+            if mutating.iter().any(|target| calls_named_function(body, target)) {
+                Some(name.clone())
+            } else {
+                None
+            }
+        }).collect();
+        if newly_mutating.is_empty() { break; }
+        mutating.extend(newly_mutating);
+    }
+    mutating
+}
+
 fn lower_contracts(source: &str) -> Result<String, String> {
     let lines: Vec<&str> = source.lines().collect();
     let state_names: HashSet<String> = lines.iter().filter_map(|raw| {
@@ -521,6 +647,12 @@ fn lower_contracts(source: &str) -> Result<String, String> {
         let name = rest.split_once(":=")?.0.trim();
         if valid_identifier(name) { Some(name.to_string()) } else { None }
     }).collect();
+    let action_names: HashSet<String> = lines.iter().filter_map(|raw| {
+        let rest = raw.trim().strip_prefix("action ")?;
+        let name = rest.split_once('(')?.0.trim();
+        if valid_identifier(name) { Some(name.to_string()) } else { None }
+    }).collect();
+    let mutating_functions = mutating_functions(source, &state_names, &action_names);
     let mut output = String::new();
     let mut index = 0usize;
     let mut contract: Option<(String, usize)> = None;
@@ -598,6 +730,14 @@ fn lower_contracts(source: &str) -> Result<String, String> {
                                 return Err(format!("line {}: view '{header}' cannot directly assign to contract state '{base}'", index + 1));
                             }
                         }
+                        for function in &mutating_functions {
+                            if calls_named_function(statement, function) {
+                                if action_names.contains(function) {
+                                    return Err(format!("line {}: view cannot call action '{function}'", index + 1));
+                                }
+                                return Err(format!("line {}: view cannot call state-mutating function '{function}'", index + 1));
+                            }
+                        }
                     }
                 }
                 let (opens, closes) = count_block_braces(current);
@@ -642,12 +782,12 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             let (name, params_text) = header.split_once('(').ok_or_else(|| format!("line {}: expected 'fn name(parameters) {{'", i + 1))?;
             let params_text = params_text.strip_suffix(')').ok_or_else(|| format!("line {}: expected ')' in function declaration", i + 1))?;
             let name = name.trim();
-            if name.is_empty() || !name.chars().enumerate().all(|(j,c)| c == '_' || c.is_ascii_alphanumeric() && (j > 0 || !c.is_ascii_digit())) {
+            if !valid_identifier(name) {
                 return Err(format!("line {}: invalid function name", i + 1));
             }
             let params: Vec<String> = if params_text.trim().is_empty() { Vec::new() } else { params_text.split(',').map(|p| p.trim().to_string()).collect() };
             for param in &params {
-                if param.is_empty() || !param.chars().enumerate().all(|(j,c)| c == '_' || c.is_ascii_alphanumeric() && (j > 0 || !c.is_ascii_digit())) {
+                if !valid_identifier(param) {
                     return Err(format!("line {}: invalid parameter name in function '{name}'", i + 1));
                 }
             }
@@ -704,6 +844,15 @@ fn compile(source: &str) -> Result<Vec<Op>, String> {
             *op = Op::CallTarget { target, params, arg_count: *arg_count };
         }
     }
+    // Keep source compilation and bytecode loading consistent on reachable function
+    // return kinds without applying v1's conservative stack analysis to compiler-generated
+    // disconnected instruction islands.
+    let mut function_entries: Vec<usize> = code.iter().filter_map(|op| {
+        if let Op::CallTarget { target, .. } = op { Some(*target) } else { None }
+    }).collect();
+    function_entries.sort_unstable();
+    function_entries.dedup();
+    infer_function_return_kinds(&code, &function_entries)?;
     Ok(code)
 }
 
@@ -716,7 +865,7 @@ enum Value {
     Map(std::collections::BTreeMap<String, Value>),
 }
 
-fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert") }
+fn is_builtin(name: &str) -> bool { matches!(name, "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" | "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" | "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" | "to_int" | "index_of" | "unique" | "assert_eq" | "gcd" | "lcm" | "factorial" | "is_prime" | "fibonacci" | "pow_int" | "mean" | "speed" | "density" | "molarity" | "force" | "kinetic_energy" | "bmi_x10" | "molar_mass" | "dna_complement" | "gc_content_percent") }
 
 fn value_to_string(value: &Value) -> String {
     match value {
@@ -818,6 +967,166 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 _ => Err(format!("type error: {name} expects two integers")),
             }
         }
+        "dna_complement" => {
+            arity(1)?;
+            let Value::Str(sequence) = &args[0] else {
+                return Err("type error: dna_complement expects a DNA string".into());
+            };
+            let mut result = String::with_capacity(sequence.len());
+            for base in sequence.chars() {
+                result.push(match base.to_ascii_uppercase() {
+                    'A' => 'T', 'T' => 'A', 'C' => 'G', 'G' => 'C',
+                    _ => return Err(format!("dna_complement found invalid DNA base '{base}'")),
+                });
+            }
+            Ok(Value::Str(result))
+        }
+        "gc_content_percent" => {
+            arity(1)?;
+            let Value::Str(sequence) = &args[0] else {
+                return Err("type error: gc_content_percent expects a DNA string".into());
+            };
+            if sequence.is_empty() { return Err("gc_content_percent cannot use an empty DNA string".into()); }
+            let mut gc = 0i64;
+            for base in sequence.chars() {
+                match base.to_ascii_uppercase() {
+                    'G' | 'C' => gc += 1,
+                    'A' | 'T' => {},
+                    _ => return Err(format!("gc_content_percent found invalid DNA base '{base}'")),
+                }
+            }
+            let length = i64::try_from(sequence.chars().count()).map_err(|_| "DNA sequence is too long")?;
+            Ok(Value::Int(gc.checked_mul(100).ok_or("GC percentage overflow")? / length))
+        }
+        "molar_mass" => {
+            arity(1)?;
+            let Value::Array(atomic_masses) = &args[0] else {
+                return Err("type error: molar_mass expects an array of integer atomic masses".into());
+            };
+            if atomic_masses.is_empty() { return Err("molar_mass expects at least one atomic mass".into()); }
+            let mut total = 0i64;
+            for mass in atomic_masses {
+                let Value::Int(mass) = mass else {
+                    return Err("type error: molar_mass expects an array containing only integers".into());
+                };
+                if *mass < 0 { return Err("molar_mass atomic masses cannot be negative".into()); }
+                total = total.checked_add(*mass).ok_or("integer overflow in molar_mass")?;
+            }
+            Ok(Value::Int(total))
+        }
+        "gcd" => {
+            arity(2)?;
+            let (Value::Int(mut a), Value::Int(mut b)) = (&args[0], &args[1]) else {
+                return Err("type error: gcd expects two integers".into());
+            };
+            a = a.checked_abs().ok_or("integer overflow in gcd")?;
+            b = b.checked_abs().ok_or("integer overflow in gcd")?;
+            while b != 0 { let remainder = a % b; a = b; b = remainder; }
+            Ok(Value::Int(a))
+        }
+        "lcm" => {
+            arity(2)?;
+            let (Value::Int(a), Value::Int(b)) = (&args[0], &args[1]) else {
+                return Err("type error: lcm expects two integers".into());
+            };
+            if *a == 0 || *b == 0 { return Ok(Value::Int(0)); }
+            let mut x = a.checked_abs().ok_or("integer overflow in lcm")?;
+            let mut y = b.checked_abs().ok_or("integer overflow in lcm")?;
+            let mut p = x;
+            while y != 0 { let r = p % y; p = y; y = r; }
+            x = a.checked_div(p).ok_or("integer overflow in lcm")?;
+            Ok(Value::Int(x.checked_mul(*b).and_then(i64::checked_abs).ok_or("integer overflow in lcm")?))
+        }
+        "factorial" => {
+            arity(1)?;
+            let Value::Int(n) = args[0] else { return Err("type error: factorial expects an integer".into()); };
+            if !(0..=20).contains(&n) { return Err("factorial expects an integer from 0 through 20".into()); }
+            let mut result = 1i64;
+            for value in 2..=n { result = result.checked_mul(value).ok_or("integer overflow in factorial")?; }
+            Ok(Value::Int(result))
+        }
+        "is_prime" => {
+            arity(1)?;
+            let Value::Int(n) = args[0] else { return Err("type error: is_prime expects an integer".into()); };
+            if n < 2 { return Ok(Value::Bool(false)); }
+            if n == 2 { return Ok(Value::Bool(true)); }
+            if n % 2 == 0 { return Ok(Value::Bool(false)); }
+            let mut divisor = 3i64;
+            while divisor <= n / divisor {
+                if n % divisor == 0 { return Ok(Value::Bool(false)); }
+                divisor += 2;
+            }
+            Ok(Value::Bool(true))
+        }
+        "fibonacci" => {
+            arity(1)?;
+            let Value::Int(n) = args[0] else { return Err("type error: fibonacci expects an integer".into()); };
+            if !(0..=92).contains(&n) { return Err("fibonacci expects an integer from 0 through 92".into()); }
+            let (mut a, mut b) = (0i64, 1i64);
+            for _ in 0..n { let next = a.checked_add(b).ok_or("integer overflow in fibonacci")?; a = b; b = next; }
+            Ok(Value::Int(a))
+        }
+        "pow_int" => {
+            arity(2)?;
+            let (Value::Int(base), Value::Int(exponent)) = (&args[0], &args[1]) else {
+                return Err("type error: pow_int expects two integers".into());
+            };
+            if !(0..=63).contains(exponent) { return Err("pow_int exponent must be from 0 through 63".into()); }
+            let mut result = 1i64;
+            let mut factor = *base;
+            let mut power = *exponent as u32;
+            while power > 0 {
+                if power & 1 == 1 { result = result.checked_mul(factor).ok_or("integer overflow in pow_int")?; }
+                power >>= 1;
+                if power > 0 { factor = factor.checked_mul(factor).ok_or("integer overflow in pow_int")?; }
+            }
+            Ok(Value::Int(result))
+        }
+        "mean" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else { return Err("type error: mean expects an array of integers".into()); };
+            if items.is_empty() { return Err("mean cannot be used with an empty array".into()); }
+            let mut total = 0i64;
+            for item in items {
+                let Value::Int(value) = item else { return Err("type error: mean expects an array containing only integers".into()); };
+                total = total.checked_add(*value).ok_or("integer overflow in mean")?;
+            }
+            Ok(Value::Int(total / i64::try_from(items.len()).map_err(|_| "mean item count overflow")?))
+        }
+        "speed" | "density" | "molarity" => {
+            arity(2)?;
+            let (Value::Int(numerator), Value::Int(denominator)) = (&args[0], &args[1]) else {
+                return Err(format!("type error: {name} expects two integers"));
+            };
+            if *denominator <= 0 { return Err(format!("{name} denominator must be positive")); }
+            Ok(Value::Int(numerator.checked_div(*denominator).ok_or("integer overflow in scientific calculation")?))
+        }
+        "force" => {
+            arity(2)?;
+            let (Value::Int(mass), Value::Int(acceleration)) = (&args[0], &args[1]) else {
+                return Err("type error: force expects mass and acceleration as integers".into());
+            };
+            Ok(Value::Int(mass.checked_mul(*acceleration).ok_or("integer overflow in force")?))
+        }
+        "kinetic_energy" => {
+            arity(2)?;
+            let (Value::Int(mass), Value::Int(velocity)) = (&args[0], &args[1]) else {
+                return Err("type error: kinetic_energy expects mass and velocity as integers".into());
+            };
+            if *mass < 0 { return Err("kinetic_energy mass cannot be negative".into()); }
+            let velocity_squared = velocity.checked_mul(*velocity).ok_or("integer overflow in kinetic_energy")?;
+            Ok(Value::Int(mass.checked_mul(velocity_squared).ok_or("integer overflow in kinetic_energy")? / 2))
+        }
+        "bmi_x10" => {
+            arity(2)?;
+            let (Value::Int(mass_kg), Value::Int(height_cm)) = (&args[0], &args[1]) else {
+                return Err("type error: bmi_x10 expects mass in kg and height in cm as integers".into());
+            };
+            if *mass_kg <= 0 || *height_cm <= 0 { return Err("bmi_x10 mass and height must be positive".into()); }
+            let numerator = mass_kg.checked_mul(100_000).ok_or("integer overflow in bmi_x10")?;
+            let denominator = height_cm.checked_mul(*height_cm).ok_or("integer overflow in bmi_x10")?;
+            Ok(Value::Int(numerator / denominator))
+        }
         "range" => {
             arity(2)?;
             let (Value::Int(start), Value::Int(end)) = (&args[0], &args[1]) else {
@@ -834,6 +1143,182 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 current = current.checked_add(1).ok_or("integer overflow while building range")?;
             }
             Ok(Value::Array(items))
+        }
+        "index_of" => {
+            arity(2)?;
+            match (&args[0], &args[1]) {
+                (Value::Str(text), Value::Str(needle)) => {
+                    let index = text.find(needle).map(|byte_index| text[..byte_index].chars().count());
+                    Ok(Value::Int(index.and_then(|n| i64::try_from(n).ok()).unwrap_or(-1)))
+                }
+                (Value::Array(items), needle) => {
+                    let index = items.iter().position(|item| item == needle);
+                    Ok(Value::Int(index.and_then(|n| i64::try_from(n).ok()).unwrap_or(-1)))
+                }
+                (Value::Str(_), _) => Err("type error: index_of expects a string needle when searching a string".into()),
+                _ => Err("type error: index_of expects a string or array as its first argument".into()),
+            }
+        }
+        "trim" | "lower" | "upper" | "char_count" => {
+            arity(1)?;
+            let Value::Str(value) = &args[0] else {
+                return Err(format!("type error: {name} expects a string"));
+            };
+            match name {
+                "trim" => Ok(Value::Str(value.trim().to_string())),
+                "lower" => {
+                    let result = value.to_lowercase();
+                    if result.len() > MAX_BYTECODE_STRING_BYTES { return Err("lower result exceeds string safety limit".into()); }
+                    Ok(Value::Str(result))
+                }
+                "upper" => {
+                    let result = value.to_uppercase();
+                    if result.len() > MAX_BYTECODE_STRING_BYTES { return Err("upper result exceeds string safety limit".into()); }
+                    Ok(Value::Str(result))
+                }
+                "char_count" => Ok(Value::Int(i64::try_from(value.chars().count()).map_err(|_| "character count overflow")?)),
+                _ => unreachable!(),
+            }
+        }
+        "to_int" => {
+            arity(1)?;
+            match &args[0] {
+                Value::Int(value) => Ok(Value::Int(*value)),
+                Value::Str(value) => value.trim().parse::<i64>()
+                    .map(Value::Int)
+                    .map_err(|_| format!("cannot convert '{value}' to a 64-bit integer")),
+                _ => Err("type error: to_int expects an integer or numeric string".into()),
+            }
+        }
+        "first" | "last" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else { return Err(format!("type error: {name} expects an array")); };
+            if items.is_empty() { return Err(format!("{name} cannot be used with an empty array")); }
+            Ok(if name == "first" { items[0].clone() } else { items[items.len() - 1].clone() })
+        }
+        "reverse" => {
+            arity(1)?;
+            match &args[0] {
+                Value::Array(items) => Ok(Value::Array(items.iter().rev().cloned().collect())),
+                Value::Str(value) => Ok(Value::Str(value.chars().rev().collect())),
+                _ => Err("type error: reverse expects an array or string".into()),
+            }
+        }
+        "is_empty" => {
+            arity(1)?;
+            let empty = match &args[0] {
+                Value::Array(items) => items.is_empty(),
+                Value::Map(items) => items.is_empty(),
+                Value::Str(value) => value.is_empty(),
+                _ => return Err("type error: is_empty expects an array, map, or string".into()),
+            };
+            Ok(Value::Bool(empty))
+        }
+        "clamp" => {
+            arity(3)?;
+            let (Value::Int(value), Value::Int(minimum), Value::Int(maximum)) = (&args[0], &args[1], &args[2]) else {
+                return Err("type error: clamp expects three integers".into());
+            };
+            if minimum > maximum { return Err("clamp minimum must be less than or equal to maximum".into()); }
+            Ok(Value::Int((*value).clamp(*minimum, *maximum)))
+        }
+        "sum" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else { return Err("type error: sum expects an array of integers".into()); };
+            let mut total = 0i64;
+            for item in items {
+                let Value::Int(value) = item else { return Err("type error: sum expects an array containing only integers".into()); };
+                total = total.checked_add(*value).ok_or("integer overflow in sum")?;
+            }
+            Ok(Value::Int(total))
+        }
+        "starts_with" | "ends_with" => {
+            arity(2)?;
+            let (Value::Str(value), Value::Str(pattern)) = (&args[0], &args[1]) else {
+                return Err(format!("type error: {name} expects two strings"));
+            };
+            Ok(Value::Bool(if name == "starts_with" { value.starts_with(pattern) } else { value.ends_with(pattern) }))
+        }
+        "replace" => {
+            arity(3)?;
+            let (Value::Str(value), Value::Str(from), Value::Str(to)) = (&args[0], &args[1], &args[2]) else {
+                return Err("type error: replace expects three strings".into());
+            };
+            if from.is_empty() { return Err("replace search string cannot be empty".into()); }
+            let matches = value.matches(from).count();
+            let removed = matches.checked_mul(from.len()).ok_or("replace size calculation overflow")?;
+            let added = matches.checked_mul(to.len()).ok_or("replace size calculation overflow")?;
+            let result_len = value.len().checked_sub(removed).and_then(|len| len.checked_add(added))
+                .ok_or("replace result size calculation overflow")?;
+            if result_len > MAX_BYTECODE_STRING_BYTES {
+                return Err(format!("replace result exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+            }
+            Ok(Value::Str(value.replace(from, to)))
+        }
+        "split" => {
+            arity(2)?;
+            let (Value::Str(value), Value::Str(separator)) = (&args[0], &args[1]) else {
+                return Err("type error: split expects two strings".into());
+            };
+            if separator.is_empty() { return Err("split separator cannot be empty".into()); }
+            const MAX_SPLIT_ITEMS: usize = 100_000;
+            let mut parts = Vec::new();
+            for part in value.split(separator) {
+                if parts.len() >= MAX_SPLIT_ITEMS {
+                    return Err(format!("split exceeds safety limit ({MAX_SPLIT_ITEMS} items)"));
+                }
+                parts.push(Value::Str(part.to_string()));
+            }
+            Ok(Value::Array(parts))
+        }
+        "join" => {
+            arity(2)?;
+            let (Value::Array(items), Value::Str(separator)) = (&args[0], &args[1]) else {
+                return Err("type error: join expects an array of strings and a string separator".into());
+            };
+            let mut parts = Vec::with_capacity(items.len());
+            let mut result_len = 0usize;
+            for item in items {
+                let Value::Str(value) = item else { return Err("type error: join expects an array containing only strings".into()); };
+                result_len = result_len.checked_add(value.len()).ok_or("join result size calculation overflow")?;
+                parts.push(value.as_str());
+            }
+            if parts.len() > 1 {
+                result_len = result_len.checked_add(separator.len().checked_mul(parts.len() - 1)
+                    .ok_or("join result size calculation overflow")?).ok_or("join result size calculation overflow")?;
+            }
+            if result_len > MAX_BYTECODE_STRING_BYTES {
+                return Err(format!("join result exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+            }
+            Ok(Value::Str(parts.join(separator)))
+        }
+        "assert_eq" => {
+            if !(2..=3).contains(&arg_len) {
+                return Err(format!("builtin 'assert_eq' expects 2 or 3 argument(s), got {arg_len}"));
+            }
+            if args[0] == args[1] {
+                Ok(Value::Bool(true))
+            } else {
+                let message = if args.len() == 3 {
+                    value_to_string(&args[2])
+                } else {
+                    format!("assert_eq failed: left was {}, right was {}", value_to_string(&args[0]), value_to_string(&args[1]))
+                };
+                Err(message)
+            }
+        }
+        "unique" => {
+            arity(1)?;
+            let Value::Array(items) = &args[0] else {
+                return Err("type error: unique expects an array".into());
+            };
+            let mut result = Vec::with_capacity(items.len());
+            for item in items {
+                if !result.contains(item) {
+                    result.push(item.clone());
+                }
+            }
+            Ok(Value::Array(result))
         }
         "assert" => {
             if !(1..=2).contains(&arg_len) {
@@ -1116,6 +1601,47 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
 
 // Verify bytecode control flow before it is executed. Stack depths are tracked
 // independently for the main program and each declared function region.
+fn infer_function_return_kinds(code: &[Op], entries: &[usize]) -> Result<HashSet<usize>, String> {
+    // Infer return behavior from control flow, not from the mere presence of a
+    // RETURN_VALUE opcode. Dead code after an unconditional return must not change a
+    // function's call-site stack effect. Mixed reachable void/value returns are rejected
+    // because bytecode v1 has no explicit return-type metadata.
+    let mut returns_value: HashSet<usize> = HashSet::new();
+    for (index, entry) in entries.iter().copied().enumerate() {
+        let end = entries.get(index + 1).copied().unwrap_or(code.len());
+        let mut visited = HashSet::new();
+        let mut pending = vec![entry];
+        let mut saw_void_return = false;
+        let mut saw_value_return = false;
+        while let Some(pc) = pending.pop() {
+            if pc < entry || pc >= end || !visited.insert(pc) {
+                continue;
+            }
+            match &code[pc] {
+                Op::Return => saw_void_return = true,
+                Op::ReturnValue => saw_value_return = true,
+                Op::Jump(target) => {
+                    if *target >= entry && *target < end { pending.push(*target); }
+                }
+                Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
+                    if *target >= entry && *target < end { pending.push(*target); }
+                    if pc + 1 < end { pending.push(pc + 1); }
+                }
+                _ => {
+                    if pc + 1 < end { pending.push(pc + 1); }
+                }
+            }
+        }
+        if saw_void_return && saw_value_return {
+            return Err(format!("bytecode verifier: function at entry {entry} has inconsistent reachable return kinds"));
+        }
+        if saw_value_return {
+            returns_value.insert(entry);
+        }
+    }
+    Ok(returns_value)
+}
+
 fn verify_bytecode(code: &[Op]) -> Result<(), String> {
     if code.is_empty() {
         return Ok(());
@@ -1138,10 +1664,33 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
             return Err(format!("bytecode verifier: invalid function entry point {entry}"));
         }
     }
+    let mut function_params: HashMap<usize, Vec<String>> = HashMap::new();
     for (index, op) in code.iter().enumerate() {
         match op {
-            Op::CallTarget { target, .. } if entries.binary_search(target).is_err() =>
-                return Err(format!("bytecode verifier: call at instruction {index} does not target a function entry")),
+            Op::CallTarget { target, params, arg_count } => {
+                if entries.binary_search(target).is_err() {
+                    return Err(format!("bytecode verifier: call at instruction {index} does not target a function entry"));
+                }
+                if params.len() != *arg_count {
+                    return Err(format!("bytecode verifier: function entry {target} declares {} parameter(s), but CALL_TARGET records {arg_count}", params.len()));
+                }
+                if let Some(previous) = function_params.get(target) {
+                    if previous != params {
+                        return Err(format!("bytecode verifier: function entry {target} has inconsistent parameter metadata across call sites"));
+                    }
+                } else {
+                    function_params.insert(*target, params.clone());
+                }
+                let mut seen_params = HashSet::new();
+                for name in params {
+                    if !valid_identifier(name) {
+                        return Err(format!("bytecode verifier: function entry {target} has invalid parameter name"));
+                    }
+                    if !seen_params.insert(name) {
+                        return Err(format!("bytecode verifier: function entry {target} has duplicate parameter"));
+                    }
+                }
+            },
             Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target)
                 if *target > code.len() =>
                 return Err(format!("bytecode verifier: jump at instruction {index} has invalid target {target}")),
@@ -1149,12 +1698,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
         }
     }
 
-    // A call's static stack effect depends on whether its target can return a
-    // value. This first-generation format does not encode return types.
-    let returns_value: HashSet<usize> = entries.iter().copied().filter(|entry| {
-        let end = entries.iter().copied().find(|candidate| candidate > entry).unwrap_or(code.len());
-        code[*entry..end].iter().any(|op| matches!(op, Op::ReturnValue))
-    }).collect();
+    let returns_value = infer_function_return_kinds(code, &entries)?;
 
     let mut regions: Vec<(usize, usize, bool)> = vec![(0, main_exit + 1, true)];
     for (i, entry) in entries.iter().copied().enumerate() {
@@ -1233,6 +1777,12 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                 Op::Return | Op::ReturnValue => {
                     if is_main {
                         return Err(format!("bytecode verifier: return instruction outside a function at {pc}"));
+                    }
+                    let expected_depth = if matches!(op, Op::ReturnValue) { 1 } else { 0 };
+                    if incoming_depth != expected_depth {
+                        return Err(format!(
+                            "bytecode verifier: function return at instruction {pc} has {incoming_depth} operand value(s); expected {expected_depth}"
+                        ));
                     }
                 }
                 Op::CallTarget { .. } => {
@@ -1318,8 +1868,8 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
                     return Err(format!("bytecode function argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
                 }
                 let params: Vec<String> = if parts[3] == "-" { Vec::new() } else { parts[3].split(',').map(str::to_string).collect() };
-                if arg_count != params.len() || params.iter().any(|name| !valid_identifier(name)) {
-                    return Err(invalid());
+                if arg_count != params.len() {
+                    return Err(format!("bytecode verifier: function entry {target} declares {} parameter(s), but CALL_TARGET records {arg_count}", params.len()));
                 }
                 Op::CallTarget { target, params, arg_count }
             }
@@ -1351,26 +1901,38 @@ fn hex_encode(input: &str) -> String {
     input.as_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+// Decode hexadecimal bytecode strings in exact two-character pairs.
 fn hex_decode(input: &str) -> Result<String, String> {
     if input == "-" { return Ok(String::new()); }
     if input.len() / 2 > MAX_BYTECODE_STRING_BYTES {
         return Err(format!("bytecode string exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
     }
-    if !input.len().is_multiple_of(2) {
+    if input.len() % 2 != 0 {
         return Err("invalid hex string in bytecode".into());
     }
     let mut bytes = Vec::with_capacity(input.len() / 2);
-    for pair in input.as_bytes().as_chunks::<2>().0 {
-        let digits = std::str::from_utf8(pair).map_err(|_| "invalid hex string in bytecode")?;
+    for chunk in input.as_bytes().chunks_exact(2) {
+        let digits = std::str::from_utf8(chunk).map_err(|_| "invalid hex string in bytecode")?;
         bytes.push(u8::from_str_radix(digits, 16).map_err(|_| "invalid hex string in bytecode")?);
     }
     String::from_utf8(bytes).map_err(|_| "bytecode string is not valid UTF-8".into())
 }
 
 fn valid_identifier(name: &str) -> bool {
-    !name.is_empty() && name.chars().enumerate().all(|(index, ch)| {
+    if name.is_empty() || !name.chars().enumerate().all(|(index, ch)| {
         ch == '_' || ch.is_ascii_alphanumeric() && (index > 0 || !ch.is_ascii_digit())
-    })
+    }) {
+        return false;
+    }
+    // These words are recognized by the lexer or statement parser and cannot
+    // safely act as ordinary variable, function, parameter, or state names.
+    !matches!(
+        name,
+        "true" | "false" | "and" | "or" | "not" |
+        "define" | "show" | "print" | "if" | "otherwise" | "repeat" |
+        "break" | "continue" | "return" | "call" | "fn" | "use" |
+        "contract" | "state" | "action" | "view"
+    )
 }
 
 fn read_source(path: &str) -> Result<String, String> {
@@ -1379,6 +1941,12 @@ fn read_source(path: &str) -> Result<String, String> {
 
 fn read_program(path: &str) -> Result<String, String> {
     module_loader::load(Path::new(path))
+}
+
+/// Compiles a source file and all of its imports without executing the program.
+fn check_program(path: &str) -> Result<(), String> {
+    let source = read_program(path)?;
+    compile(&source).map(|_| ())
 }
 
 fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
@@ -1394,6 +1962,581 @@ fn run_bytecode(path: &str) -> Result<(), String> {
     run(&code)
 }
 
+fn run_chain_command(args: &[String]) -> Result<(), String> {
+    use std::path::Path;
+    match args {
+        [_, mode, key_path] if mode == "--chain-keygen" => {
+            if Path::new(key_path).exists() {
+                return Err(format!("key file already exists at {key_path}; refusing to overwrite it"));
+            }
+            let mut seed = [0_u8; 32];
+            getrandom::getrandom(&mut seed).map_err(|error| format!("secure random key generation failed: {error}"))?;
+            let signing_key = SigningKey::from_bytes(&seed);
+            let public_key = signing_key.verifying_key().to_bytes();
+            let address = crate::chain_protocol::address_from_public_key(&public_key)?;
+            let content = format!(
+                "ZENVORA_KEY_V1\nprivate={}\npublic={}\naddress={}\n",
+                hex_encode_bytes(&seed), hex_encode_bytes(&public_key), address
+            );
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(key_path)
+                .map_err(|error| format!("cannot create key file: {error}"))?;
+            use std::io::Write;
+            if let Err(error) = file.write_all(content.as_bytes()).and_then(|_| file.sync_all()) {
+                let _ = std::fs::remove_file(key_path);
+                return Err(format!("cannot safely write key file: {error}"));
+            }
+            println!("Zenvora development key created: {key_path}");
+            println!("Address: {address}");
+            println!("WARNING: private key is unencrypted; keep this file private and do not use it for real funds.");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id, config_path] if mode == "--chain-store-init-multi" => {
+            if Path::new(store_path).exists() {
+                return Err(format!("block store already exists at {store_path}; refusing to overwrite it"));
+            }
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let allocations = read_genesis_config(config_path, chain_id)?;
+            let proposer = allocations.iter()
+                .find(|(address, balance)| **balance > 0 && is_validator_address(address))
+                .map(|(address, _)| address.clone())
+                .ok_or_else(|| "genesis config needs at least one funded public-key-derived validator address".to_string())?;
+            let mut runtime = chain_runtime::ChainRuntime::new();
+            for (address, balance) in &allocations {
+                runtime.set_genesis_balance(address, *balance)?;
+            }
+            let mut store = crate::block_store::BlockStore::new(chain_id, allocations)?;
+            let header = crate::chain_protocol::BlockHeaderV1 {
+                chain_id, height: 0, timestamp_secs: 0, parent_hash: [0; 32],
+                transaction_root: crate::chain_protocol::transaction_merkle_root(&[])?,
+                receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[])?,
+                state_root: runtime.state_root(), proposer: proposer.clone(), consensus_proof: Vec::new(),
+            };
+            crate::chain_block::execute_block(&mut runtime, &header, &[], chain_id, None)?;
+            store.append_executed_block(store_path, &runtime, &header, &[], &[])?;
+            let validator_count = runtime.genesis_balances().iter()
+                .filter(|(address, balance)| **balance > 0 && is_validator_address(address))
+                .count();
+            println!("Zenvora multi-account genesis initialized: chain_id={chain_id} validators={validator_count}");
+            println!("Genesis proposer: {proposer}");
+            println!("Block store: {store_path}");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id, key_path, balance] if mode == "--chain-store-init" => {
+            if Path::new(store_path).exists() {
+                return Err(format!("block store already exists at {store_path}; refusing to overwrite it"));
+            }
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            if chain_id == 0 { return Err("chain ID must be nonzero".into()); }
+            let signing_key = read_chain_key(key_path)?;
+            let public_key = signing_key.verifying_key().to_bytes();
+            let address = crate::chain_protocol::address_from_public_key(&public_key)?;
+            let balance: i64 = balance.parse().map_err(|_| "genesis balance must be a valid 64-bit integer")?;
+            if balance <= 0 {
+                return Err("genesis validator balance must be positive".into());
+            }
+            let mut runtime = chain_runtime::ChainRuntime::new();
+            runtime.set_genesis_balance(&address, balance)?;
+            let mut store = crate::block_store::BlockStore::new(chain_id, runtime.genesis_balances().clone())?;
+            let header = crate::chain_protocol::BlockHeaderV1 {
+                chain_id,
+                height: 0,
+                timestamp_secs: 0,
+                parent_hash: [0; 32],
+                transaction_root: crate::chain_protocol::transaction_merkle_root(&[])?,
+                receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[])?,
+                state_root: runtime.state_root(),
+                proposer: address.clone(),
+                consensus_proof: Vec::new(),
+            };
+            crate::chain_block::execute_block(&mut runtime, &header, &[], chain_id, None)?;
+            store.append_executed_block(store_path, &runtime, &header, &[], &[])?;
+            println!("Zenvora local chain initialized: chain_id={chain_id} height=0");
+            println!("Genesis account: {address} balance={balance}");
+            println!("Block store: {store_path}");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id, key_path, recipient, amount, max_fee] if mode == "--chain-store-transfer" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_signed_transfer_cli(
+                store_path, chain_id, key_path, recipient, amount, max_fee,
+                std::slice::from_ref(key_path),
+            )
+        }
+        [_, mode, store_path, chain_id, key_path, recipient, amount, max_fee, validator_paths @ ..]
+            if mode == "--chain-store-transfer-multi" && !validator_paths.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_signed_transfer_cli(store_path, chain_id, key_path, recipient, amount, max_fee, validator_paths)
+        }
+        [_, mode, store_path, chain_id, pool_path, validator_paths @ ..]
+            if mode == "--chain-store-produce" && !validator_paths.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_pool_block_cli(store_path, chain_id, pool_path, validator_paths)
+        }
+        [_, mode, store_path, chain_id, pool_path, proposer_key, peers @ ..]
+            if mode == "--chain-store-produce-peer-quorum" && !peers.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_peer_quorum_block_cli(store_path, chain_id, pool_path, proposer_key, peers)
+        }
+        [_, mode, store_path, chain_id, pool_path] if mode == "--chain-rpc-pool" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            crate::chain_rpc::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), 8545)
+        }
+        [_, mode, store_path, chain_id, pool_path, port] if mode == "--chain-rpc-pool" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
+            crate::chain_rpc::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), port)
+        }
+        [_, mode, store_path, chain_id, address] if mode == "--chain-store-balance" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let (_, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+            println!("address={address} balance={} nonce={}", runtime.balance(address), runtime.account_nonce(address));
+            Ok(())
+        }
+        [_, mode, store_path, chain_id] if mode == "--chain-store-info" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let (store, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+            let tip = store.blocks().last().ok_or_else(|| "block store has no genesis block".to_string())?;
+            println!("chain_id={chain_id} blocks={} height={}", store.blocks().len(), tip.header.height);
+            println!("state_root={}", hex_encode_bytes(&runtime.state_root()));
+            println!("tip_hash={}", hex_encode_bytes(&tip.header.header_hash()?));
+            println!("Replay verification: PASS (local file only; no consensus verification)");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id] if mode == "--chain-rpc" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            crate::chain_rpc::serve(store_path.clone(), chain_id, 8545)
+        }
+        [_, mode, store_path, chain_id, port] if mode == "--chain-rpc" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
+            crate::chain_rpc::serve(store_path.clone(), chain_id, port)
+        }
+        [_, mode, store_path, chain_id, pool_path, validator_key, bind_ip, port] if mode == "--chain-p2p-serve-validator" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "P2P port must be between 1 and 65535")?;
+            crate::chain_p2p::serve_with_validator(
+                store_path.clone(), chain_id, pool_path.clone(), validator_key.clone(), bind_ip, port,
+            )
+        }
+        [_, mode, store_path, chain_id, pool_path, bind_ip, port] if mode == "--chain-p2p-serve-pool" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "P2P port must be between 1 and 65535")?;
+            crate::chain_p2p::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), bind_ip, port)
+        }
+        [_, mode, store_path, chain_id, pool_path, peer] if mode == "--chain-p2p-gossip" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let sent = crate::chain_p2p::gossip_pool_to_peer(store_path, chain_id, pool_path, peer)?;
+            println!("Gossiped {sent} new pending transaction(s) to {peer}");
+            Ok(())
+        }
+        [_, mode, store_path, chain_id, bind_ip, port] if mode == "--chain-p2p-serve" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "P2P port must be between 1 and 65535")?;
+            crate::chain_p2p::serve(store_path.clone(), chain_id, bind_ip, port)
+        }
+        [_, mode, store_path, chain_id, peer] if mode == "--chain-p2p-sync" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let synced = crate::chain_p2p::sync_from_peer(store_path, chain_id, peer)?;
+            println!("Verified and synced {synced} block(s) from {peer}");
+            Ok(())
+        }
+        [_, mode, ledger_path, address, amount] if mode == "--chain-init" => {
+            if Path::new(ledger_path).exists() {
+                return Err(format!("ledger already exists at {ledger_path}; refusing to overwrite it"));
+            }
+            let amount: i64 = amount.parse().map_err(|_| "genesis balance must be a valid 64-bit integer")?;
+            let mut runtime = chain_runtime::ChainRuntime::new();
+            runtime.set_genesis_balance(address, amount)?;
+            runtime.save_to_file(ledger_path)?;
+            println!("Zenvora ledger initialized: {address} balance={amount}");
+            Ok(())
+        }
+        [_, mode, ledger_path, from, to, amount] if mode == "--chain-transfer" => {
+            let amount: i64 = amount.parse().map_err(|_| "transfer amount must be a valid 64-bit integer")?;
+            let mut runtime = chain_runtime::ChainRuntime::load_from_file(ledger_path)?;
+            let receipt = runtime.transfer(from, to, amount)?;
+            runtime.save_to_file(ledger_path)?;
+            println!("sequence={} status={} from={} to={} amount={} sender_balance={} recipient_balance={}",
+                receipt.sequence, if receipt.accepted { "ACCEPTED" } else { "REJECTED" },
+                receipt.from, receipt.to, receipt.amount, receipt.sender_balance, receipt.recipient_balance);
+            Ok(())
+        }
+        [_, mode, ledger_path, address] if mode == "--chain-balance" => {
+            let runtime = chain_runtime::ChainRuntime::load_from_file(ledger_path)?;
+            println!("{}: {}", address, runtime.balance(address));
+            Ok(())
+        }
+        [_, mode, ledger_path] if mode == "--chain-receipts" => {
+            let runtime = chain_runtime::ChainRuntime::load_from_file(ledger_path)?;
+            for receipt in runtime.receipts() {
+                println!("sequence={} status={} from={} to={} amount={} sender_balance={} recipient_balance={}",
+                    receipt.sequence, if receipt.accepted { "ACCEPTED" } else { "REJECTED" },
+                    receipt.from, receipt.to, receipt.amount, receipt.sender_balance, receipt.recipient_balance);
+            }
+            Ok(())
+        }
+        _ => Err("invalid chain command arguments".into()),
+    }
+}
+
+fn run_peer_quorum_block_cli(
+    store_path: &str,
+    chain_id: u64,
+    pool_path: &str,
+    proposer_key_path: &str,
+    peers: &[String],
+) -> Result<(), String> {
+    if peers.is_empty() || peers.len() > 100 {
+        return Err("supply between 1 and 100 validator peer addresses".into());
+    }
+    let proposer_key = read_chain_key(proposer_key_path)?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let pool = crate::tx_pool::TransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
+    if pool.is_empty() {
+        return Err("transaction pool is empty".into());
+    }
+    let envelopes = pool.pending().to_vec();
+    let mut candidate = runtime.clone();
+    let mut candidate_receipts = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        candidate_receipts.push(candidate.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, chain_id, height,
+        )?);
+    }
+    let transactions: Vec<crate::chain_protocol::TransactionV1> = envelopes.iter()
+        .map(|envelope| envelope.transaction.clone()).collect();
+    let proposer_address = crate::chain_protocol::address_from_public_key(
+        &proposer_key.verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id,
+        height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root: crate::chain_protocol::transaction_merkle_root(&transactions)?,
+        receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&candidate_receipts)?,
+        state_root: candidate.state_root(),
+        proposer: proposer_address,
+        consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &proposer_key)?;
+    let mut peer_errors = Vec::new();
+    for peer in peers {
+        if crate::chain_consensus::verify_consensus_proof(&header, runtime.genesis_balances()).is_ok() {
+            break;
+        }
+        match crate::chain_p2p::request_block_signature(peer, &header, &envelopes) {
+            Ok(proof) => {
+                let previous_proof = header.consensus_proof.clone();
+                header.consensus_proof = proof;
+                if let Err(error) = crate::chain_consensus::verify_partial_consensus_proof(&header, runtime.genesis_balances()) {
+                    header.consensus_proof = previous_proof;
+                    peer_errors.push(format!("{peer}: {error}"));
+                }
+            }
+            Err(error) => peer_errors.push(format!("{peer}: {error}")),
+        }
+    }
+    let receipts = match crate::chain_block::execute_block(
+        &mut runtime, &header, &envelopes, chain_id, Some(&previous.header),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            if peer_errors.is_empty() { return Err(error); }
+            return Err(format!("{error}; peer errors: {}", peer_errors.join("; ")));
+        }
+    };
+    if receipts != candidate_receipts {
+        return Err("executed receipts differ from candidate block receipts".into());
+    }
+    store.append_executed_block(store_path, &runtime, &header, &envelopes, &receipts)?;
+    let next_height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    crate::tx_pool::TransactionPool::new(chain_id, next_height)?.save_to_file(pool_path)
+        .map_err(|error| format!("block committed at height {height}, but transaction pool reset failed: {error}"))?;
+    println!("Peer-quorum block committed: height={height} transactions={}", receipts.len());
+    println!("Validator signatures: {}", header.consensus_proof.len() / 96);
+    println!("State root: {}", hex_encode_bytes(&runtime.state_root()));
+    Ok(())
+}
+
+fn run_pool_block_cli(
+    store_path: &str,
+    chain_id: u64,
+    pool_path: &str,
+    validator_key_paths: &[String],
+) -> Result<(), String> {
+    if validator_key_paths.is_empty() || validator_key_paths.len() > 42 {
+        return Err("supply between 1 and 42 validator key files".into());
+    }
+    let validator_keys: Vec<SigningKey> = validator_key_paths.iter()
+        .map(|path| read_chain_key(path))
+        .collect::<Result<_, _>>()?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let pool = crate::tx_pool::TransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
+    if pool.is_empty() {
+        return Err("transaction pool is empty".into());
+    }
+    let envelopes = pool.pending().to_vec();
+    let mut candidate = runtime.clone();
+    let mut candidate_receipts = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        candidate_receipts.push(candidate.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, chain_id, height,
+        )?);
+    }
+    let transactions: Vec<crate::chain_protocol::TransactionV1> = envelopes.iter()
+        .map(|envelope| envelope.transaction.clone()).collect();
+    let proposer = crate::chain_protocol::address_from_public_key(
+        &validator_keys[0].verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id,
+        height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root: crate::chain_protocol::transaction_merkle_root(&transactions)?,
+        receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&candidate_receipts)?,
+        state_root: candidate.state_root(),
+        proposer,
+        consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &validator_keys[0])?;
+    for key in validator_keys.iter().skip(1) {
+        crate::chain_consensus::add_validator_signature(&mut header, key)?;
+    }
+    let receipts = crate::chain_block::execute_block(
+        &mut runtime, &header, &envelopes, chain_id, Some(&previous.header),
+    )?;
+    if receipts != candidate_receipts {
+        return Err("executed receipts differ from candidate block receipts".into());
+    }
+    store.append_executed_block(store_path, &runtime, &header, &envelopes, &receipts)?;
+    let next_height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    crate::tx_pool::TransactionPool::new(chain_id, next_height)?.save_to_file(pool_path)
+        .map_err(|error| format!("block committed at height {height}, but transaction pool reset failed: {error}"))?;
+    println!("Block committed from transaction pool: height={height} transactions={}", receipts.len());
+    println!("Validator signatures: {}", validator_keys.len());
+    println!("State root: {}", hex_encode_bytes(&runtime.state_root()));
+    Ok(())
+}
+
+fn is_validator_address(address: &str) -> bool {
+    address.len() == 42
+        && address.starts_with("zv")
+        && address.as_bytes()[2..].iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+}
+
+fn read_genesis_config(path: &str, expected_chain_id: u64) -> Result<BTreeMap<String, i64>, String> {
+    let metadata = std::fs::metadata(path).map_err(|error| format!("cannot inspect genesis config: {error}"))?;
+    if metadata.len() > 1024 * 1024 {
+        return Err("genesis config exceeds 1 MiB".into());
+    }
+    let content = std::fs::read_to_string(path).map_err(|error| format!("cannot read genesis config: {error}"))?;
+    let mut lines = content.lines();
+    if lines.next() != Some("ZENVORA_GENESIS_V1") {
+        return Err("genesis config must start with ZENVORA_GENESIS_V1".into());
+    }
+    let chain_line = lines.next().ok_or_else(|| "genesis config is missing chain_id".to_string())?;
+    let chain_value = chain_line.strip_prefix("chain_id=")
+        .ok_or_else(|| "genesis config must have chain_id=<number> on line two".to_string())?;
+    let chain_id: u64 = chain_value.parse().map_err(|_| "invalid genesis chain ID")?;
+    if chain_id != expected_chain_id || chain_id == 0 {
+        return Err("genesis config chain ID does not match requested chain".into());
+    }
+    let mut allocations = BTreeMap::new();
+    for (index, line) in lines.enumerate() {
+        let line_number = index + 3;
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') { continue; }
+        let mut fields = line.split_whitespace();
+        let address = fields.next().ok_or_else(|| format!("genesis line {line_number} is missing address"))?;
+        let balance: i64 = fields.next().ok_or_else(|| format!("genesis line {line_number} is missing balance"))?
+            .parse().map_err(|_| format!("genesis line {line_number} has invalid balance"))?;
+        if fields.next().is_some() || balance < 0 || allocations.contains_key(address) {
+            return Err(format!("genesis line {line_number} has extra fields, negative balance, or duplicate address"));
+        }
+        allocations.insert(address.to_string(), balance);
+    }
+    if allocations.is_empty() {
+        return Err("genesis config must contain at least one allocation".into());
+    }
+    let validator_count = allocations.iter()
+        .filter(|(address, balance)| **balance > 0 && is_validator_address(address))
+        .count();
+    if validator_count == 0 || validator_count > 42 {
+        return Err("genesis config must contain 1 to 42 funded public-key-derived validator addresses".into());
+    }
+    let mut check = chain_runtime::ChainRuntime::new();
+    for (address, balance) in &allocations {
+        check.set_genesis_balance(address, *balance)?;
+    }
+    Ok(allocations)
+}
+
+fn run_signed_transfer_cli(
+    store_path: &str,
+    chain_id: u64,
+    transaction_key_path: &str,
+    recipient: &str,
+    amount_text: &str,
+    max_fee_text: &str,
+    validator_key_paths: &[String],
+) -> Result<(), String> {
+    if validator_key_paths.is_empty() || validator_key_paths.len() > 42 {
+        return Err("supply between 1 and 42 validator key files".into());
+    }
+    let transaction_key = read_chain_key(transaction_key_path)?;
+    let public_key = transaction_key.verifying_key().to_bytes();
+    let sender = crate::chain_protocol::address_from_public_key(&public_key)?;
+    let amount: u64 = amount_text.parse().map_err(|_| "amount must be a positive integer")?;
+    let max_fee: u64 = max_fee_text.parse().map_err(|_| "maximum fee reserve must be a nonnegative integer")?;
+    let validator_keys: Vec<SigningKey> = validator_key_paths.iter()
+        .map(|path| read_chain_key(path))
+        .collect::<Result<_, _>>()?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let mut transaction = crate::chain_protocol::TransactionV1 {
+        chain_id,
+        sender: sender.clone(),
+        nonce: runtime.account_nonce(&sender),
+        recipient: recipient.to_string(),
+        amount,
+        max_fee,
+        gas_limit: 21_000,
+        valid_until_height: None,
+        signature: Vec::new(),
+    };
+    transaction.signature = transaction_key.sign(&transaction.signing_bytes()?).to_bytes().to_vec();
+    let envelope = crate::chain_block::SignedTransactionEnvelope {
+        transaction: transaction.clone(),
+        public_key: public_key.to_vec(),
+    };
+    let mut candidate = runtime.clone();
+    let receipt = candidate.apply_signed_transaction(&transaction, &public_key, chain_id, height)?;
+    let first_validator_address = crate::chain_protocol::address_from_public_key(
+        &validator_keys[0].verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id,
+        height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root: crate::chain_protocol::transaction_merkle_root(&[transaction])?,
+        receipt_root: chain_runtime::ChainRuntime::receipt_root_for(&[receipt])?,
+        state_root: candidate.state_root(),
+        proposer: first_validator_address,
+        consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &validator_keys[0])?;
+    for key in validator_keys.iter().skip(1) {
+        crate::chain_consensus::add_validator_signature(&mut header, key)?;
+    }
+    let receipts = crate::chain_block::execute_block(
+        &mut runtime, &header, &[envelope.clone()], chain_id, Some(&previous.header),
+    )?;
+    store.append_executed_block(store_path, &runtime, &header, &[envelope], &receipts)?;
+    println!("Block committed locally: height={height} chain_id={chain_id}");
+    println!("Transaction: {}", receipts[0].transaction_id.as_deref().unwrap_or("unknown"));
+    println!("Validator signatures: {}", validator_keys.len());
+    println!("Status: {} | {} balance={} | {} balance={}",
+        if receipts[0].accepted { "ACCEPTED" } else { "REJECTED" },
+        receipts[0].from, receipts[0].sender_balance,
+        receipts[0].to, receipts[0].recipient_balance);
+    println!("WARNING: local prototype; fees are reserved but not charged, and this is not full BFT consensus.");
+    Ok(())
+}
+
+fn read_chain_key(path: &str) -> Result<SigningKey, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| format!("cannot read key file: {error}"))?;
+    let mut lines = content.lines();
+    if lines.next() != Some("ZENVORA_KEY_V1") {
+        return Err("unsupported or malformed Zenvora key file".into());
+    }
+    let private_line = lines.next().ok_or_else(|| "key file is missing private seed".to_string())?;
+    let public_line = lines.next().ok_or_else(|| "key file is missing public key".to_string())?;
+    let address_line = lines.next().ok_or_else(|| "key file is missing address".to_string())?;
+    if lines.next().is_some() {
+        return Err("key file contains unexpected extra lines".into());
+    }
+    let seed: [u8; 32] = decode_hex_bytes(private_line.strip_prefix("private=").ok_or_else(|| "invalid private-key field".to_string())?)?
+        .try_into().map_err(|_| "private seed must be 32 bytes")?;
+    let signing_key = SigningKey::from_bytes(&seed);
+    let public_key = signing_key.verifying_key().to_bytes();
+    if hex_encode_bytes(&public_key) != public_line.strip_prefix("public=").unwrap_or("") {
+        return Err("key file public key does not match private seed".into());
+    }
+    let address = crate::chain_protocol::address_from_public_key(&public_key)?;
+    if address != address_line.strip_prefix("address=").unwrap_or("") {
+        return Err("key file address does not match public key".into());
+    }
+    Ok(signing_key)
+}
+
+fn decode_hex_bytes(value: &str) -> Result<Vec<u8>, String> {
+    if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return Err("invalid lowercase hexadecimal value".into());
+    }
+    let mut output = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        let high = (pair[0] as char).to_digit(16).ok_or_else(|| "invalid hex digit".to_string())?;
+        let low = (pair[1] as char).to_digit(16).ok_or_else(|| "invalid hex digit".to_string())?;
+        output.push(((high << 4) | low) as u8);
+    }
+    Ok(output)
+}
+
+fn hex_encode_bytes(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(&mut output, "{byte:02x}");
+    }
+    output
+}
+
+fn current_unix_seconds() -> Result<u64, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    Ok(SystemTime::now().duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("system clock is before Unix epoch: {error}"))?
+        .as_secs())
+}
+
+fn create_project(name: &str) -> Result<(), String> {
+    let path = Path::new(name);
+    if name.is_empty() || path.components().count() != 1
+        || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        || !name.chars().next().is_some_and(|c| c.is_ascii_alphanumeric()) {
+        return Err("project name must start with a letter or digit and contain only letters, digits, '-' or '_'".into());
+    }
+    fs::create_dir(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("project path '{name}' already exists; refusing to overwrite it")
+        } else { format!("cannot create project '{name}': {error}") }
+    })?;
+    let main_source = "# Welcome to your first Zenvora project!\ndefine student := \"Creator\"\nshow \"Hello, \" + student\nshow \"Your first calculation:\"\nshow 6 * 7\n\ndefine scores := array(10, 20, 30)\nshow \"Total score:\"\nshow sum(scores)\n";
+    let readme = format!("# {name}\n\nA starter project written in Zenvora Lang.\n\nRun from the Zenvora Lang repository root:\n\n    cargo run -- {name}/main.zv\n    cargo run -- --check {name}/main.zv\n\nEdit main.zv to make this project your own.\n");
+    if let Err(error) = fs::write(path.join("main.zv"), main_source).and_then(|_| fs::write(path.join("README.md"), readme)) {
+        let _ = fs::remove_dir_all(path);
+        return Err(format!("cannot write starter project files: {error}"));
+    }
+    println!("Created Zenvora project '{name}'");
+    println!("Next: zv {name}/main.zv");
+    Ok(())
+}
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
@@ -1401,10 +2544,19 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --run-bytecode <file.zvb>\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        return;
+    }
+    if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
+        if let Err(error) = run_chain_command(&args) {
+            eprintln!("Zenvora chain error: {error}");
+            process::exit(1);
+        }
         return;
     }
     let result = match args.as_slice() {
+        [_, mode, name] if mode == "--new" => create_project(name),
+        [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
@@ -1415,7 +2567,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb>");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
@@ -1427,13 +2579,236 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{compile, compile_core, run_with_output, Op};
+    use super::{compile, compile_core, read_chain_key, run_chain_command, run_with_output, Op};
+    use ed25519_dalek::Signer;
+
+    #[test]
+    fn local_signed_chain_cli_keygen_transfer_and_replay_work_end_to_end() {
+        let base = std::env::temp_dir();
+        let key_path = base.join(format!("zenvora-cli-key-{}.zvk", std::process::id()));
+        let store_path = base.join(format!("zenvora-cli-store-{}.zvb", std::process::id()));
+        let second_store_path = base.join(format!("zenvora-cli-store-second-{}.zvb", std::process::id()));
+        let _ = std::fs::remove_file(&key_path);
+        let _ = std::fs::remove_file(&store_path);
+        let _ = std::fs::remove_file(&second_store_path);
+        let key_text = key_path.to_string_lossy().to_string();
+        let store_text = store_path.to_string_lossy().to_string();
+        let second_store_text = second_store_path.to_string_lossy().to_string();
+
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
+        assert!(run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).is_err());
+        let key = read_chain_key(&key_text).unwrap();
+        let address = crate::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
+            key_text.clone(), "1000".into(),
+        ]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), second_store_text.clone(), "71".into(),
+            key_text.clone(), "1000".into(),
+        ]).unwrap();
+        let (first_genesis, _) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        let (second_genesis, _) = crate::block_store::BlockStore::load_from_file(&second_store_text, 71).unwrap();
+        assert_eq!(
+            first_genesis.blocks()[0].header.header_hash().unwrap(),
+            second_genesis.blocks()[0].header.header_hash().unwrap(),
+        );
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-transfer".into(), store_text.clone(), "71".into(),
+            key_text.clone(), "bob".into(), "100".into(), "1".into(),
+        ]).unwrap();
+
+        let (store, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(store.blocks().len(), 2);
+        assert_eq!(runtime.balance(&address), 900);
+        assert_eq!(runtime.account_nonce(&address), 1);
+        assert_eq!(runtime.balance("bob"), 100);
+
+        let _ = std::fs::remove_file(key_path);
+        let _ = std::fs::remove_file(store_path);
+        let _ = std::fs::remove_file(second_store_path);
+    }
+
+    #[test]
+    fn persisted_transaction_pool_can_be_produced_into_a_validator_signed_block() {
+        let base = std::env::temp_dir();
+        let suffix = std::process::id();
+        let key_path = base.join(format!("zenvora-pool-producer-key-{suffix}.zvk"));
+        let store_path = base.join(format!("zenvora-pool-producer-store-{suffix}.zvb"));
+        let pool_path = base.join(format!("zenvora-pool-producer-{suffix}.zvp"));
+        for path in [&key_path, &store_path, &pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+        let key_text = key_path.to_string_lossy().to_string();
+        let store_text = store_path.to_string_lossy().to_string();
+        let pool_text = pool_path.to_string_lossy().to_string();
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
+            key_text.clone(), "1000".into(),
+        ]).unwrap();
+
+        let key = read_chain_key(&key_text).unwrap();
+        let public_key = key.verifying_key().to_bytes();
+        let address = crate::chain_protocol::address_from_public_key(&public_key).unwrap();
+        let (_, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        let mut transaction = crate::chain_protocol::TransactionV1 {
+            chain_id: 71, sender: address, nonce: 0, recipient: "bob".into(),
+            amount: 100, max_fee: 1, gas_limit: 21_000, valid_until_height: Some(20),
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = crate::chain_block::SignedTransactionEnvelope {
+            transaction, public_key: public_key.to_vec(),
+        };
+        let mut pool = crate::tx_pool::TransactionPool::new(71, 1).unwrap();
+        pool.submit(&runtime, envelope).unwrap();
+        pool.save_to_file(&pool_text).unwrap();
+
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce".into(), store_text.clone(), "71".into(),
+            pool_text.clone(), key_text.clone(),
+        ]).unwrap();
+        let (store, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(store.blocks().len(), 2);
+        assert_eq!(runtime.balance("bob"), 100);
+        let next_pool = crate::tx_pool::TransactionPool::load_from_file(&pool_text, &runtime, 71, 2).unwrap();
+        assert!(next_pool.is_empty());
+        for path in [&key_path, &store_path, &pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn multi_validator_cli_requires_quorum_and_replays_signed_block() {
+        let base = std::env::temp_dir();
+        let suffix = std::process::id();
+        let key_paths: Vec<std::path::PathBuf> = (0..4)
+            .map(|index| base.join(format!("zenvora-multi-key-{suffix}-{index}.zvk")))
+            .collect();
+        let store_path = base.join(format!("zenvora-multi-store-{suffix}.zvb"));
+        let config_path = base.join(format!("zenvora-multi-genesis-{suffix}.txt"));
+        for path in key_paths.iter().chain([&store_path, &config_path]) {
+            let _ = std::fs::remove_file(path);
+        }
+        let key_texts: Vec<String> = key_paths.iter().map(|path| path.to_string_lossy().to_string()).collect();
+        for path in &key_texts {
+            run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), path.clone()]).unwrap();
+        }
+        let mut allocations = Vec::new();
+        for path in &key_texts {
+            let key = read_chain_key(path).unwrap();
+            let address = crate::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+            allocations.push(format!("{address} 1000"));
+        }
+        let config = format!("ZENVORA_GENESIS_V1\nchain_id=71\n{}\n", allocations.join("\n"));
+        std::fs::write(&config_path, config).unwrap();
+        let store_text = store_path.to_string_lossy().to_string();
+        let config_text = config_path.to_string_lossy().to_string();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init-multi".into(), store_text.clone(), "71".into(), config_text,
+        ]).unwrap();
+
+        let insufficient = vec![
+            "zv".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
+            key_texts[0].clone(), "bob".into(), "100".into(), "1".into(),
+            key_texts[0].clone(), key_texts[1].clone(),
+        ];
+        assert!(run_chain_command(&insufficient).is_err());
+        let (before, before_runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(before.blocks().len(), 1);
+        assert_eq!(before_runtime.balance("bob"), 0);
+
+        let sufficient = vec![
+            "zv".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
+            key_texts[0].clone(), "bob".into(), "100".into(), "1".into(),
+            key_texts[0].clone(), key_texts[1].clone(), key_texts[2].clone(),
+        ];
+        run_chain_command(&sufficient).unwrap();
+        let (store, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
+        assert_eq!(store.blocks().len(), 2);
+        assert_eq!(runtime.balance("bob"), 100);
+
+        for path in key_paths.iter().chain([&store_path, &config_path]) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
+        let code = compile(source)?;
+        let mut output = Vec::new();
+        run_with_output(&code, &mut |line| output.push(line))?;
+        Ok(output)
+    }
 
     fn execute(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
         let mut output = Vec::new();
         run_with_output(&code, &mut |line| output.push(line))?;
         Ok(output)
+    }
+
+    #[test]
+    fn new_project_creates_runnable_files_and_refuses_overwrite() {
+        let name = format!("zenvora-test-project-{}", std::process::id());
+        let path = std::path::Path::new(&name);
+        let _ = std::fs::remove_dir_all(path);
+        super::create_project(&name).unwrap();
+        assert!(path.join("main.zv").is_file());
+        assert!(path.join("README.md").is_file());
+        let source = std::fs::read_to_string(path.join("main.zv")).unwrap();
+        assert_eq!(execute_source_for_test(&source).unwrap(), vec!["Hello, Creator", "Your first calculation:", "42", "Total score:", "60"]);
+        assert!(super::create_project(&name).unwrap_err().contains("refusing to overwrite"));
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn new_project_rejects_unsafe_names() {
+        assert!(super::create_project("../escape").is_err());
+        assert!(super::create_project("").is_err());
+    }
+
+    #[test]
+    fn new_project_name_validation_accepts_simple_names_and_rejects_paths() {
+        assert!(super::create_project("../escape").is_err());
+        assert!(super::create_project("nested/project").is_err());
+        assert!(super::create_project("bad name").is_err());
+        assert!(super::create_project("").is_err());
+        assert!(super::create_project("-starts-with-dash").is_err());
+    }
+    #[test]
+    fn check_program_compiles_without_running_side_effects() {
+        let path = std::env::temp_dir().join(format!("zenvora-check-{}.zv", std::process::id()));
+        std::fs::write(&path, concat!("show 1 / 0", "\n")).unwrap();
+        let path_text = path.to_string_lossy().to_string();
+        // Compilation succeeds even though executing this program would divide by zero.
+        assert!(super::check_program(&path_text).is_ok());
+        std::fs::write(&path, concat!("show (1 + )", "\n")).unwrap();
+        assert!(super::check_program(&path_text).unwrap_err().contains("expected"));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn advanced_math_and_science_builtins_are_checked() {
+        let output = execute("show gcd(48, 18)\nshow lcm(12, 18)\nshow factorial(5)\nshow is_prime(97)\nshow fibonacci(10)\nshow pow_int(3, 4)\nshow mean(array(2, 4, 9))\nshow speed(100, 5)\nshow force(10, 9)\nshow kinetic_energy(2, 5)\nshow density(12, 3)\nshow molarity(6, 2)\nshow bmi_x10(70, 175)\n").unwrap();
+        assert_eq!(output, vec!["6", "36", "120", "true", "55", "81", "5", "20", "90", "25", "4", "3", "228"]);
+    }
+
+    #[test]
+    fn chemistry_and_biology_helpers_validate_scientific_inputs() {
+        let output = execute("show molar_mass(array(12, 16, 1, 1, 1, 1))\nshow dna_complement(\"ACGT\")\nshow gc_content_percent(\"GCGC\")\nshow gc_content_percent(\"ATGC\")\n").unwrap();
+        assert_eq!(output, vec!["32", "TGCA", "100", "50"]);
+        assert!(execute("show dna_complement(\"ACNX\")\n").unwrap_err().contains("invalid DNA base"));
+        assert!(execute("show gc_content_percent(\"\")\n").unwrap_err().contains("empty DNA string"));
+    }
+
+    #[test]
+    fn advanced_math_builtins_reject_invalid_inputs_and_overflow() {
+        assert!(execute("show factorial(21)\n").unwrap_err().contains("0 through 20"));
+        assert!(execute("show pow_int(9223372036854775807, 2)\n").unwrap_err().contains("integer overflow"));
+        assert!(execute("show speed(10, 0)\n").unwrap_err().contains("denominator must be positive"));
+        assert!(execute("show bmi_x10(70, 0)\n").unwrap_err().contains("must be positive"));
     }
 
     #[test]
@@ -1516,6 +2891,31 @@ mod tests {
     }
 
     #[test]
+    fn bytecode_verifier_rejects_inconsistent_function_parameter_metadata() {
+        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 -\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("declares 0 parameter(s)") && error.contains("records 1"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_inconsistent_function_parameter_metadata_across_calls() {
+        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 first\nCALL_TARGET 4 1 second\nJUMP 5\nPUSH 1\nRETURN\n";
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("inconsistent parameter metadata across call sites"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_duplicate_and_invalid_function_parameter_names() {
+        let duplicate = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 2 value,value\nPUSH 1\nPUSH 2\nJUMP 5\nRETURN\n";
+        let error = super::deserialize_bytecode(duplicate).unwrap_err();
+        assert!(error.contains("duplicate parameter"), "unexpected error: {error}");
+
+        let invalid = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 bad-name\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
+        let error = super::deserialize_bytecode(invalid).unwrap_err();
+        assert!(error.contains("invalid parameter name"), "unexpected error: {error}");
+    }
+
+    #[test]
     fn bytecode_verifier_rejects_stack_underflow_and_bad_control_flow() {
         for bytecode in [
             "ZENVORA_BYTECODE 1\nPRINT\nJUMP 2\n",
@@ -1525,6 +2925,56 @@ mod tests {
             let error = super::deserialize_bytecode(bytecode).unwrap_err();
             assert!(error.contains("verifier") || error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
         }
+    }
+
+    #[test]
+    fn source_compilation_rejects_mixed_return_paths_before_execution() {
+        let source = "fn maybe(flag) {\nif flag {\nreturn 1\n}\n}\nshow maybe(false)\n";
+        let error = super::compile(source).unwrap_err();
+        assert!(error.contains("inconsistent reachable return kinds"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_mixed_reachable_return_kinds() {
+        let bytecode = concat!(
+            "ZENVORA_BYTECODE 1\n",
+            "CALL_TARGET 3 0 -\n",
+            "PRINT\n",
+            "JUMP 8\n",
+            "PUSH_BOOL true\n",
+            "JUMP_IF_FALSE 7\n",
+            "PUSH 1\n",
+            "RETURN_VALUE\n",
+            "RETURN\n",
+        );
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("inconsistent reachable return kinds"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_function_returns_with_stack_residue() {
+        let bytecode = concat!(
+            "ZENVORA_BYTECODE 1\n",
+            "CALL_TARGET 7 0 -\n",
+            "PUSH 10\n",
+            "ADD\n",
+            "PUSH 20\n",
+            "PRINT\n",
+            "PRINT\n",
+            "JUMP 10\n",
+            "PUSH 1\n",
+            "PUSH 2\n",
+            "RETURN_VALUE\n",
+        );
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("function return") && error.contains("expected 1"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bytecode_verifier_rejects_structural_errors_in_unreachable_code() {
+        let bytecode = "ZENVORA_BYTECODE 1\nJUMP 3\nJUMP 99\nJUMP 3\n";
+        let error = super::deserialize_bytecode(bytecode).unwrap_err();
+        assert!(error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
     }
 
     #[test]
@@ -1639,6 +3089,21 @@ mod tests {
     }
 
     #[test]
+    fn reserved_keywords_are_rejected_as_identifiers() {
+        for source in [
+            "define if := 1\n",
+            "define true := 1\n",
+            "define otherwise := 1\n",
+            "fn repeat(value) {\nreturn value\n}\n",
+            "fn valid(and) {\nreturn 1\n}\n",
+        ] {
+            let error = compile(source).unwrap_err();
+            assert!(error.contains("invalid variable name") || error.contains("invalid function name") || error.contains("invalid parameter name"), "unexpected error: {error}");
+        }
+        assert_eq!(execute("define counter := 1\nshow counter\n").unwrap(), vec!["1"]);
+    }
+
+    #[test]
     fn invalid_assignment_names_are_rejected() {
         for source in [" := 5\n", "1bad := 5\n", "bad-name := 5\n"] {
             assert!(compile_core(source).unwrap_err().contains("invalid variable name"));
@@ -1702,6 +3167,22 @@ mod tests {
     }
 
     #[test]
+    fn contract_views_reject_direct_action_calls() {
+        let direct = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\ncall increment(1)\nreturn count\n}\n}\n";
+        assert!(compile(direct).unwrap_err().contains("view cannot call action 'increment'"));
+        let expression = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\nreturn increment(1)\n}\n}\n";
+        assert!(compile(expression).unwrap_err().contains("view cannot call action 'increment'"));
+        let string_literal = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview label() {\nreturn \"increment()\"\n}\n}\nshow label()\n";
+        assert_eq!(execute(string_literal).unwrap(), vec!["increment()"]);
+    }
+
+    #[test]
+    fn contract_views_reject_indirect_state_mutation_through_helpers() {
+        let source = "define count := 0\nfn mutate() {\ncount := count + 1\nreturn count\n}\nfn helper() {\n# a comment must not hide the call from effect analysis\ncall mutate()\nreturn count\n}\ncontract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview bad() {\nreturn helper()\n}\n}\n";
+        assert!(compile(source).unwrap_err().contains("view cannot call state-mutating function 'helper'"));
+    }
+
+    #[test]
     fn contract_views_reject_direct_state_mutation() {
         let source = "contract Counter {\nstate count := 0\nview bad() {\ncount := count + 1\nreturn count\n}\n}\n";
         assert!(compile(source).unwrap_err().contains("cannot directly assign to contract state 'count'"));
@@ -1737,9 +3218,140 @@ mod tests {
     }
 
     #[test]
+    fn unique_preserves_first_occurrence_order_for_mixed_values() {
+        let output = execute(r#"show unique(array(3, 1, 3, "x", 1, "x", true, false, true))
+show unique(array())
+"#).unwrap();
+        assert_eq!(output, vec!["[3, 1, x, true, false]", "[]"]);
+        assert!(execute("show unique(7)\n").unwrap_err().contains("expects an array"));
+    }
+
+    #[test]
+    fn assert_eq_compares_values_and_reports_actionable_failures() {
+        assert_eq!(execute("show assert_eq(42, 42)\nshow assert_eq(array(1, 2), array(1, 2))\nshow assert_eq(1, 2, \"bad balance\")\n").unwrap_err(), "bad balance");
+        let output = execute("show assert_eq(42, 42)\nshow assert_eq(array(1, 2), array(1, 2))\n").unwrap();
+        assert_eq!(output, vec!["true", "true"]);
+        assert!(execute("show assert_eq(1, 2)\n").unwrap_err().contains("left was 1, right was 2"));
+        assert!(execute("show assert_eq(1)\n").unwrap_err().contains("expects 2 or 3"));
+    }
+
+    #[test]
     fn standard_library_type_conversion_math_range_and_assert() {
         let output = execute("show type_of(42)\nshow type_of(array(1))\nshow to_string(true)\nshow abs(-9)\nshow min(8, 3)\nshow max(8, 3)\nshow range(2, 5)\nshow len(range(0, 4))\nshow assert(2 < 3)\n").unwrap();
         assert_eq!(output, vec!["integer", "array", "true", "9", "3", "8", "[2, 3, 4]", "4", "true"]);
+    }
+
+    #[test]
+    fn string_helpers_and_sum_cover_common_standard_library_operations() {
+        let output = execute(r#"show starts_with("zenvora-lang", "zen")
+show ends_with("zenvora-lang", "lang")
+show replace("a-b-a", "a", "x")
+show split("red,green,blue", ",")
+show join(array("Zenvora", "Lang"), " ")
+show sum(array(10, 20, 12))
+"#).unwrap();
+        assert_eq!(output, vec!["true", "true", "x-b-x", "[red, green, blue]", "Zenvora Lang", "42"]);
+    }
+
+    #[test]
+    fn string_helpers_and_sum_reject_invalid_inputs_and_overflow() {
+        assert!(execute(r#"show starts_with(1, "x")
+"#).unwrap_err().contains("two strings"));
+        assert!(execute(r#"show split("a", "")
+"#).unwrap_err().contains("separator cannot be empty"));
+        assert!(execute(r#"show replace("abc", "", "x")
+"#).unwrap_err().contains("search string cannot be empty"));
+        assert!(execute(r#"show join(array("ok", 2), " ")
+"#).unwrap_err().contains("array containing only strings"));
+        assert!(execute(r#"show sum(array(1, "two"))
+"#).unwrap_err().contains("only integers"));
+        assert!(execute(r#"show sum(array(9223372036854775807, 1))
+"#).unwrap_err().contains("integer overflow"));
+    }
+
+    #[test]
+    fn collection_and_numeric_helpers_cover_boundaries() {
+        let output = execute(r#"show first(array(7, 8, 9))
+show last(array(7, 8, 9))
+show reverse(array(1, 2, 3))
+show reverse("héllo")
+show is_empty(array())
+show is_empty(map())
+show is_empty("")
+show clamp(12, 0, 10)
+show clamp(-3, 0, 10)
+"#).unwrap();
+        assert_eq!(output, vec!["7", "9", "[3, 2, 1]", "olléh", "true", "true", "true", "10", "0"]);
+    }
+
+    #[test]
+    fn string_helpers_reject_oversized_results_before_building_them() {
+        let limit = super::MAX_BYTECODE_STRING_BYTES;
+        let oversized_replacement = "b".repeat(limit);
+        let replace_error = super::builtin("replace", vec![
+            super::Value::Str("a".repeat(limit)),
+            super::Value::Str("a".into()),
+            super::Value::Str(oversized_replacement),
+        ]).unwrap_err();
+        assert!(replace_error.contains("replace result exceeds safety limit") || replace_error.contains("replace size calculation overflow"));
+
+        let join_error = super::builtin("join", vec![
+            super::Value::Array(vec![
+                super::Value::Str("a".repeat(limit / 2 + 1)),
+                super::Value::Str("b".repeat(limit / 2 + 1)),
+            ]),
+            super::Value::Str(",".into()),
+        ]).unwrap_err();
+        assert!(join_error.contains("join result exceeds safety limit"));
+    }
+
+    #[test]
+    fn collection_and_numeric_helpers_reject_invalid_inputs() {
+        assert!(execute("show first(array())\n").unwrap_err().contains("empty array"));
+        assert!(execute("show last(4)\n").unwrap_err().contains("expects an array"));
+        assert!(execute("show reverse(true)\n").unwrap_err().contains("array or string"));
+        assert!(execute("show is_empty(3)\n").unwrap_err().contains("array, map, or string"));
+        assert!(execute("show clamp(1, 5, 2)\n").unwrap_err().contains("minimum must be less than or equal"));
+        assert!(execute("show clamp(1, false, 2)\n").unwrap_err().contains("three integers"));
+    }
+
+    #[test]
+    fn text_normalization_character_count_and_integer_conversion_work() {
+        let output = execute(r#"show trim("  Zenvora Lang  ")
+show lower("ZENvora")
+show upper("Zenvora")
+show char_count("hé🙂")
+show to_int("  -42 ")
+show to_int(17)
+"#).unwrap();
+        assert_eq!(output, vec!["Zenvora Lang", "zenvora", "ZENVORA", "3", "-42", "17"]);
+    }
+
+    #[test]
+    fn text_normalization_and_integer_conversion_reject_invalid_values() {
+        assert!(execute("show trim(12)\n").unwrap_err().contains("expects a string"));
+        assert!(execute(r#"show to_int("12x")
+"#).unwrap_err().contains("cannot convert"));
+        assert!(execute("show to_int(true)\n").unwrap_err().contains("integer or numeric string"));
+        assert!(execute(r#"show to_int("9223372036854775808")
+"#).unwrap_err().contains("cannot convert"));
+    }
+
+    #[test]
+    fn index_of_supports_unicode_strings_and_arrays() {
+        let output = execute(r#"show index_of("héllo🙂", "🙂")
+show index_of("zenvora", "nope")
+show index_of(array(7, "x", true), "x")
+show index_of(array(7, "x", true), false)
+"#).unwrap();
+        assert_eq!(output, vec!["5", "-1", "1", "-1"]);
+    }
+
+    #[test]
+    fn index_of_rejects_invalid_argument_types() {
+        assert!(execute(r#"show index_of("abc", 1)
+"#).unwrap_err().contains("string needle"));
+        assert!(execute("show index_of(1, 1)\n").unwrap_err().contains("string or array"));
     }
 
     #[test]
@@ -1794,4 +3406,26 @@ mod tests {
         assert!(compile_core("if true {\n show 1\n").unwrap_err().contains("missing closing brace"));
         assert!(compile_core("}\n").unwrap_err().contains("closing brace without matching block"));
     }
+    #[test]
+    fn chain_cli_initializes_transfers_and_persists_the_ledger() {
+        let path = std::env::temp_dir().join(format!("zenvora-chain-cli-{}.zvr", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let path_text = path.to_string_lossy().to_string();
+
+        let init = vec!["zv".to_string(), "--chain-init".to_string(), path_text.clone(), "alice".to_string(), "1000".to_string()];
+        super::run_chain_command(&init).unwrap();
+
+        let transfer = vec!["zv".to_string(), "--chain-transfer".to_string(), path_text.clone(), "alice".to_string(), "bob".to_string(), "125".to_string()];
+        super::run_chain_command(&transfer).unwrap();
+
+        let restored = super::chain_runtime::ChainRuntime::load_from_file(&path).unwrap();
+        assert_eq!(restored.balance("alice"), 875);
+        assert_eq!(restored.balance("bob"), 125);
+        assert_eq!(restored.receipts().len(), 1);
+
+        let duplicate_init = vec!["zv".to_string(), "--chain-init".to_string(), path_text, "alice".to_string(), "500".to_string()];
+        assert!(super::run_chain_command(&duplicate_init).unwrap_err().contains("refusing to overwrite"));
+        std::fs::remove_file(path).unwrap();
+    }
+
 }
