@@ -112,11 +112,12 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 - [x] Existing v1 behavior and current regression suite continue to pass in GitHub Actions CI.
 - [x] Deterministic malformed-input tests cover header/metadata parsing, integer boundaries, invalid operands, region tables, and jump targets.
 - [x] A dependency-free bounded parser fuzz-smoke test exercises 4,096 generated ASCII inputs in CI.
+- [x] Adversarial regression tests cover file/string size caps, exact region-end branch targets, extreme jump/call operands, and serializer newline injection.
 - [ ] Dedicated longer-running fuzz/property-based campaigns cover header parsing, metadata parsing, integer boundaries, region tables, and jump targets.
 
 ## Current implementation boundary
 
-The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, `parse_v2_file`/`serialize_v2_file`, and `verify_v2_file`. `compile_with_layout` preserves every declared function's metadata, including uncalled functions, and the opt-in `--emit-bytecode-v2 <source.zv> <output.zv2b>` path emits a verified v2 file. `deserialize_bytecode` dispatches v2 files through the parser/verifier, then maps verified instructions into the existing VM representation; the main-region exit is translated to skip function bodies. Each disconnected component starts with an empty stack. Remaining work includes longer-running fuzz/property-based campaigns, independent review, compatibility guarantees, and stabilizing the format before production use. The existing v1 serializer and loader remain unchanged; v1 remains the default format.
+The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, `parse_v2_file`/`serialize_v2_file`, and `verify_v2_file`. `compile_with_layout` preserves every declared function's metadata, including uncalled functions, and the opt-in `--emit-bytecode-v2 <source.zv> <output.zv2b>` path emits a verified v2 file. `deserialize_bytecode` dispatches v2 files through the parser/verifier, then maps verified instructions into the existing VM representation; the main-region exit is translated to skip function bodies. Each disconnected component starts with an empty stack. Recent adversarial tests additionally exercise file/string size caps, exact region-end branch targets, extreme jump/call operands, and serializer newline injection. Remaining work includes a dedicated longer-running fuzz/property-based campaign, independent review, compatibility guarantees, and stabilizing the format before production use. The existing v1 serializer and loader remain unchanged; v1 remains the default format.
 
 ## Security status
 
