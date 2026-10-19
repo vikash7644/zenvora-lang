@@ -17,11 +17,8 @@ These files describe proposals and a local-development prototype, not a producti
 - `Cargo.toml` and `Cargo.lock` — Rust package manifest and locked dependency versions for the `zv` command.
 - `CHANGELOG.md` — v0.8.0 release notes and current feature status.
 - `docs/language-grammar.md` — current parser grammar draft and unresolved v1.0 semantics.
-- `src/main.rs` — lexer, expression parser, bytecode compiler, stack VM, CLI, and automated regression tests.
-- `src/chain_protocol.rs` — canonical transaction/header encodings, SHA-256 IDs, Merkle roots, and Ed25519 signature verification.
-- `src/chain_runtime.rs` — Zenvora-VM transfer execution, V3 ledger persistence, signed nonce tracking, and state/receipt roots.
-- `src/chain_block.rs` — atomic candidate-block execution and transaction/receipt/state-root validation.
-- `src/block_store.rs` — append-only local block storage, independent candidate execution before persistence, and full replay verification.
+- `src/main.rs` — language lexer/parser, compiler, stack VM, CLI, and regression tests; legacy chain CLI entrypoints are still present pending migration.
+- `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the Zenvora Lang release scope.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/zenvora-language-tour.zv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
@@ -38,7 +35,7 @@ These files describe proposals and a local-development prototype, not a producti
 - `CONTRIBUTING.md` — contributor checklist and validation commands.
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
-- `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
+- `docs/technical_spec.md` — legacy draft architecture for the former chain prototype; planned migration to the separate BHYVORIX Chain repository.
 - `examples/token.zvl` — illustrative smart-contract DSL draft; not executable by the current compiler.
 - `website/` — static responsive ecosystem landing page.
 
