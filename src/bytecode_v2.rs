@@ -361,10 +361,19 @@ fn region_for_pc(layout: &ProgramLayout, pc: usize) -> Option<(usize, usize, Opt
     if pc < layout.main_end {
         return Some((0, layout.main_end, None));
     }
-    layout.functions.iter().find_map(|function| {
-        (pc >= function.entry && pc < function.end)
-            .then_some((function.entry, function.end, Some(function.entry)))
-    })
+
+    // Regions are validated as contiguous and ordered, so binary search avoids
+    // scanning the whole function table for every instruction in large programs.
+    let insertion = layout.functions.partition_point(|function| function.entry <= pc);
+    let function = layout.functions.get(insertion.checked_sub(1)?)?;
+    (pc < function.end).then_some((function.entry, function.end, Some(function.entry)))
+}
+
+fn function_for_entry(layout: &ProgramLayout, entry: usize) -> Option<&FunctionRegion> {
+    layout.functions
+        .binary_search_by_key(&entry, |function| function.entry)
+        .ok()
+        .map(|index| &layout.functions[index])
 }
 
 /// Verify opcode syntax, every jump/call target (including unreachable code), and
@@ -405,7 +414,7 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
                 }
             }
             V2Instruction::Call { target, argument_count } => {
-                let function = file.layout.functions.iter().find(|f| f.entry == *target)
+                let function = function_for_entry(&file.layout, *target)
                     .ok_or_else(|| format!("bytecode v2: call at instruction {pc} targets undeclared function {target}"))?;
                 if function.parameters.len() != *argument_count {
                     return Err(format!(
@@ -460,7 +469,7 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
                 V2Instruction::Jump(_) | V2Instruction::Return => (0, 0),
                 V2Instruction::Builtin { argument_count } => (*argument_count, 1 - *argument_count as isize),
                 V2Instruction::Call { target, argument_count } => {
-                    let function = file.layout.functions.iter().find(|f| f.entry == *target)
+                    let function = function_for_entry(&file.layout, *target)
                         .ok_or_else(|| format!("bytecode v2: undeclared call target {target}"))?;
                     let result: isize = if function.return_kind == ReturnKind::Value { 1 } else { 0 };
                     (*argument_count, result - *argument_count as isize)
@@ -827,5 +836,19 @@ mod tests {
         };
         assert!(serialize_v2_file(&file).unwrap_err().contains("invalid instruction record"));
     }
+
+    #[test]
+    fn region_lookup_respects_half_open_boundaries_with_binary_search() {
+        let value = layout(7, 2, vec![function(2, 4, &[]), function(4, 7, &[])]);
+        assert_eq!(super::region_for_pc(&value, 0), Some((0, 2, None)));
+        assert_eq!(super::region_for_pc(&value, 2), Some((2, 4, Some(2))));
+        assert_eq!(super::region_for_pc(&value, 3), Some((2, 4, Some(2))));
+        assert_eq!(super::region_for_pc(&value, 4), Some((4, 7, Some(4))));
+        assert_eq!(super::region_for_pc(&value, 6), Some((4, 7, Some(4))));
+        assert_eq!(super::region_for_pc(&value, 7), None);
+        assert_eq!(super::function_for_entry(&value, 4).map(|f| f.end), Some(7));
+        assert_eq!(super::function_for_entry(&value, 3), None);
+    }
+
 
 }
