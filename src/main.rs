@@ -770,6 +770,40 @@ fn lower_contracts(source: &str) -> Result<String, String> {
     Ok(output)
 }
 
+fn function_body_can_fall_through(code: &[Op]) -> bool {
+    if code.is_empty() {
+        return true;
+    }
+    let mut visited = HashSet::new();
+    let mut pending = vec![0usize];
+    while let Some(pc) = pending.pop() {
+        if pc == code.len() {
+            return true;
+        }
+        if pc > code.len() || !visited.insert(pc) {
+            continue;
+        }
+        match &code[pc] {
+            Op::Return | Op::ReturnValue => {}
+            Op::Jump(target) => {
+                if *target >= code.len() {
+                    return true;
+                }
+                pending.push(*target);
+            }
+            Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
+                if *target >= code.len() {
+                    return true;
+                }
+                pending.push(*target);
+                pending.push(pc + 1);
+            }
+            _ => pending.push(pc + 1),
+        }
+    }
+    false
+}
+
 fn compile(source: &str) -> Result<Vec<Op>, String> {
     compile_with_layout(source).map(|(code, _)| code)
 }
@@ -838,9 +872,9 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
                 _ => {}
             }
         }
-        let has_explicit_terminal_return = matches!(body_code.last(), Some(Op::Return | Op::ReturnValue));
+        let can_fall_through = function_body_can_fall_through(&body_code);
         code.extend(body_code);
-        if !has_explicit_terminal_return {
+        if can_fall_through {
             code.push(Op::Return);
         }
         regions.push((entry, code.len(), name.clone(), params.clone()));
