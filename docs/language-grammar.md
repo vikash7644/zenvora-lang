@@ -5,7 +5,7 @@ Status: **draft, not frozen for v1.0**. This document describes the current line
 ## Source layout
 
 - One statement or block header per physical line.
-- Blank lines and lines whose first non-whitespace character is `#` are ignored. `#` begins a comment outside string literals.
+- Blank lines and lines whose first non-whitespace character is `#` are ignored. `#` outside a string literal ends the rest of that physical line, so trailing comments are accepted too.
 - A trailing semicolon is stripped by the current parser. The exact semicolon policy is not frozen yet.
 - Braces delimit `if`, `repeat`, and function blocks. Indentation is not used to determine block nesting.
 - Identifiers are ASCII: a letter or underscore followed by letters, digits, or underscores.
@@ -15,8 +15,18 @@ Status: **draft, not frozen for v1.0**. This document describes the current line
 ```ebnf
 program          = { line } ;
 line             = blank-line | comment-line | function-header | statement | block-line ;
+blank-line       = whitespace ;
+comment-line     = { whitespace }, "#", { any-character } ;
 function-header  = "fn", identifier, "(", [ parameters ], ")", "{" ;
 parameters       = identifier, { ",", identifier } ;
+identifier       = ( letter | "_" ), { letter | digit | "_" } ;
+integer          = digit, { digit } ;
+string           = '"', { string-character | escape }, '"' ;
+escape           = '\\\"' | '\\\\' | "\\n" | "\\r" | "\\t" ;
+boolean          = "true" | "false" ;
+whitespace       = " ", { " " | "\\t" } ;
+digit            = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+letter           = "A"…"Z" | "a"…"z" ;
 
 statement        = declaration
                  | assignment
@@ -57,12 +67,11 @@ comparison       = additive, [ comparison-op, additive ] ;
 comparison-op    = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 additive         = term, { ( "+" | "-" ), term } ;
 term             = factor, { ( "*" | "/" ), factor } ;
-factor           = unary, { "[", expression, "]" } ;
-unary            = ( "-" | "not" ), unary | primary ;
+factor           = ( "-" | "not" ), factor | postfix ;
+postfix          = primary, { "[", expression, "]" } ;
 primary          = integer | string | boolean
                  | identifier, [ "(", [ arguments ], ")" ]
                  | "(", expression, ")" ;
-boolean          = "true" | "false" ;
 ```
 
 The parser currently accepts at most one comparison operator in a comparison expression; chained comparisons are not part of the grammar.
