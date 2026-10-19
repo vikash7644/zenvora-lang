@@ -3243,6 +3243,8 @@ mod tests {
         assert!(err.contains("line 1: column 9: unexpected character"), "{err}");
         let err = compile_core("show \"bad\\q\"").unwrap_err();
         assert!(err.contains("line 1: column 11: unsupported string escape"), "{err}");
+        let err = compile_core("show \"नमस्ते\" + @").unwrap_err();
+        assert!(err.contains("line 1: column 17: unexpected character"), "{err}");
     }
 
     #[test]
