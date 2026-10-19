@@ -28,9 +28,9 @@ jobs:
       - name: Generate lockfile for reproducibility audit
         run: |
           cargo generate-lockfile
-          printf '%s\\n' 'LOCKFILE_BASE64_BEGIN'
+          printf '%s\n' 'LOCKFILE_BASE64_BEGIN'
           base64 -w0 Cargo.lock
-          printf '\\n%s\\n' 'LOCKFILE_BASE64_END'
+          printf '\n%s\n' 'LOCKFILE_BASE64_END'
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
