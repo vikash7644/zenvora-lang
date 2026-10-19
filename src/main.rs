@@ -1605,7 +1605,7 @@ where
                 let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
                 let old_binding = vars.get(name).or_else(|| globals.get(name))
                     .ok_or_else(|| format!("undefined variable '{name}'"))?;
-                let collection = old_binding.clone();
+                let collection = (*old_binding).clone();
                 let updated = match (collection, index) {
                     (Value::Array(mut items), Value::Int(index)) if index >= 0 => {
                         let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
@@ -3581,9 +3581,9 @@ mod tests {
 
     #[test]
     fn live_runtime_bindings_enforce_aggregate_memory_budget() {
-        let mut source = format!("define giant := \"{}\"\\n", "x".repeat(super::MAX_BYTECODE_STRING_BYTES));
+        let mut source = format!("define giant := \"{}\"\n", "x".repeat(super::MAX_BYTECODE_STRING_BYTES));
         for index in 0..80 {
-            source.push_str(&format!("define copy_{index} := giant\\n"));
+            source.push_str(&format!("define copy_{index} := giant\n"));
         }
         let error = execute(&source).unwrap_err();
         assert!(error.contains("live variable/call-frame values exceed safety limit"), "{error}");
