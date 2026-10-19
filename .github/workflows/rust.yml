@@ -44,7 +44,10 @@ jobs:
         shell: bash
         run: |
           ./target/release/zv --version
-          expected=
+          expected="$(printf '%s\n' 30 60 20 35)"
+          actual="$(./target/release/zv examples/hello.zv)"
+          test "$actual" = "$expected"
+
       - name: Run hello example
         run: cargo run -- examples/hello.zv
 
