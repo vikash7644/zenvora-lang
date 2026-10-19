@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Module loading now caps each source file at 4 MiB and expanded imported source at 16 MiB, using bounded reads and checked expansion before appending. Added oversize-input regression tests.
+
 - Bounded array and map growth to 100,000 items across `push`, `put`, and indexed map assignment; updates to existing map keys remain allowed at the limit. Added resource-boundary regression coverage.
 
 - Compiler diagnostics now track lexer token columns and report source-relative columns for parser errors, including malformed expressions and block conditions. Added regression tests for indentation, function calls, trailing tokens, and `if`/`repeat` conditions.
