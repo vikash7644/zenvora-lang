@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Bytecode execution now reads at most 16 MiB plus one detection byte before decoding, preventing oversized files from being fully allocated before the decoder rejects them. Added a file-reader regression test.
+
 - Parser expression nesting is now capped at 256 levels, with regression tests for deeply nested parentheses and unary operators to prevent stack exhaustion.
 
 - Module loading now caps each source file at 4 MiB and expanded imported source at 16 MiB, using bounded reads and checked expansion before appending. Added oversize-input regression tests.
