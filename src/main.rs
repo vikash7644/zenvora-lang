@@ -39,7 +39,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
                 match ch {
                     '"' => { closed = true; break; }
                     '\\' => {
-                        if i >= chars.len() { return Err("unterminated escape in string literal".into()); }
+                        if i >= chars.len() { return Err(format!("column {}: unterminated escape in string literal", i + 1)); }
                         let escaped = chars[i];
                         i += 1;
                         match escaped {
@@ -48,13 +48,13 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
                             'n' => value.push('\n'),
                             'r' => value.push('\r'),
                             't' => value.push('\t'),
-                            _ => return Err(format!("unsupported string escape '\\{escaped}'")),
+                            _ => return Err(format!("column {}: unsupported string escape '\\{escaped}'", i)),
                         }
                     }
                     _ => value.push(ch),
                 }
             }
-            if !closed { return Err("unterminated string literal".into()); }
+            if !closed { return Err(format!("column {}: unterminated string literal", chars.len() + 1)); }
             if value.len() > MAX_BYTECODE_STRING_BYTES {
                 return Err(format!("string literal exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
             }
@@ -65,7 +65,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
             let start = i;
             while i < chars.len() && chars[i].is_ascii_digit() { i += 1; }
             let n: String = chars[start..i].iter().collect();
-            out.push(Token::Number(n.parse().map_err(|_| format!("invalid integer: {n}"))?));
+            out.push(Token::Number(n.parse().map_err(|_| format!("column {}: invalid integer: {n}", start + 1))?));
             continue;
         }
         if c.is_ascii_alphabetic() || c == '_' {
@@ -94,7 +94,7 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
             '>' if i + 1 < chars.len() && chars[i + 1] == '=' => { i += 1; Token::GreaterEq }
             '<' => Token::Less,
             '>' => Token::Greater,
-            _ => return Err(format!("unexpected character '{c}'")),
+            _ => return Err(format!("column {}: unexpected character '{c}'", i + 1)),
         };
         out.push(token);
         i += 1;
@@ -3033,6 +3033,14 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["hello\nworld", "Zenvora Lang", "", "नमस्ते 🌍"]);
+    }
+
+    #[test]
+    fn lexer_errors_include_one_based_source_columns() {
+        assert!(lex("show @").unwrap_err().contains("column 6: unexpected character"));
+        assert!(lex("show \"bad\\q\"").unwrap_err().contains("column 11: unsupported string escape"));
+        assert!(lex("\"unterminated").unwrap_err().contains("column 14: unterminated string literal"));
+        assert!(lex("show \"bad\\").unwrap_err().contains("column 11: unterminated escape"));
     }
 
     #[test]
