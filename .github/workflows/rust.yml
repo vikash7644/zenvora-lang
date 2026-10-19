@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
@@ -79,17 +79,27 @@ jobs:
       - name: Run module import example
         run: cargo run -- examples/modules.zv
 
-      - name: Compile example to bytecode
+      - name: Compile example to bytecode v1
         run: cargo run -- --emit-bytecode examples/functions.zv /tmp/zenvora-functions.zvb
 
-      - name: Execute compiled bytecode
+      - name: Execute compiled bytecode v1
         run: cargo run -- --run-bytecode /tmp/zenvora-functions.zvb
+
+      - name: Compile example to experimental bytecode v2
+        run: cargo run -- --emit-bytecode-v2 examples/functions.zv /tmp/zenvora-functions.zv2b
+
+      - name: Check bytecode v2 header
+        run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.zv2b
+
+      - name: Execute verified bytecode v2
+        run: cargo run -- --run-bytecode /tmp/zenvora-functions.zv2b
 
       - name: Verify CLI version
         run: cargo run -- --version
 
       - name: Verify CLI help
         run: cargo run -- --help
+
       - name: Smoke-test Rust compiler HTTP API
         shell: bash
         run: |
@@ -122,7 +132,7 @@ jobs:
         working-directory: compiler
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
