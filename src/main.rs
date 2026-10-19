@@ -1031,7 +1031,7 @@ fn ensure_value_depth(value: &Value) -> Result<(), String> {
     }
     let size = value_size(value);
     if size > MAX_VALUE_BYTES {
-        return Err(format!("value exceeds memory safety limit ({MAX_VALUE_BYTES} bytes)"));
+        return Err(format!("value exceeds estimated memory safety budget ({MAX_VALUE_BYTES} bytes)"));
     }
     Ok(())
 }
@@ -3516,7 +3516,7 @@ mod tests {
         let large_text = super::Value::Str("x".repeat(super::MAX_BYTECODE_STRING_BYTES));
         let values = vec![large_text; super::MAX_VALUE_BYTES / super::MAX_BYTECODE_STRING_BYTES + 1];
         let error = super::builtin("array", values).unwrap_err();
-        assert!(error.contains("value exceeds memory safety limit"), "{error}");
+        assert!(error.contains("estimated memory safety budget"), "{error}");
     }
 
     #[test]
