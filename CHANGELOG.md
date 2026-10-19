@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Compiler entry points now reject source larger than 16 MiB before contract lowering or lexing, with a regression test through the public compile path.
+
 - Lexer input is now capped at 1,000,000 tokens per expression, and the compiler enforces the 1,000,000-instruction budget while appending bytecode and processing source lines. Added token-count and instruction-growth regression tests.
 
 - Live variable bindings and saved call-frame environments now share a 64 MiB estimated-memory budget, with regression coverage that aliases a large string until the limit is reached.
