@@ -784,4 +784,48 @@ mod tests {
         assert!(verify_v2_file(&file).unwrap_err().contains("escapes its region"));
     }
 
+
+    #[test]
+    fn rejects_file_and_decoded_string_size_limits_before_use() {
+        let oversized_file = "x".repeat(super::MAX_V2_FILE_BYTES + 1);
+        assert!(parse_v2_file(&oversized_file).unwrap_err().contains("file exceeds size limit"));
+
+        let oversized_hex = "a".repeat(super::MAX_V2_STRING_BYTES * 2 + 2);
+        assert!(super::parse_v2_instruction(&format!("PUSH_STRING_HEX {oversized_hex}"))
+            .unwrap_err().contains("malformed instruction"));
+    }
+
+    #[test]
+    fn rejects_branch_targets_at_region_end_except_main_exit_jump() {
+        let main_conditional_exit = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nCODE\\nJUMP_IF_FALSE 1\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&main_conditional_exit).unwrap_err().contains("escapes its region"));
+
+        let function_end_jump = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nFUNCTION 1 3 0 void -\\nCODE\\nJUMP 1\\nJUMP 3\\nRETURN\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&function_end_jump).unwrap_err().contains("escapes its region"));
+    }
+
+    #[test]
+    fn rejects_extreme_branch_and_call_operands_without_panicking() {
+        let extreme_jump = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nJUMP 18446744073709551615\\nJUMP 2\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&extreme_jump).unwrap_err().contains("escapes its region"));
+
+        let overflow_call = "CALL 184467440737095516160 0";
+        assert!(super::parse_v2_instruction(overflow_call).is_err());
+    }
+
+    #[test]
+    fn serializer_rejects_embedded_instruction_line_breaks() {
+        let file = ParsedV2File {
+            layout: layout(1, 1, vec![]),
+            instructions: vec!["JUMP 1\\nPUSH 99".into()],
+        };
+        assert!(serialize_v2_file(&file).unwrap_err().contains("invalid instruction record"));
+    }
+
 }
