@@ -804,4 +804,24 @@ mod tests {
         std::fs::remove_file(local_path).unwrap();
     }
 
+    #[test]
+    fn peer_frame_rejects_zero_and_oversized_lengths_before_reading_payload() {
+        for invalid_length in [0_u32, (super::MAX_FRAME_BYTES as u32) + 1] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream.write_all(&invalid_length.to_be_bytes()).unwrap();
+            });
+
+            let mut stream = std::net::TcpStream::connect(address).unwrap();
+            let error = super::read_frame(&mut stream).unwrap_err();
+            assert!(
+                error.contains("peer frame size is outside the permitted range"),
+                "unexpected error for length {invalid_length}: {error}"
+            );
+            server.join().unwrap();
+        }
+    }
+
 }
