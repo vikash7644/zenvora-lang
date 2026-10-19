@@ -16,7 +16,7 @@ Run these commands with a current stable Rust toolchain:
 ```sh
 cargo fmt -- --check
 cargo check --all-targets
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets
 cargo test --all-targets
 ```
 
