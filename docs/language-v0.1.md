@@ -82,11 +82,12 @@ This is **not yet a secure smart-contract runtime**. State is not persisted betw
 
 ## Current limitations and next engineering milestones
 
-1. **Bytecode format:** add explicit function metadata and declared return kinds in a new version, validate all instruction regions, and add adversarial tests and fuzzing.
-2. **Language correctness:** build a formal parser/AST with source spans and clearer diagnostics, then introduce static type checking and a compatibility policy.
-3. **Modules and packages:** add namespaces, visibility rules, package metadata, and deterministic package resolution.
-4. **Runtime safety:** account for memory and collection growth, define resource budgets, and apply limits consistently across source and bytecode execution.
-5. **Contract model:** define a typed ABI, persistent state, authorization, enforced action/view semantics, and deterministic gas before production-chain integration.
-6. **Chain foundations:** finalize canonical protocol decisions, transaction/fee rules, multi-node networking, consensus/finality, and recovery tests before any public testnet decision.
+1. **Bytecode v2 security review:** explicit function metadata, text loading, structural/control-flow/stack verification, opt-in emission, adversarial tests, round-trip checks, and fuzz campaigns are implemented and CI-tested. The format is still provisional, v1 remains the default, and independent security review is pending.
+2. **Language correctness:** add source spans and line/column diagnostics, expand malformed-input and boundary regressions, and document exact behavior for values, operators, functions, and errors before considering a formal AST or static type system.
+3. **Runtime resource safety:** review memory and collection growth, define resource budgets, and apply limits consistently across source, modules, bytecode loading, and execution.
+4. **Modules and packages:** the relative use loader exists with duplicate-import, cycle, and depth checks; namespaces, visibility rules, package metadata, deterministic package resolution, and import-root policy remain future work.
+5. **Contract model:** the contract/state/action/view syntax is experimental. Define a typed ABI, persistent state, authorization, enforced action/view semantics, and deterministic gas before production-chain integration.
+6. **Chain foundations:** the repository contains local transaction/runtime/storage prototypes and smoke tests, not a public testnet or production consensus network. Finalize canonical protocol decisions, transaction/fee rules, multi-node networking, consensus/finality, and recovery tests before any public testnet decision.
+7. **Packaging and compatibility:** stabilize CLI behavior, document version compatibility and bytecode migration policy, and verify release artifacts against reproducible CI before broad adoption.
 
 Native machine-code generation, a production blockchain, a wallet, a DEX, and a mainnet are not delivered by this prototype. Do not use it to hold funds or deploy production contracts.
