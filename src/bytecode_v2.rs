@@ -881,12 +881,12 @@ mod tests {
     #[test]
     fn serializer_parser_round_trip_preserves_verified_program_metadata_and_code() {
         let original = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nFUNCTION 4 6 1 value amount\\nCODE\\nPUSH 9\\nCALL 4 1\\nPRINT\\nJUMP 4\\nPUSH 1\\nRETURN_VALUE\\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&original).is_ok());
 
         let serialized = serialize_v2_file(&original).unwrap();
-        assert!(serialized.starts_with("ZENVORA_BYTECODE 2\\n"));
+        assert!(serialized.starts_with("ZENVORA_BYTECODE 2\n"));
 
         let reparsed = parse_v2_file(&serialized).unwrap();
         assert_eq!(reparsed, original);
