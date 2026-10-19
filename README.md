@@ -89,7 +89,7 @@ cargo run -- --compiler-api
 - `GET /health` reports the service identity.
 - `POST /compile-run` accepts JSON such as `{"source":"define a := 10\\nshow a * 3"}` and returns `ok`, output lines, or a compile/runtime error.
 - Requests are limited to 64 KiB and source programs to 48 KiB.
-- The service binds to `127.0.0.1` only. It is a local development API, **not a public hosted endpoint**, and should not be exposed to the internet. The GitHub Pages Playground remains a browser demo until a separately secured hosting/deployment plan is implemented.
+- The service binds to `127.0.0.1` only. It is a local development API, **not a public hosted endpoint**, and should not be exposed to the internet. The GitHub Pages Playground now has an expanded JavaScript demo runner for variables, strings, expressions, branching, loops, functions, arrays/maps, and selected standard-library helpers. It still does not execute the actual Rust compiler/VM and does not yet support module imports, the contract DSL, file/network APIs, or full language parity. A secure hosted compiler service or a browser-compatible build of the real compiler is required before claiming that every `.zv` program can run on the website.
 
 Example request:
 
