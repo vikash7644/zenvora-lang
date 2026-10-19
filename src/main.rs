@@ -324,7 +324,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         }
 
         if let Some(condition) = line.strip_prefix("repeat ").and_then(|s| s.strip_suffix('{')) {
-            let tokens = lex(condition.trim()).map_err(|e| format!("line {}: {e}", line_no + 1))?;
+            let tokens = lex(condition.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, condition.trim(), e)))?;
             let mut parser = Parser { tokens, pos: 0, code: Vec::new() };
             parser.condition().map_err(|e| format!("line {}: {e}", line_no + 1))?;
             if parser.peek() != &Token::End {
@@ -3056,6 +3056,12 @@ mod tests {
         assert!(err.contains("line 1: column 9: unexpected character"), "{err}");
         let err = compile_core("show \"bad\\q\"").unwrap_err();
         assert!(err.contains("line 1: column 11: unsupported string escape"), "{err}");
+    }
+
+    #[test]
+    fn repeat_condition_lexer_columns_include_source_prefix() {
+        let err = compile_core("   repeat count < @ {").unwrap_err();
+        assert!(err.contains("line 1: column 21: unexpected character"), "{err}");
     }
 
     #[test]
