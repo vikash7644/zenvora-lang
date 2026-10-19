@@ -3099,7 +3099,7 @@ mod tests {
 
     #[test]
     fn bytecode_rejects_unknown_instructions_and_invalid_jumps() {
-        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 2\n").unwrap_err().contains("unsupported bytecode version"));
+        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 9\n").unwrap_err().contains("unsupported bytecode version"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nMAGIC\n").unwrap_err().contains("invalid bytecode instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nJUMP 99\n").unwrap_err().contains("invalid instruction"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nCALL_TARGET 9 0 -\n").unwrap_err().contains("invalid function entry"));
