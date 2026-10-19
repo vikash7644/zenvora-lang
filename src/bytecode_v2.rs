@@ -1134,6 +1134,17 @@ JUMP 2
         assert!(verify_v2_file(&valid_value).is_ok());
     }
 
+
+    #[test]
+    fn verifier_rejects_value_return_with_more_than_one_stack_value() {
+        let extra_value = parse_v2_file(
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nFUNCTION 1 4 0 value -\\nCODE\\nJUMP 1\\nPUSH 9\\nPUSH 10\\nRETURN_VALUE\\n",
+        ).unwrap();
+        assert!(verify_v2_file(&extra_value).unwrap_err().contains(
+            "return at instruction 3 has 2 operand value(s), expected 1"
+        ));
+    }
+
     #[test]
     fn verifier_rejects_value_return_without_a_value_and_call_into_function_body() {
         let missing_value = parse_v2_file(
