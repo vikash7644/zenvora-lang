@@ -90,6 +90,29 @@ jobs:
 
       - name: Verify CLI help
         run: cargo run -- --help
+      - name: Smoke-test Rust compiler HTTP API
+        shell: bash
+        run: |
+          cargo run -- --compiler-api 18787 > /tmp/zenvora-compiler-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/zenvora-api-health.json; then
+              break
+            fi
+            sleep 1
+          done
+          grep -q '"service":"zenvora-compiler-api"' /tmp/zenvora-api-health.json
+          curl --silent --show-error --fail \
+            -H 'Content-Type: application/json' \
+            --data '{"source":"define a := 10\ndefine b := 20\nshow a + b\nshow a * 2"}' \
+            http://127.0.0.1:18787/compile-run > /tmp/zenvora-api-result.json
+          grep -q '"output":"30\\n20"' /tmp/zenvora-api-result.json
+          curl --silent --show-error --fail \
+            -H 'Content-Type: application/json' \
+            --data '{"source":"show missing_variable"}' \
+            http://127.0.0.1:18787/compile-run > /tmp/zenvora-api-error.json
+          grep -q '"ok":false' /tmp/zenvora-api-error.json
 
   interpreter-mvp:
     name: Interpreter MVP regression suite
