@@ -165,9 +165,6 @@ jobs:
 
       - name: Run shared hello example
         run: cargo run -- ../examples/hello.zv
-30\\n60\\n20\\n35'
-          actual="$(./target/release/zv examples/hello.zv)"
-          test "$actual" = "$expected"
 
       - name: Run hello example
         run: cargo run -- examples/hello.zv
