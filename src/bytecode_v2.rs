@@ -4,7 +4,7 @@
 //! The v1 serializer/loader remain unchanged. V2 text parsing here only frames raw
 //! instruction records and validates metadata/layout; it is not an execution-ready loader.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// Maximum function parameter count, kept consistent with the VM safety limit.
 pub const MAX_FUNCTION_PARAMETERS: usize = 1_024;
