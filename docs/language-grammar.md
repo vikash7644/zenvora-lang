@@ -123,7 +123,7 @@ Only one contract block per source file is currently supported. This is a **loca
 
 ## Syntax and semantics not frozen yet
 
-- Stable rules for integer overflow, division edge cases, equality across value types, and comparison errors need a dedicated reference section and exhaustive regression coverage.
+- The current behavior for overflow, division edge cases, equality across value types, and comparison errors is described above; it still needs exhaustive regression coverage and an explicit v1.0 compatibility decision.
 - Function return-value rules and control-flow fallthrough rules need a single normative description.
 - Repeated trailing semicolons, `otherwise if`, and same-line multiple statements need an explicit accept/reject decision.
 - Module imports and the contract/state/action/view DSL have separate implementation paths. The contract execution proposal is not production behavior; see `contract-execution-v1.md`.
