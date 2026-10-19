@@ -473,6 +473,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+    use std::net::TcpStream;
     use std::thread;
 
     fn build_store(path: &str, include_transfer: bool) -> (ChainRuntime, BlockStore, SigningKey) {
@@ -909,6 +910,53 @@ mod tests {
         server.join().unwrap();
         assert!(error.contains("peer status has no valid protocol version"), "unexpected error: {error}");
         std::fs::remove_file(local_path).unwrap();
+    }
+
+
+    #[test]
+    fn peer_frame_rejects_zero_and_oversized_lengths_before_reading_payload() {
+        for invalid_length in [0_u32, (super::super::chain_p2p::MAX_FRAME_BYTES as u32) + 1] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream.write_all(&invalid_length.to_be_bytes()).unwrap();
+            });
+
+            let mut stream = TcpStream::connect(address).unwrap();
+            let error = super::super::chain_p2p::read_frame(&mut stream).unwrap_err();
+            assert!(
+                error.contains("peer frame size is outside the permitted range"),
+                "unexpected error for length {invalid_length}: {error}"
+            );
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn peer_frame_rejects_truncated_length_and_payload() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.write_all(&[0, 0]).unwrap();
+        });
+        let mut stream = TcpStream::connect(address).unwrap();
+        let error = super::super::chain_p2p::read_frame(&mut stream).unwrap_err();
+        assert!(error.contains("cannot read peer frame length"));
+        server.join().unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.write_all(&5_u32.to_be_bytes()).unwrap();
+            stream.write_all(&[1, 2]).unwrap();
+        });
+        let mut stream = TcpStream::connect(address).unwrap();
+        let error = super::super::chain_p2p::read_frame(&mut stream).unwrap_err();
+        assert!(error.contains("cannot read peer frame"));
+        server.join().unwrap();
     }
 
 }
