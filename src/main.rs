@@ -4125,6 +4125,28 @@ fn twice(value) {
     }
 
     #[test]
+    fn bytecode_v2_round_trip_preserves_short_circuit_boolean_and_string_results() {
+        let source = r#"define enabled := false
+if enabled and (1 / 0 == 0) {
+    show "wrong"
+} otherwise {
+    show "short-circuit"
+}
+show "zen" + "vora"
+"#;
+
+        let expected = execute(source).unwrap();
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec!["short-circuit", "zenvora"]);
+    }
+
+    #[test]
     fn bytecode_v2_round_trip_preserves_branching_and_loop_results() {
         let source = r#"define i := 0
 define total := 0
