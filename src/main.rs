@@ -3087,6 +3087,12 @@ mod tests {
 
         let err = compile_core("show 1 2").unwrap_err();
         assert!(err.contains("line 1: column 8: unexpected token"), "{err}");
+
+        let err = compile_core("if true + {\n}\n").unwrap_err();
+        assert!(err.contains("line 1: column 10: expected a number"), "{err}");
+
+        let err = compile_core("repeat count < {\n}\n").unwrap_err();
+        assert!(err.contains("line 1: column 15: expected a number"), "{err}");
     }
 
     #[test]
