@@ -438,7 +438,7 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
             let (required, delta): (usize, isize) = match instruction {
                 V2Instruction::Push | V2Instruction::PushString | V2Instruction::PushBool | V2Instruction::Load => (0, 1),
                 V2Instruction::Store | V2Instruction::Declare | V2Instruction::Print
-                | V2Instruction::Neg | V2Instruction::Not | V2Instruction::JumpIfFalse => (1, -1),
+                | V2Instruction::Neg | V2Instruction::Not | V2Instruction::JumpIfFalse(_) => (1, -1),
                 V2Instruction::SetIndex => (2, -2),
                 V2Instruction::Index => (2, -1),
                 V2Instruction::Add | V2Instruction::Sub | V2Instruction::Mul | V2Instruction::Div
@@ -450,11 +450,10 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
                 V2Instruction::Call { target, argument_count } => {
                     let function = file.layout.functions.iter().find(|f| f.entry == *target)
                         .ok_or_else(|| format!("bytecode v2: undeclared call target {target}"))?;
-                    let result = if function.return_kind == ReturnKind::Value { 1 } else { 0 };
+                    let result: isize = if function.return_kind == ReturnKind::Value { 1 } else { 0 };
                     (*argument_count, result - *argument_count as isize)
                 }
                 V2Instruction::ReturnValue => (1, -1),
-                V2Instruction::JumpIfFalse(_) => unreachable!(),
             };
             if incoming_depth < required {
                 return Err(format!("bytecode v2: operand stack underflow at instruction {pc}"));
