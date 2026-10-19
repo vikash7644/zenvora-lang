@@ -190,10 +190,12 @@ pub fn request_block_signature(
 ) -> Result<Vec<u8>, String> {
     let peer_address: SocketAddr = peer.parse()
         .map_err(|_| "peer must be an IP:port socket address")?;
-    let encoded_transactions: Vec<Value> = transactions.iter().map(|envelope| json!({
-        "publicKey":hex_encode(&envelope.public_key),
-        "transaction":envelope.transaction.canonical_bytes().map(|bytes|hex_encode(&bytes)).unwrap_or_default()
-    })).collect();
+    let encoded_transactions: Vec<Value> = transactions.iter().map(|envelope| {
+        Ok(json!({
+            "publicKey":hex_encode(&envelope.public_key),
+            "transaction":hex_encode(&envelope.transaction.canonical_bytes()?)
+        }))
+    }).collect::<Result<_, String>>()?;
     let response = request_peer(peer_address, &json!({
         "method":"sign_block",
         "header":hex_encode(&header.canonical_bytes()?),
