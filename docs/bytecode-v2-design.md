@@ -1,6 +1,6 @@
 # Zenvora Bytecode v2 — Function Metadata and Verification Design
 
-**Status:** design proposal with region-layout validation, provisional metadata framing/round-trip helpers, and an independently tested opcode/control-flow/stack verifier foundation implemented. The v2 verifier is not wired into the production loader, and compiler emission/execution are not implemented. Bytecode v1 remains the only executable format supported by the current loader.
+**Status:** experimental Bytecode v2 text loading, metadata validation, opcode/control-flow/stack verification, and execution through the existing VM are implemented and CI-tested. The format/opcode set remains provisional, compiler emission and fuzz testing are pending, and this is not a production-security or audit claim. Bytecode v1 remains supported and unchanged.
 
 ## Why v2 is needed
 
@@ -97,6 +97,8 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 - [x] Provisional v2 framing parser checks the version header, main start, metadata record shape, parameter count/name consistency, return-kind tags, CODE terminator, instruction-count/size bounds, and region layout.
 - [x] Metadata framing round-trip tests cover a main region plus declared functions, including a zero-parameter function.
 - [x] Initial v2 verifier validates opcode syntax, declared call targets/argument counts, region-local jump targets, reachable stack underflow and stack-depth joins, main exit stack cleanliness, and function return-kind metadata.
+- [x] The loader dispatches the v2 header to the v2 parser/verifier and executes only after verification succeeds.
+- [x] A valid v2 fixture round-trips through metadata serialization/parsing, loads through the CLI bytecode decoder, and executes a metadata-driven function with expected output.
 - [x] A declared but uncalled function is still region-checked.
 - [x] Every region has exactly one declared entry and a valid end boundary under the contiguous-region layout.
 - [x] Overlapping and out-of-bounds regions are rejected.
@@ -106,14 +108,14 @@ The verifier must not be treated as a sandbox by itself. Any future host functio
 - [x] Reachable stack underflow and inconsistent stack depth at joins are rejected by the initial v2 verifier.
 - [x] Unreachable malformed opcodes and invalid jump targets are rejected structurally.
 - [x] Disconnected unreachable control-flow components are independently analyzed from an empty operand stack; this conservative policy is documented in the verifier.
-- [ ] Valid compiler output round-trips through v2 encode/decode and executes with the same observable output.
+- [ ] Compiler-generated output round-trips through v2 encode/decode and executes with the same observable output (v2 compiler emission is not implemented yet).
 - [x] Existing v1 behavior and current regression suite continue to pass in GitHub Actions CI.
 - [ ] Fuzz tests cover header parsing, metadata parsing, integer boundaries, region tables, and jump targets.
 
 ## Current implementation boundary
 
-The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, provisional `parse_v2_file`/`serialize_v2_file` framing helpers, and `verify_v2_file`. The verifier parses the provisional opcode set, checks metadata-driven calls and region-local jumps even in unreachable code, and analyzes stack depths/returns from region entry plus disconnected components. Each disconnected component starts with an empty stack. It remains a foundation rather than a complete production verifier: fuzz tests, compiler emission, and runtime execution are pending, and the v2 parser/verifier are not wired into the production loader. The existing v1 serializer and loader remain unchanged, and v1 remains the only executable format.
+The Rust module `src/bytecode_v2.rs` implements `ProgramLayout`, `FunctionRegion`, `ReturnKind`, `validate_layout`, `parse_v2_file`/`serialize_v2_file`, and `verify_v2_file`. `deserialize_bytecode` dispatches v2 files through this parser/verifier, then maps verified instructions into the existing VM representation; the main-region exit is translated to skip function bodies. Each disconnected component starts with an empty stack. Remaining work includes v2 compiler emission, broader malformed-input/fuzz coverage, independent review, and stabilizing the format before production use. The existing v1 serializer and loader remain unchanged, and v1 remains the only executable format.
 
 ## Security status
 
-This work is not formal verification, an audit, or a production-readiness statement. V2 should not be announced as supported until its loader, opcode/control-flow verifier, compiler emission, negative tests, and CI checks are implemented and reviewed.
+This work is not formal verification, an audit, or a production-readiness statement. V2 should not be announced as a stable production format until compiler emission, broader negative/fuzz testing, independent review, and compatibility guarantees are completed.
