@@ -3083,7 +3083,7 @@ mod tests {
         assert!(err.contains("line 1: column 12: expected a number"), "{err}");
 
         let err = compile_core("show foo(1, )").unwrap_err();
-        assert!(err.contains("line 1: column 13: invalid function argument"), "{err}");
+        assert!(err.contains("line 1: column 13: expected a number"), "{err}");
 
         let err = compile_core("show 1 2").unwrap_err();
         assert!(err.contains("line 1: column 8: unexpected token"), "{err}");
