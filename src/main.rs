@@ -837,6 +837,7 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
             if functions.iter().any(|(existing, _, _)| existing == name) {
                 return Err(format!("line {}: duplicate function '{name}'", i + 1));
             }
+            let declaration_line = i + 1;
             i += 1;
             let mut depth = 1i32;
             let mut body = String::new();
@@ -847,7 +848,7 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
                 if depth > 0 { body.push_str(current); body.push('\n'); }
                 i += 1;
             }
-            if depth != 0 { return Err(format!("missing closing brace for function '{name}'")); }
+            if depth != 0 { return Err(format!("line {declaration_line}: missing closing brace for function '{name}'")); }
             functions.push((name.to_string(), params, body));
         } else {
             main_source.push_str(lines[i]);
