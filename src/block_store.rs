@@ -542,4 +542,61 @@ mod tests {
         assert!(BlockStore::load_from_file(&path, 71).is_err());
         std::fs::remove_file(path).unwrap();
     }
+
+    #[test]
+    fn replay_rejects_resigned_header_with_tampered_state_root() {
+        let key = SigningKey::from_bytes(&[85; 32]);
+        let (mut runtime, mut store, genesis_header) = genesis(&key);
+        let path = std::env::temp_dir().join(format!(
+            "zenvora-block-store-state-root-tamper-{}.zvb",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        store.append_executed_block(&path, &runtime, &genesis_header, &[], &[]).unwrap();
+
+        let envelope = signed_transfer(&key, 0);
+        let mut expected = runtime.clone();
+        let receipt = expected.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, 71, 1,
+        ).unwrap();
+        let mut header = BlockHeaderV1 {
+            chain_id: 71,
+            height: 1,
+            timestamp_secs: 1_800_000_001,
+            parent_hash: genesis_header.header_hash().unwrap(),
+            transaction_root: transaction_merkle_root(&[envelope.transaction.clone()]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[receipt]).unwrap(),
+            state_root: expected.state_root(),
+            proposer: "validator_1".into(),
+            consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut header, &key).unwrap();
+        let receipts = execute_block(
+            &mut runtime, &header, &[envelope.clone()], 71, Some(&genesis_header),
+        ).unwrap();
+        store.append_executed_block(&path, &runtime, &header, &[envelope], &receipts).unwrap();
+
+        // Simulate a valid proposer signature on a wrong state commitment. Replay must
+        // compare the commitment with state recomputed from the stored transactions.
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<String> = saved.lines().map(str::to_string).collect();
+        let block_line_index = lines.iter().enumerate()
+            .filter(|(_, line)| line.starts_with("B\t"))
+            .nth(1)
+            .map(|(index, _)| index)
+            .unwrap();
+        let encoded = lines[block_line_index].strip_prefix("B\t").unwrap();
+        let mut tampered = BlockHeaderV1::from_canonical_bytes(&super::hex_decode(encoded).unwrap()).unwrap();
+        tampered.state_root[0] ^= 1;
+        sign_header_as_proposer(&mut tampered, &key).unwrap();
+        lines[block_line_index] = format!("B\t{}", super::hex_encode(&tampered.canonical_bytes().unwrap()));
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+
+        let error = BlockStore::load_from_file(&path, 71).unwrap_err();
+        assert!(
+            error.contains("block state root does not match resulting state"),
+            "unexpected replay error: {error}"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
 }
