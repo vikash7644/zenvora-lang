@@ -20,6 +20,10 @@ A prior integration effort left chain-specific code, workflows, and design draft
 
 These files describe proposals and a local-development prototype, not a production network, mainnet, wallet, or native coin. The blockchain branding is planned to be BHYVORIX Chain; Zenvora Lang itself is not being renamed.
 
+## Project status and completion checklist
+
+The live implementation checklist, known limitations, and CI completion gates are tracked in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md). A queued workflow is not considered a passing check.
+
 ## Repository contents
 
 - `Cargo.toml` and `Cargo.lock` — Rust package manifest and locked dependency versions for the `zv` command.
