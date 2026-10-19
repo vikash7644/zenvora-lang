@@ -872,7 +872,7 @@ mod tests {
     #[test]
     fn verifier_rejects_value_return_with_extra_stack_values_on_one_branch() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 9 1 value flag\\nCODE\\nJUMP 2\\nJUMP 3\\nLOAD flag\\nJUMP_IF_FALSE 7\\nPUSH 7\\nPUSH 8\\nRETURN_VALUE\\nPUSH 9\\nRETURN_VALUE\\n",
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 1\\nFUNCTION 1 8 1 value flag\\nCODE\\nJUMP 1\\nLOAD flag\\nJUMP_IF_FALSE 6\\nPUSH 7\\nPUSH 8\\nRETURN_VALUE\\nPUSH 9\\nRETURN_VALUE\\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("return at instruction"));
     }
