@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2021"
 description = "Zenvora Lang compiler and bytecode virtual machine"
 license = "MIT"
+default-run = "zv"
 
 [[bin]]
 name = "zv"
