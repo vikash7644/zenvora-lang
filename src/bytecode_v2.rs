@@ -1121,7 +1121,7 @@ JUMP 2
         let void_with_residue = parse_v2_file(
             "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 4 0 void -\\nCODE\\nJUMP 2\\nJUMP 2\\nPUSH 9\\nRETURN\\n",
         ).unwrap();
-        assert!(verify_v2_file(&void_with_residue).unwrap_err().contains("return at instruction 3 has 1 operand value(s), expected 0"));
+        assert!(verify_v2_file(&void_with_residue).unwrap_err().contains("return at instruction 2 has 1 operand value(s), expected 0"));
 
         let valid_void = parse_v2_file(
             "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nFUNCTION 2 3 0 void -\\nCODE\\nJUMP 2\\nJUMP 2\\nRETURN\\n",
