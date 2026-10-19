@@ -3550,8 +3550,8 @@ show index_of(array(7, "x", true), false)
 
         let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
         assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
-        assert!(encoded.contains("FUNCTION 5 9 1 value value"));
-        assert!(encoded.contains("FUNCTION 9 12 1 void value"));
+        assert!(encoded.contains("FUNCTION 4 8 1 value value"));
+        assert!(encoded.contains("FUNCTION 8 11 1 void value"));
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
