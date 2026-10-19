@@ -1805,9 +1805,77 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
     Ok(())
 }
 
+fn deserialize_bytecode_v2(source: &str) -> Result<Vec<Op>, String> {
+    let file = bytecode_v2::parse_v2_file(source)?;
+    bytecode_v2::verify_v2_file(&file)?;
+    let mut code = Vec::with_capacity(file.instructions.len());
+
+    for (pc, line) in file.instructions.iter().enumerate() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let invalid = || format!("bytecode v2: malformed instruction at index {pc}");
+        let op = match parts.as_slice() {
+            ["PUSH", value] => Op::Push(value.parse().map_err(|_| invalid())?),
+            ["PUSH_STRING_HEX", value] => Op::PushString(hex_decode(value)?),
+            ["PUSH_BOOL", "true"] => Op::PushBool(true),
+            ["PUSH_BOOL", "false"] => Op::PushBool(false),
+            ["LOAD", name] if valid_identifier(name) => Op::Load((*name).into()),
+            ["STORE", name] if valid_identifier(name) => Op::Store((*name).into()),
+            ["DECLARE", name] if valid_identifier(name) => Op::Declare((*name).into()),
+            ["ADD"] => Op::Add,
+            ["SUB"] => Op::Sub,
+            ["MUL"] => Op::Mul,
+            ["DIV"] => Op::Div,
+            ["NEG"] => Op::Neg,
+            ["NOT"] => Op::Not,
+            ["AND"] => Op::And,
+            ["OR"] => Op::Or,
+            ["PRINT"] => Op::Print,
+            ["EQ"] => Op::Eq,
+            ["NE"] => Op::Ne,
+            ["LT"] => Op::Lt,
+            ["LE"] => Op::Le,
+            ["GT"] => Op::Gt,
+            ["GE"] => Op::Ge,
+            ["INDEX"] => Op::Index,
+            ["SET_INDEX", name] if valid_identifier(name) => Op::SetIndex((*name).into()),
+            ["JUMP_IF_FALSE", target] => Op::JumpIfFalse(target.parse().map_err(|_| invalid())?),
+            ["JUMP_IF_FALSE_KEEP", target] => Op::JumpIfFalseKeep(target.parse().map_err(|_| invalid())?),
+            ["JUMP_IF_TRUE_KEEP", target] => Op::JumpIfTrueKeep(target.parse().map_err(|_| invalid())?),
+            ["JUMP", target] => {
+                let target: usize = target.parse().map_err(|_| invalid())?;
+                // In v2 the main exit targets main_end; the shared VM must skip
+                // the function regions when the main program finishes.
+                if pc + 1 == file.layout.main_end && target == file.layout.main_end {
+                    Op::Jump(file.layout.instruction_count)
+                } else {
+                    Op::Jump(target)
+                }
+            }
+            ["CALL", target, count] => {
+                let target: usize = target.parse().map_err(|_| invalid())?;
+                let arg_count: usize = count.parse().map_err(|_| invalid())?;
+                let function = file.layout.functions.iter().find(|function| function.entry == target)
+                    .ok_or_else(|| format!("bytecode v2: call at instruction {pc} targets undeclared function {target}"))?;
+                Op::CallTarget { target, params: function.parameters.clone(), arg_count }
+            }
+            ["BUILTIN", name, count] if valid_identifier(name) && is_builtin(name) => {
+                Op::Builtin((*name).into(), count.parse().map_err(|_| invalid())?)
+            }
+            ["RETURN"] => Op::Return,
+            ["RETURN_VALUE"] => Op::ReturnValue,
+            _ => return Err(invalid()),
+        };
+        code.push(op);
+    }
+    Ok(code)
+}
+
 fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_BYTECODE_BYTES {
         return Err(format!("bytecode file exceeds safety limit ({} bytes)", MAX_BYTECODE_BYTES));
+    }
+    if source.lines().next().map(str::trim) == Some("ZENVORA_BYTECODE 2") {
+        return deserialize_bytecode_v2(source);
     }
     let mut lines = source.lines();
     if lines.next() != Some(BYTECODE_HEADER) {
