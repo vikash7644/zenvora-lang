@@ -12,6 +12,8 @@ pub const MAX_FUNCTION_PARAMETERS: usize = 1_024;
 pub const MAX_V2_INSTRUCTIONS: usize = 1_000_000;
 /// Defensive input bound for this textual metadata parser (16 MiB).
 pub const MAX_V2_FILE_BYTES: usize = 16 * 1024 * 1024;
+/// Defensive decoded string limit, matching the current VM's string bound.
+pub const MAX_V2_STRING_BYTES: usize = 1024 * 1024;
 
 /// Declared return behavior for a v2 function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -293,7 +295,7 @@ fn parse_v2_instruction(line: &str) -> Result<V2Instruction, String> {
     let instruction = match fields.as_slice() {
         ["PUSH", value] if value.parse::<i64>().is_ok() => V2Instruction::Push,
         ["PUSH_STRING_HEX", hex] => {
-            if *hex != "-" && (hex.len() % 2 != 0 || hex.len() / 2 > MAX_V2_FILE_BYTES) {
+            if *hex != "-" && (hex.len() % 2 != 0 || hex.len() / 2 > MAX_V2_STRING_BYTES) {
                 return Err(invalid());
             }
             if *hex != "-" && !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -656,7 +658,7 @@ mod tests {
 
     #[test]
     fn verifier_rejects_unknown_opcode_and_bad_call_target() {
-        let unknown = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nMAGIC\nJUMP 2\n").unwrap();
+        let unknown = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nMAGIC\nJUMP 3\n").unwrap();
         assert!(verify_v2_file(&unknown).unwrap_err().contains("malformed instruction"));
 
         let bad_call = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nCALL 2 0\nJUMP 2\n").unwrap();
@@ -708,6 +710,23 @@ mod tests {
             "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 1\nJUMP 3\n",
         ).unwrap();
         assert!(verify_v2_file(&unreachable_loop).is_ok());
+    }
+
+
+    #[test]
+    fn verifier_checks_declared_but_uncalled_function_regions() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 0 void -\nCODE\nJUMP 1\nJUMP 2\nPRINT\nRETURN\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).unwrap_err().contains("stack underflow"));
+    }
+
+    #[test]
+    fn verifier_rejects_invalid_jump_in_unreachable_code() {
+        let file = parse_v2_file(
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 99\nJUMP 3\n",
+        ).unwrap();
+        assert!(verify_v2_file(&file).unwrap_err().contains("escapes its region"));
     }
 
 }
