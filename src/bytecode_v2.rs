@@ -605,6 +605,8 @@ mod tests {
         assert!(validate_layout(&invalid).unwrap_err().contains("invalid parameter name"));
         let duplicate = layout(5, 2, vec![function(2, 5, &["x", "x"])]);
         assert!(validate_layout(&duplicate).unwrap_err().contains("duplicate parameter name"));
+        let reserved = layout(5, 2, vec![function(2, 5, &["true"])]);
+        assert!(validate_layout(&reserved).unwrap_err().contains("invalid parameter name"));
     }
 
     #[test]
