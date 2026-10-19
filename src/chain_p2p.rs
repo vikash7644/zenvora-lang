@@ -89,6 +89,11 @@ pub fn sync_from_peer(store_path: &str, chain_id: u64, peer: &str) -> Result<usi
         .map_err(|_| "peer must be an IP:port socket address")?;
     let (mut store, mut runtime) = BlockStore::load_from_file(store_path, chain_id)?;
     let status = request_peer(peer_address, &json!({"method":"status"}))?;
+    let remote_protocol_version = status.get("protocolVersion").and_then(Value::as_u64)
+        .ok_or_else(|| "peer status has no valid protocol version".to_string())?;
+    if remote_protocol_version != PROTOCOL_VERSION {
+        return Err("peer uses an incompatible protocol version".into());
+    }
     let remote_chain_id = status.get("chainId").and_then(Value::as_u64)
         .ok_or_else(|| "peer status has no valid chain ID".to_string())?;
     if remote_chain_id != chain_id {
