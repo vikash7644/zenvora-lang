@@ -3061,7 +3061,7 @@ mod tests {
     #[test]
     fn repeat_condition_lexer_columns_include_source_prefix() {
         let err = compile_core("   repeat count < @ {").unwrap_err();
-        assert!(err.contains("line 1: column 21: unexpected character"), "{err}");
+        assert!(err.contains("line 1: column 19: unexpected character"), "{err}");
     }
 
     #[test]
