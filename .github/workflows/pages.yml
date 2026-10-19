@@ -29,6 +29,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Validate website files
+        run: |
+          test -s website/index.html
+          test -s website/playground.html
+          grep -q '<title>' website/index.html
+          grep -q 'playground.html' website/index.html
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
