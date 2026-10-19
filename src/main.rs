@@ -80,6 +80,9 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
             }
             continue;
         }
+        // Handle two-character operators (==, !=, <=, >=) by peeking the next char
+        // and advancing `i` one extra position inside the branch so the final
+        // `i += 1` after the match moves past both characters.
         let token = match c {
             '+' => Token::Plus, '-' => Token::Minus, '*' => Token::Star, '/' => Token::Slash,
             '(' => Token::LParen, ')' => Token::RParen, '[' => Token::LBracket, ']' => Token::RBracket, ',' => Token::Comma,
@@ -1898,17 +1901,18 @@ fn hex_encode(input: &str) -> String {
     input.as_bytes().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+// Decode hexadecimal bytecode strings in exact two-character pairs.
 fn hex_decode(input: &str) -> Result<String, String> {
     if input == "-" { return Ok(String::new()); }
     if input.len() / 2 > MAX_BYTECODE_STRING_BYTES {
         return Err(format!("bytecode string exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
     }
-    if !input.len().is_multiple_of(2) {
+    if input.len() % 2 != 0 {
         return Err("invalid hex string in bytecode".into());
     }
     let mut bytes = Vec::with_capacity(input.len() / 2);
-    for pair in input.as_bytes().as_chunks::<2>().0 {
-        let digits = std::str::from_utf8(pair).map_err(|_| "invalid hex string in bytecode")?;
+    for chunk in input.as_bytes().chunks_exact(2) {
+        let digits = std::str::from_utf8(chunk).map_err(|_| "invalid hex string in bytecode")?;
         bytes.push(u8::from_str_radix(digits, 16).map_err(|_| "invalid hex string in bytecode")?);
     }
     String::from_utf8(bytes).map_err(|_| "bytecode string is not valid UTF-8".into())
