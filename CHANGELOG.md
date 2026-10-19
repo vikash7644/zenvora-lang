@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Lexer input is now capped at 1,000,000 tokens per expression, and the compiler enforces the 1,000,000-instruction budget while appending bytecode and processing source lines. Added token-count and instruction-growth regression tests.
+
 - Live variable bindings and saved call-frame environments now share a 64 MiB estimated-memory budget, with regression coverage that aliases a large string until the limit is reached.
 
 - The VM now caps the combined estimated size of operand-stack values at 16 MiB, with accounting on stack pushes/pops and a regression test for oversized argument/expression stacks.
