@@ -61,7 +61,10 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     }
                     if name.eq_ignore_ascii_case("content-length") {
                         if length.is_some() { return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"duplicate Content-Length"})); }
-                        length = Some(value.trim().parse::<usize>().map_err(|_| "invalid Content-Length")?);
+                        length = Some(match value.trim().parse::<usize>() {
+                            Ok(length) => length,
+                            Err(_) => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"invalid Content-Length"})),
+                        });
                     }
                 }
                 content_length = Some(length.ok_or("Content-Length is required")?);
