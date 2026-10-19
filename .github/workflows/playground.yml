@@ -1,0 +1,45 @@
+name: Zenvora Playground CI
+
+on:
+  push:
+    branches: [main, chain-lang-integration]
+    paths:
+      - "website/**"
+      - "scripts/test_playground.cjs"
+      - ".github/workflows/playground.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "scripts/test_playground.cjs"
+      - ".github/workflows/playground.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playground-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-demo:
+    name: Browser playground smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate playground page
+        run: |
+          test -s website/playground.html
+          grep -q 'BROWSER DEMO' website/playground.html
+          grep -q 'not the Rust compiler' website/playground.html
+
+      - name: Test browser runner behavior
+        run: node scripts/test_playground.cjs
