@@ -732,6 +732,30 @@ mod tests {
     }
 
     #[test]
+    fn rejects_integer_boundaries_and_malformed_instruction_operands() {
+        let too_large = "ZENVORA_BYTECODE 2\nPROGRAM 0 184467440737095516160\nCODE\nJUMP 1\n";
+        assert!(parse_v2_file(too_large).unwrap_err().contains("invalid main end"));
+
+        let malformed = [
+            "PUSH nope",
+            "PUSH_STRING_HEX abc",
+            "PUSH_STRING_HEX gg",
+            "CALL 184467440737095516160 0",
+            "CALL 1 1025",
+            "BUILTIN array 1025",
+            "JUMP nope",
+            "LOAD bad-name",
+            "PUSH_BOOL maybe",
+        ];
+        for instruction in malformed {
+            assert!(
+                super::parse_v2_instruction(instruction).is_err(),
+                "expected malformed instruction to be rejected: {instruction}"
+            );
+        }
+    }
+
+    #[test]
     fn verifier_rejects_invalid_jump_in_unreachable_code() {
         let file = parse_v2_file(
             "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 99\nJUMP 3\n",
