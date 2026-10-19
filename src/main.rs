@@ -1006,6 +1006,25 @@ fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &s
     Ok(())
 }
 
+fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Result<(), String> {
+    match (collection, index) {
+        (Value::Array(items), Value::Int(index)) if index >= 0 => {
+            let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
+            *slot = value;
+            Ok(())
+        }
+        (Value::Array(_), Value::Int(index)) => Err(format!("array index {index} out of bounds")),
+        (Value::Array(_), _) => Err("type error: array index must be an integer".into()),
+        (Value::Map(items), Value::Str(key)) => {
+            check_map_capacity(items, &key)?;
+            items.insert(key, value);
+            Ok(())
+        }
+        (Value::Map(_), _) => Err("type error: map index must be a string".into()),
+        _ => Err("type error: indexed assignment expects an array or map".into()),
+    }
+}
+
 fn value_to_string(value: &Value) -> String {
     match value {
         Value::Int(n) => n.to_string(),
@@ -1084,13 +1103,17 @@ fn binding_map_size(bindings: &HashMap<String, Value>) -> usize {
         .fold(0usize, |total, size| total.saturating_add(size))
 }
 
-fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
-    let old_size = old.map(|value| binding_size(name, value)).unwrap_or(0);
-    let next = current.saturating_sub(old_size).saturating_add(binding_size(name, new));
+fn runtime_state_bytes_after_sizes(current: usize, old_size: usize, new_size: usize) -> Result<usize, String> {
+    let next = current.saturating_sub(old_size).saturating_add(new_size);
     if next > MAX_RUNTIME_STATE_BYTES {
         return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
     }
     Ok(next)
+}
+
+fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
+    let old_size = old.map(|value| binding_size(name, value)).unwrap_or(0);
+    runtime_state_bytes_after_sizes(current, old_size, binding_size(name, new))
 }
 
 fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
@@ -1627,27 +1650,18 @@ where
                 let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
                 let old_binding = vars.get(name).or_else(|| globals.get(name))
                     .ok_or_else(|| format!("undefined variable '{name}'"))?;
-                let collection = (*old_binding).clone();
-                let updated = match (collection, index) {
-                    (Value::Array(mut items), Value::Int(index)) if index >= 0 => {
-                        let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
-                        *slot = value;
-                        Value::Array(items)
-                    }
-                    (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
-                    (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
-                    (Value::Map(mut items), Value::Str(key)) => {
-                        check_map_capacity(&items, &key)?;
-                        items.insert(key, value);
-                        Value::Map(items)
-                    }
-                    (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
-                    _ => return Err("type error: indexed assignment expects an array or map".into()),
-                };
-                ensure_value_depth(&updated)?;
-                let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old_binding), &updated)?;
-                if vars.contains_key(name) { vars.insert(name.clone(), updated); }
-                else { globals.insert(name.clone(), updated); }
+                let old_binding_size = binding_size(name, old_binding);
+                if vars.contains_key(name) {
+                    let collection = vars.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_value(collection, index, value)?;
+                } else {
+                    let collection = globals.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_value(collection, index, value)?;
+                }
+                let updated = vars.get(name).or_else(|| globals.get(name))
+                    .ok_or_else(|| format!("undefined variable '{name}'"))?;
+                ensure_value_depth(updated)?;
+                let next = runtime_state_bytes_after_sizes(runtime_state_bytes, old_binding_size, binding_size(name, updated))?;
                 runtime_state_bytes = next;
             }
             Op::Index => {
