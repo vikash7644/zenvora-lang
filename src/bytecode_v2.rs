@@ -695,12 +695,12 @@ mod tests {
     #[test]
     fn verifier_rejects_unknown_builtin_and_accepts_supported_builtin() {
         let unknown = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nBUILTIN not_a_real_builtin 0\\nJUMP 2\\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN not_a_real_builtin 0\nJUMP 2\n",
         ).unwrap();
         assert!(verify_v2_file(&unknown).unwrap_err().contains("malformed instruction"));
 
         let known = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nCODE\\nPUSH_STRING_HEX 61\\nBUILTIN len 1\\nPRINT\\nJUMP 4\\n",
+            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nCODE\nPUSH_STRING_HEX 61\nBUILTIN len 1\nPRINT\nJUMP 4\n",
         ).unwrap();
         assert!(verify_v2_file(&known).is_ok());
     }
