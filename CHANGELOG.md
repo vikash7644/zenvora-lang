@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Bounded array and map growth to 100,000 items across `push`, `put`, and indexed map assignment; updates to existing map keys remain allowed at the limit. Added resource-boundary regression coverage.
+
 - Compiler diagnostics now track lexer token columns and report source-relative columns for parser errors, including malformed expressions and block conditions. Added regression tests for indentation, function calls, trailing tokens, and `if`/`repeat` conditions.
 
 - Bytecode v2 serialization rejects non-canonical leading/trailing instruction whitespace, with a regression test to preserve serializer/parser round-trip consistency.
