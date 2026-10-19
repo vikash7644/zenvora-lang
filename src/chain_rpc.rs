@@ -441,6 +441,54 @@ mod tests {
     }
 
     #[test]
+    fn malformed_json_and_invalid_json_rpc_envelopes_return_protocol_errors() {
+        let malformed = handle_json_rpc(b"{", "/no-store-needed-for-parse-error", 71);
+        assert_eq!(malformed["error"]["code"], -32700);
+        assert_eq!(malformed["id"], Value::Null);
+
+        let wrong_version = handle_json_rpc(
+            br#"{"jsonrpc":"1.0","id":7,"method":"chain_getInfo","params":[]}"#,
+            "/no-store-needed-for-invalid-envelope", 71,
+        );
+        assert_eq!(wrong_version["error"]["code"], -32600);
+        assert_eq!(wrong_version["id"], 7);
+
+        let missing_method = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":"bad","params":[]}"#,
+            "/no-store-needed-for-invalid-envelope", 71,
+        );
+        assert_eq!(missing_method["error"]["code"], -32600);
+        assert_eq!(missing_method["id"], "bad");
+    }
+
+    #[test]
+    fn read_only_rpc_rejects_transaction_submission_explicitly() {
+        let (path, cleanup_path) = test_store();
+        let response = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":9,"method":"chain_submitTransaction","params":[]}"#,
+            &path, 71,
+        );
+        assert_eq!(response["error"]["code"], -32601);
+        assert_eq!(
+            response["error"]["message"],
+            "transaction submission is disabled on read-only RPC"
+        );
+        std::fs::remove_file(cleanup_path).unwrap();
+    }
+
+    #[test]
+    fn block_lookup_rejects_missing_height_parameter() {
+        let (path, cleanup_path) = test_store();
+        let response = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":10,"method":"chain_getBlock","params":[]}"#,
+            &path, 71,
+        );
+        assert_eq!(response["error"]["code"], -32602);
+        assert_eq!(response["id"], 10);
+        std::fs::remove_file(cleanup_path).unwrap();
+    }
+
+    #[test]
     fn json_rpc_info_balance_and_unknown_method_work() {
         let (path, cleanup_path) = test_store();
         let info = handle_json_rpc(
