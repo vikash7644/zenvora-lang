@@ -4126,11 +4126,13 @@ fn twice(value) {
 
     #[test]
     fn bytecode_v2_round_trip_preserves_branching_and_loop_results() {
-        let source = r#"define total := 0
+        let source = r#"define i := 0
+define total := 0
 repeat i <= 4 {
     if i > 2 {
-        define total := total + i
+        total := total + i
     }
+    i := i + 1
 }
 if total == 7 {
     show "verified"
