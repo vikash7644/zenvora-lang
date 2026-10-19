@@ -3,6 +3,7 @@ name: Deploy Zenvora website
 on:
   push:
     branches:
+      - main
       - chain-lang-integration
     paths:
       - "website/**"
