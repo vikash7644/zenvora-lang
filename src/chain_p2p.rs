@@ -727,10 +727,12 @@ mod tests {
 
             let response = json!({
                 "ok": true,
-                "chainId": 71,
-                "genesisHash": "00".repeat(32),
-                "genesisStateRoot": "00".repeat(32),
-                "height": 0
+                "result": {
+                    "chainId": 71,
+                    "genesisHash": "00".repeat(32),
+                    "genesisStateRoot": "00".repeat(32),
+                    "height": 0
+                }
             }).to_string();
             stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
             stream.write_all(response.as_bytes()).unwrap();
