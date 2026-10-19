@@ -71,6 +71,19 @@ jobs:
           sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.zvb" "$chain_id" 1
           test "$("$cli" --chain-store-balance "$tmp/node-a.zvb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.zvb" "$chain_id" bob)"
 
+          # Matching balances alone are not enough: compare the independently replayed state
+          # commitment and canonical tip hash between the two stores.
+          info_a="$("$cli" --chain-store-info "$tmp/node-a.zvb" "$chain_id")"
+          info_b="$("$cli" --chain-store-info "$tmp/node-b.zvb" "$chain_id")"
+          field() { printf '%s\\n' "$1" | sed -n "s/^$2=//p"; }
+          for key in height state_root tip_hash; do
+            value_a="$(field "$info_a" "$key")"
+            value_b="$(field "$info_b" "$key")"
+            test -n "$value_a"
+            test "$value_a" = "$value_b"
+          done
+          echo "PASS: synchronized nodes agree on height, state root, and tip hash."
+
           # A genuinely separate node configured for another chain must reject node A.
           "$cli" --chain-store-init "$tmp/node-c.zvb" 71002 "$tmp/validator.zvk" 1000000
           if "$cli" --chain-p2p-sync "$tmp/node-c.zvb" 71002 "127.0.0.1:$port"; then
@@ -96,6 +109,11 @@ jobs:
           sh scripts/verify_chain_store.sh "$cli" "$tmp/node-a.zvb" "$chain_id" 1
           sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.zvb" "$chain_id" 1
           test "$("$cli" --chain-store-balance "$tmp/node-a.zvb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.zvb" "$chain_id" bob)"
-          echo "PASS: both stores survive peer shutdown and fresh-process replay verification."
+          info_a="$("$cli" --chain-store-info "$tmp/node-a.zvb" "$chain_id")"
+          info_b="$("$cli" --chain-store-info "$tmp/node-b.zvb" "$chain_id")"
+          for key in height state_root tip_hash; do
+            test "$(field "$info_a" "$key")" = "$(field "$info_b" "$key")"
+          done
+          echo "PASS: both stores survive restart with matching height, state root, and tip hash."
 
           echo "Multi-node block sync, replay verification, matching balances, and chain-ID rejection passed."
