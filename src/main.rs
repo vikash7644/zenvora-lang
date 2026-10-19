@@ -1139,10 +1139,13 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
         }
         "get" => {
             arity(2)?;
-            match (&args[0], &args[1]) {
-                (Value::Array(items), Value::Int(index)) if *index >= 0 => items.get(*index as usize).cloned().ok_or_else(|| format!("array index {index} out of bounds")),
+            let mut values = args.into_iter();
+            let collection = values.next().ok_or("get expects a collection and an index")?;
+            let index = values.next().ok_or("get expects a collection and an index")?;
+            match (collection, index) {
+                (Value::Array(items), Value::Int(index)) if index >= 0 => items.into_iter().nth(index as usize).ok_or_else(|| format!("array index {index} out of bounds")),
                 (Value::Array(_), Value::Int(index)) => Err(format!("array index {index} out of bounds")),
-                (Value::Map(items), Value::Str(key)) => items.get(key).cloned().ok_or_else(|| format!("map key '{key}' not found")),
+                (Value::Map(mut items), Value::Str(key)) => items.remove(&key).ok_or_else(|| format!("map key '{key}' not found")),
                 (Value::Array(_), _) => Err("type error: array index must be an integer".into()),
                 (Value::Map(_), _) => Err("type error: map key must be a string".into()),
                 _ => Err("type error: get expects an array or map as its first argument".into()),
@@ -1444,14 +1447,22 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
         }
         "first" | "last" => {
             arity(1)?;
-            let Value::Array(items) = &args[0] else { return Err(format!("type error: {name} expects an array")); };
+            let mut values = args.into_iter();
+            let original = values.next().ok_or_else(|| format!("{name} expects an array"))?;
+            let Value::Array(items) = original else { return Err(format!("type error: {name} expects an array")); };
             if items.is_empty() { return Err(format!("{name} cannot be used with an empty array")); }
-            Ok(if name == "first" { items[0].clone() } else { items[items.len() - 1].clone() })
+            if name == "first" {
+                items.into_iter().next().ok_or_else(|| format!("{name} cannot be used with an empty array"))
+            } else {
+                items.into_iter().last().ok_or_else(|| format!("{name} cannot be used with an empty array"))
+            }
         }
         "reverse" => {
             arity(1)?;
-            match &args[0] {
-                Value::Array(items) => Ok(Value::Array(items.iter().rev().cloned().collect())),
+            let mut values = args.into_iter();
+            let original = values.next().ok_or("reverse expects an array or string")?;
+            match original {
+                Value::Array(mut items) => { items.reverse(); Ok(Value::Array(items)) }
                 Value::Str(value) => Ok(Value::Str(value.chars().rev().collect())),
                 _ => Err("type error: reverse expects an array or string".into()),
             }
