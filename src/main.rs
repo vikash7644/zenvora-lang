@@ -3107,11 +3107,11 @@ mod tests {
 
     #[test]
     fn parser_rejects_excessive_expression_nesting_without_overflowing_the_stack() {
-        let nested = format!("show {}1{}\\n", "(".repeat(super::MAX_PARSE_NESTING + 8), ")".repeat(super::MAX_PARSE_NESTING + 8));
+        let nested = format!("show {}1{}\n", "(".repeat(super::MAX_PARSE_NESTING + 8), ")".repeat(super::MAX_PARSE_NESTING + 8));
         let error = compile_core(&nested).unwrap_err();
         assert!(error.contains("parser nesting exceeds safety limit"), "{error}");
 
-        let unary = format!("show {}1\\n", "-".repeat(super::MAX_PARSE_NESTING + 8));
+        let unary = format!("show {}1\n", "-".repeat(super::MAX_PARSE_NESTING + 8));
         let error = compile_core(&unary).unwrap_err();
         assert!(error.contains("parser nesting exceeds safety limit"), "{error}");
     }
