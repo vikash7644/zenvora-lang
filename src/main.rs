@@ -838,8 +838,11 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
                 _ => {}
             }
         }
+        let has_explicit_terminal_return = matches!(body_code.last(), Some(Op::Return | Op::ReturnValue));
         code.extend(body_code);
-        code.push(Op::Return);
+        if !has_explicit_terminal_return {
+            code.push(Op::Return);
+        }
         regions.push((entry, code.len(), name.clone(), params.clone()));
     }
     let end = code.len();
@@ -3535,6 +3538,24 @@ show index_of(array(7, "x", true), false)
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["10", "30", "Zenvora", "9"]);
+    }
+
+    #[test]
+    fn compiler_emits_v2_for_called_and_uncalled_functions() {
+        let source = "show twice(21)\nfn twice(value) {\n return value * 2\n}\nfn never(value) {\n show value\n}\n";
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        assert_eq!(layout.functions.len(), 2);
+        assert_eq!(layout.functions[0].return_kind, super::bytecode_v2::ReturnKind::Value);
+        assert_eq!(layout.functions[1].return_kind, super::bytecode_v2::ReturnKind::Void);
+
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert!(encoded.contains("FUNCTION 5 9 1 value value"));
+        assert!(encoded.contains("FUNCTION 9 12 1 void value"));
+        let decoded = super::deserialize_bytecode(&encoded).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
     }
 
     #[test]
