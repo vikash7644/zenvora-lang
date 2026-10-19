@@ -905,7 +905,7 @@ mod tests {
     #[test]
     fn verifier_rejects_keep_branch_join_with_different_stack_depths() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 5\\nCODE\\nPUSH_BOOL true\\nJUMP_IF_TRUE_KEEP 4\\nPRINT\\nJUMP 5\\nJUMP 5\\n",
+            "ZENVORA_BYTECODE 2\\nPROGRAM 0 4\\nCODE\\nPUSH_BOOL true\\nJUMP_IF_TRUE_KEEP 3\\nPRINT\\nJUMP 4\\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("inconsistent stack depth"));
     }
