@@ -40,6 +40,9 @@ jobs:
       - name: Run hello example
         run: cargo run -- examples/hello.zv
 
+      - name: Run Zenvora Lang language tour
+        run: cargo run -- examples/zenvora-language-tour.zv
+
       - name: Run loop-control example
         run: cargo run -- examples/loops.zv
 
