@@ -240,13 +240,21 @@ fn handle_message_with_pool(
                 (Some(genesis), Some(tip)) => (genesis, tip),
                 _ => return json!({"ok":false,"error":"block store has no genesis/tip"}),
             };
+            let tip_hash = match tip.header.header_hash() {
+                Ok(value) => hex_encode(&value),
+                Err(error) => return json!({"ok":false,"error":format!("cannot encode tip hash: {error}")}),
+            };
+            let genesis_hash = match genesis.header.header_hash() {
+                Ok(value) => hex_encode(&value),
+                Err(error) => return json!({"ok":false,"error":format!("cannot encode genesis hash: {error}")}),
+            };
             json!({"ok":true,"result":{
                 "protocolVersion":PROTOCOL_VERSION,
                 "chainId":store.chain_id(),
                 "blockCount":store.blocks().len(),
                 "height":tip.header.height,
-                "tipHash":tip.header.header_hash().map(|hash|hex_encode(&hash)).unwrap_or_default(),
-                "genesisHash":genesis.header.header_hash().map(|hash|hex_encode(&hash)).unwrap_or_default(),
+                "tipHash":tip_hash,
+                "genesisHash":genesis_hash,
                 "genesisStateRoot":hex_encode(&genesis.header.state_root)
             }})
         }
@@ -370,10 +378,17 @@ fn handle_message_with_pool(
                 Ok(value) => value,
                 Err(error) => return json!({"ok":false,"error":error}),
             };
-            let transactions: Vec<Value> = pool.pending().iter().map(|envelope| json!({
-                "publicKey":hex_encode(&envelope.public_key),
-                "transaction":envelope.transaction.canonical_bytes().map(|bytes|hex_encode(&bytes)).unwrap_or_default()
-            })).collect();
+            let mut transactions: Vec<Value> = Vec::with_capacity(pool.pending().len());
+            for envelope in pool.pending() {
+                let transaction_bytes = match envelope.transaction.canonical_bytes() {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":format!("cannot encode pending transaction: {error}")}),
+                };
+                transactions.push(json!({
+                    "publicKey":hex_encode(&envelope.public_key),
+                    "transaction":hex_encode(&transaction_bytes)
+                }));
+            }
             json!({"ok":true,"result":{"transactions":transactions,"count":transactions.len()}})
         }
         Some("submit_transaction") => {
