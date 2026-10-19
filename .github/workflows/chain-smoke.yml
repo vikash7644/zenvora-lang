@@ -44,6 +44,16 @@ jobs:
           ./target/debug/zv --chain-store-transfer "$tmp/dev.zvb" 71 "$tmp/owner.zvk" bob 125 3
           sh scripts/verify_chain_store.sh ./target/debug/zv "$tmp/dev.zvb" 71 1
 
+          # Negative checks: the verifier must reject incorrect expectations.
+          if sh scripts/verify_chain_store.sh ./target/debug/zv "$tmp/dev.zvb" 72 1; then
+            echo "Verifier incorrectly accepted a mismatched chain ID" >&2
+            exit 1
+          fi
+          if sh scripts/verify_chain_store.sh ./target/debug/zv "$tmp/dev.zvb" 71 0; then
+            echo "Verifier incorrectly accepted an unexpected tip height" >&2
+            exit 1
+          fi
+
           ./target/debug/zv --chain-rpc "$tmp/dev.zvb" 71 18545 >"$tmp/rpc.log" 2>&1 &
           rpc_pid="$!"
           ready=0
