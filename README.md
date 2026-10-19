@@ -20,6 +20,7 @@ These are design drafts, not proof that listed features are implemented. Consens
 - `src/chain_block.rs` — atomic candidate-block execution and transaction/receipt/state-root validation.
 - `src/block_store.rs` — append-only local block storage, independent candidate execution before persistence, and full replay verification.
 - `examples/hello.zv` — arithmetic and variable example.
+- `examples/zenvora-language-tour.zv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
 - `examples/functions.zv` — function parameters, local variables, return values, and loops.
 - `examples/booleans.zv` — native booleans and logical operators.
@@ -35,6 +36,23 @@ These are design drafts, not proof that listed features are implemented. Consens
 - `docs/technical_spec.md` — draft architecture for the proposed Zenvora Chain; design only, not a completed chain.
 - `examples/token.zvl` — illustrative smart-contract DSL draft; not executable by the current compiler.
 - `website/` — static responsive ecosystem landing page.
+
+## See Zenvora Lang code in action
+
+The `.zv` files in [`examples/`](examples/) are programs written in **Zenvora Lang**. Start with the [executable language tour](examples/zenvora-language-tour.zv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
+
+```zv
+define name := "Zenvora"
+define answer := multiply(6, 7)
+show "Hello, " + name
+show answer
+
+fn multiply(left, right) {
+    return left * right
+}
+```
+
+GitHub's repository language meter may still show **Rust** because the compiler and virtual machine are implemented in Rust; that meter does not mean the `.zv` programs are Rust. Zenvora Lang is currently a custom language and GitHub does not automatically provide its own syntax-highlighting grammar from a file extension alone.
 
 ## Latest prototype release
 
