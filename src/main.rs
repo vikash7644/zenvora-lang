@@ -21,6 +21,7 @@ enum Token {
     LParen, RParen, LBracket, RBracket, Comma, EqEq, NotEq, Less, LessEq, Greater, GreaterEq, End,
 }
 
+#[cfg(test)]
 fn lex(input: &str) -> Result<Vec<Token>, String> {
     lex_with_columns(input).map(|(tokens, _)| tokens)
 }
