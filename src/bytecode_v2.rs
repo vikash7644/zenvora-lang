@@ -245,6 +245,289 @@ fn parse_usize(value: &str, field: &str) -> Result<usize, String> {
     value.parse::<usize>().map_err(|_| format!("bytecode v2: invalid {field}"))
 }
 
+/// Parsed opcode model used only by the v2 verifier. V2 calls refer to explicit
+/// metadata entries as \`CALL <entry> <argument-count>\`; parameter names come
+/// exclusively from the FUNCTION metadata record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum V2Instruction {
+    Push,
+    PushString,
+    PushBool,
+    Load,
+    Store,
+    Declare,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Neg,
+    Not,
+    And,
+    Or,
+    Print,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Index,
+    SetIndex,
+    JumpIfFalse(usize),
+    JumpIfFalseKeep(usize),
+    JumpIfTrueKeep(usize),
+    Jump(usize),
+    Call { target: usize, argument_count: usize },
+    Builtin { argument_count: usize },
+    Return,
+    ReturnValue,
+}
+
+fn parse_operand_usize(value: &str, description: &str) -> Result<usize, String> {
+    value.parse::<usize>().map_err(|_| format!("bytecode v2: invalid {description}"))
+}
+
+fn parse_v2_instruction(line: &str) -> Result<V2Instruction, String> {
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    let invalid = || format!("bytecode v2: malformed instruction '{line}'");
+    let instruction = match fields.as_slice() {
+        ["PUSH", value] if value.parse::<i64>().is_ok() => V2Instruction::Push,
+        ["PUSH_STRING_HEX", hex] => {
+            if *hex != "-" && (hex.len() % 2 != 0 || hex.len() / 2 > MAX_V2_FILE_BYTES) {
+                return Err(invalid());
+            }
+            if *hex != "-" && !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err(invalid());
+            }
+            V2Instruction::PushString
+        }
+        ["PUSH_BOOL", "true" | "false"] => V2Instruction::PushBool,
+        ["LOAD", name] if valid_identifier(name) => V2Instruction::Load,
+        ["STORE", name] if valid_identifier(name) => V2Instruction::Store,
+        ["DECLARE", name] if valid_identifier(name) => V2Instruction::Declare,
+        ["ADD"] => V2Instruction::Add,
+        ["SUB"] => V2Instruction::Sub,
+        ["MUL"] => V2Instruction::Mul,
+        ["DIV"] => V2Instruction::Div,
+        ["NEG"] => V2Instruction::Neg,
+        ["NOT"] => V2Instruction::Not,
+        ["AND"] => V2Instruction::And,
+        ["OR"] => V2Instruction::Or,
+        ["PRINT"] => V2Instruction::Print,
+        ["EQ"] => V2Instruction::Eq,
+        ["NE"] => V2Instruction::Ne,
+        ["LT"] => V2Instruction::Lt,
+        ["LE"] => V2Instruction::Le,
+        ["GT"] => V2Instruction::Gt,
+        ["GE"] => V2Instruction::Ge,
+        ["INDEX"] => V2Instruction::Index,
+        ["SET_INDEX", name] if valid_identifier(name) => V2Instruction::SetIndex,
+        ["JUMP", target] => V2Instruction::Jump(parse_operand_usize(target, "jump target")?),
+        ["JUMP_IF_FALSE", target] => V2Instruction::JumpIfFalse(parse_operand_usize(target, "jump target")?),
+        ["JUMP_IF_FALSE_KEEP", target] => V2Instruction::JumpIfFalseKeep(parse_operand_usize(target, "jump target")?),
+        ["JUMP_IF_TRUE_KEEP", target] => V2Instruction::JumpIfTrueKeep(parse_operand_usize(target, "jump target")?),
+        ["CALL", target, count] => {
+            let target = parse_operand_usize(target, "call target")?;
+            let argument_count = parse_operand_usize(count, "call argument count")?;
+            if argument_count > MAX_FUNCTION_PARAMETERS {
+                return Err(format!("bytecode v2: call argument count exceeds safety limit ({MAX_FUNCTION_PARAMETERS})"));
+            }
+            V2Instruction::Call { target, argument_count }
+        }
+        ["BUILTIN", name, count] if valid_identifier(name) => {
+            let argument_count = parse_operand_usize(count, "builtin argument count")?;
+            if argument_count > MAX_FUNCTION_PARAMETERS {
+                return Err(format!("bytecode v2: builtin argument count exceeds safety limit ({MAX_FUNCTION_PARAMETERS})"));
+            }
+            V2Instruction::Builtin { argument_count }
+        }
+        ["RETURN"] => V2Instruction::Return,
+        ["RETURN_VALUE"] => V2Instruction::ReturnValue,
+        _ => return Err(invalid()),
+    };
+    Ok(instruction)
+}
+
+fn region_for_pc(layout: &ProgramLayout, pc: usize) -> Option<(usize, usize, Option<usize>)> {
+    if pc < layout.main_end {
+        return Some((0, layout.main_end, None));
+    }
+    layout.functions.iter().find_map(|function| {
+        (pc >= function.entry && pc < function.end)
+            .then_some((function.entry, function.end, Some(function.entry)))
+    })
+}
+
+/// Verify opcode syntax, every jump/call target (including unreachable code), and
+/// reachable control-flow stack effects for each region independently.
+///
+/// This verifier is deliberately not connected to the production loader yet.
+pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
+    if file.instructions.len() != file.layout.instruction_count {
+        return Err("bytecode v2: instruction vector length disagrees with layout".into());
+    }
+    validate_layout(&file.layout)?;
+    if file.instructions.len() > MAX_V2_INSTRUCTIONS {
+        return Err("bytecode v2: instruction count exceeds safety limit".into());
+    }
+
+    let parsed: Vec<V2Instruction> = file.instructions.iter()
+        .map(|line| parse_v2_instruction(line))
+        .collect::<Result<_, _>>()?;
+
+    // Structural checks run on every instruction, even unreachable instructions.
+    for (pc, instruction) in parsed.iter().enumerate() {
+        let (start, end, _) = region_for_pc(&file.layout, pc)
+            .ok_or_else(|| format!("bytecode v2: instruction {pc} is outside a declared region"))?;
+        match instruction {
+            V2Instruction::Jump(target)
+            | V2Instruction::JumpIfFalse(target)
+            | V2Instruction::JumpIfFalseKeep(target)
+            | V2Instruction::JumpIfTrueKeep(target) => {
+                let is_main_exit = start == 0
+                    && pc + 1 == end
+                    && matches!(instruction, V2Instruction::Jump(target) if *target == end);
+                if is_main_exit {
+                    continue;
+                }
+                if *target < start || *target >= end {
+                    return Err(format!("bytecode v2: jump at instruction {pc} escapes its region to {target}"));
+                }
+            }
+            V2Instruction::Call { target, argument_count } => {
+                let function = file.layout.functions.iter().find(|f| f.entry == *target)
+                    .ok_or_else(|| format!("bytecode v2: call at instruction {pc} targets undeclared function {target}"))?;
+                if function.parameters.len() != *argument_count {
+                    return Err(format!(
+                        "bytecode v2: call at instruction {pc} passes {argument_count} argument(s), but function {target} declares {}",
+                        function.parameters.len()
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    for (start, end, is_main, return_kind) in std::iter::once((0, file.layout.main_end, true, None))
+        .chain(file.layout.functions.iter().map(|f| (f.entry, f.end, false, Some(f.return_kind))))
+    {
+        let mut depths: HashMap<usize, usize> = HashMap::new();
+        let mut pending = vec![(start, 0usize)];
+        let mut reached_exit = false;
+
+        while let Some((pc, incoming_depth)) = pending.pop() {
+            if pc == end && is_main {
+                reached_exit = true;
+                if incoming_depth != 0 {
+                    return Err(format!("bytecode v2: main exits with {incoming_depth} operand value(s)"));
+                }
+                continue;
+            }
+            if pc < start || pc >= end {
+                return Err(format!("bytecode v2: control flow escapes region at instruction {pc}"));
+            }
+            if let Some(previous) = depths.get(&pc) {
+                if *previous != incoming_depth {
+                    return Err(format!("bytecode v2: inconsistent stack depth at instruction {pc} ({previous} vs {incoming_depth})"));
+                }
+                continue;
+            }
+            depths.insert(pc, incoming_depth);
+
+            let instruction = &parsed[pc];
+            let (required, delta): (usize, isize) = match instruction {
+                V2Instruction::Push | V2Instruction::PushString | V2Instruction::PushBool | V2Instruction::Load => (0, 1),
+                V2Instruction::Store | V2Instruction::Declare | V2Instruction::Print
+                | V2Instruction::Neg | V2Instruction::Not | V2Instruction::JumpIfFalse => (1, -1),
+                V2Instruction::SetIndex => (2, -2),
+                V2Instruction::Index => (2, -1),
+                V2Instruction::Add | V2Instruction::Sub | V2Instruction::Mul | V2Instruction::Div
+                | V2Instruction::And | V2Instruction::Or | V2Instruction::Eq | V2Instruction::Ne
+                | V2Instruction::Lt | V2Instruction::Le | V2Instruction::Gt | V2Instruction::Ge => (2, -1),
+                V2Instruction::JumpIfFalseKeep(_) | V2Instruction::JumpIfTrueKeep(_) => (1, 0),
+                V2Instruction::Jump(_) | V2Instruction::Return => (0, 0),
+                V2Instruction::Builtin { argument_count } => (*argument_count, 1 - *argument_count as isize),
+                V2Instruction::Call { target, argument_count } => {
+                    let function = file.layout.functions.iter().find(|f| f.entry == *target)
+                        .ok_or_else(|| format!("bytecode v2: undeclared call target {target}"))?;
+                    let result = if function.return_kind == ReturnKind::Value { 1 } else { 0 };
+                    (*argument_count, result - *argument_count as isize)
+                }
+                V2Instruction::ReturnValue => (1, -1),
+                V2Instruction::JumpIfFalse(_) => unreachable!(),
+            };
+            if incoming_depth < required {
+                return Err(format!("bytecode v2: operand stack underflow at instruction {pc}"));
+            }
+            let outgoing_depth = if delta < 0 {
+                incoming_depth.checked_sub((-delta) as usize)
+                    .ok_or_else(|| format!("bytecode v2: stack underflow at instruction {pc}"))?
+            } else {
+                incoming_depth.checked_add(delta as usize)
+                    .ok_or_else(|| "bytecode v2: stack depth overflow".to_string())?
+            };
+            if outgoing_depth > 65_536 {
+                return Err(format!("bytecode v2: operand stack exceeds safety limit at instruction {pc}"));
+            }
+
+            match instruction {
+                V2Instruction::Jump(target) => {
+                    if is_main && pc + 1 == end && *target == end {
+                        reached_exit = true;
+                        if outgoing_depth != 0 {
+                            return Err(format!("bytecode v2: main exits with {outgoing_depth} operand value(s)"));
+                        }
+                    } else {
+                        pending.push((*target, outgoing_depth));
+                    }
+                }
+                V2Instruction::JumpIfFalse(target)
+                | V2Instruction::JumpIfFalseKeep(target)
+                | V2Instruction::JumpIfTrueKeep(target) => {
+                    pending.push((*target, outgoing_depth));
+                    if pc + 1 < end {
+                        pending.push((pc + 1, outgoing_depth));
+                    } else if !is_main {
+                        return Err(format!("bytecode v2: function falls through at instruction {pc}"));
+                    } else {
+                        return Err(format!("bytecode v2: main falls through at instruction {pc}"));
+                    }
+                }
+                V2Instruction::Return | V2Instruction::ReturnValue => {
+                    if is_main {
+                        return Err(format!("bytecode v2: return instruction outside a function at {pc}"));
+                    }
+                    let expected_kind = if matches!(instruction, V2Instruction::Return) {
+                        ReturnKind::Void
+                    } else {
+                        ReturnKind::Value
+                    };
+                    if return_kind != Some(expected_kind) {
+                        return Err(format!("bytecode v2: return kind does not match function metadata at instruction {pc}"));
+                    }
+                    let expected_depth = if expected_kind == ReturnKind::Void { 0 } else { 1 };
+                    if incoming_depth != expected_depth {
+                        return Err(format!("bytecode v2: return at instruction {pc} has {incoming_depth} operand value(s), expected {expected_depth}"));
+                    }
+                }
+                _ => {
+                    if pc + 1 < end {
+                        pending.push((pc + 1, outgoing_depth));
+                    } else if !is_main {
+                        return Err(format!("bytecode v2: function falls through at instruction {pc}"));
+                    } else {
+                        return Err(format!("bytecode v2: main falls through at instruction {pc}"));
+                    }
+                }
+            }
+        }
+        if is_main && !reached_exit {
+            return Err("bytecode v2: main region has no reachable exit".into());
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_v2_file, serialize_v2_file, validate_layout, FunctionRegion, ParsedV2File, ProgramLayout, ReturnKind};
