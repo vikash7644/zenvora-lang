@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::{env, fs, process};
 use std::path::Path;
+use std::io::Read;
 use ed25519_dalek::{Signer, SigningKey};
 
 mod module_loader;
@@ -2128,8 +2129,16 @@ fn valid_identifier(name: &str) -> bool {
     )
 }
 
-fn read_source(path: &str) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|error| format!("cannot read {path}: {error}"))
+fn read_bytecode_source(path: &str) -> Result<String, String> {
+    let file = fs::File::open(path).map_err(|error| format!("cannot read bytecode {path}: {error}"))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_BYTECODE_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("cannot read bytecode {path}: {error}"))?;
+    if bytes.len() > MAX_BYTECODE_BYTES {
+        return Err(format!("bytecode file exceeds safety limit ({} bytes)", MAX_BYTECODE_BYTES));
+    }
+    String::from_utf8(bytes).map_err(|error| format!("bytecode file is not valid UTF-8: {error}"))
 }
 
 fn read_program(path: &str) -> Result<String, String> {
@@ -2207,7 +2216,7 @@ fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
 }
 
 fn run_bytecode(path: &str) -> Result<(), String> {
-    let serialized = read_source(path)?;
+    let serialized = read_bytecode_source(path)?;
     let code = deserialize_bytecode(&serialized)?;
     run(&code)
 }
@@ -3327,6 +3336,16 @@ mod tests {
         assert!(encoded.contains("JUMP_IF_FALSE 24"));
         assert!(encoded.contains("SET_INDEX items"));
         assert!(super::serialize_bytecode(&[Op::Call("unresolved".into(), 0)]).unwrap_err().contains("unresolved function call"));
+    }
+
+    #[test]
+    fn bytecode_file_reader_enforces_size_limit_before_unbounded_allocation() {
+        let path = std::env::temp_dir().join(format!("zenvora-oversized-bytecode-{}.zvb", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, vec![b' '; super::MAX_BYTECODE_BYTES + 1]).unwrap();
+        let error = super::read_bytecode_source(path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("bytecode file exceeds safety limit"), "{error}");
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
