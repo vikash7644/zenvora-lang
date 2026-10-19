@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Indexed array/map assignment now updates the bound collection in place instead of cloning the entire collection for every write, while preserving bounds, type, depth, and memory checks.
+
 - Compiler entry points now reject source larger than 16 MiB before contract lowering or lexing, with a regression test through the public compile path.
 
 - Lexer input is now capped at 1,000,000 tokens per expression, and the compiler enforces the 1,000,000-instruction budget while appending bytecode and processing source lines. Added token-count and instruction-growth regression tests.
