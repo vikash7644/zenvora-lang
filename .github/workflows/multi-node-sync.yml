@@ -75,7 +75,7 @@ jobs:
           # commitment and canonical tip hash between the two stores.
           info_a="$("$cli" --chain-store-info "$tmp/node-a.zvb" "$chain_id")"
           info_b="$("$cli" --chain-store-info "$tmp/node-b.zvb" "$chain_id")"
-          field() { printf '%s\\n' "$1" | sed -n "s/^$2=//p"; }
+          field() { printf '%s\n' "$1" | sed -n "s/^$2=//p"; }
           for key in height state_root tip_hash; do
             value_a="$(field "$info_a" "$key")"
             value_b="$(field "$info_b" "$key")"
