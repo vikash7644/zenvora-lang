@@ -576,29 +576,27 @@ mod tests {
         ).unwrap();
         store.append_executed_block(&path, &runtime, &header, &[envelope], &receipts).unwrap();
 
-        // Simulate an attacker who can also produce a valid proposer signature: the replayed
-        // state must still match the signed state-root commitment, not merely the signature.
-        let content = std::fs::read_to_string(&path).unwrap();
-        let mut lines: Vec<String> = content.lines().map(str::to_string).collect();
+        // Simulate a valid proposer signature on a wrong state commitment. Replay must
+        // compare the commitment with state recomputed from the stored transactions.
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<String> = saved.lines().map(str::to_string).collect();
         let block_line_index = lines.iter().enumerate()
-            .filter(|(_, line)| line.starts_with("B\\t"))
+            .filter(|(_, line)| line.starts_with("B\t"))
             .nth(1)
             .map(|(index, _)| index)
             .unwrap();
-        let encoded = lines[block_line_index].strip_prefix("B\\t").unwrap();
+        let encoded = lines[block_line_index].strip_prefix("B\t").unwrap();
         let mut tampered = BlockHeaderV1::from_canonical_bytes(&super::hex_decode(encoded).unwrap()).unwrap();
         tampered.state_root[0] ^= 1;
         sign_header_as_proposer(&mut tampered, &key).unwrap();
-        lines[block_line_index] = format!("B\\t{}", super::hex_encode(&tampered.canonical_bytes().unwrap()));
-        std::fs::write(&path, lines.join("\\n") + "\\n").unwrap();
+        lines[block_line_index] = format!("B\t{}", super::hex_encode(&tampered.canonical_bytes().unwrap()));
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
 
         let error = BlockStore::load_from_file(&path, 71).unwrap_err();
         assert!(
-            error.contains("block state root does not match resulting state")
-                || error.contains("block state root"),
+            error.contains("block state root does not match resulting state"),
             "unexpected replay error: {error}"
         );
         std::fs::remove_file(path).unwrap();
     }
-
 }
