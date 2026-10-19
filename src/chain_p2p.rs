@@ -267,10 +267,17 @@ fn handle_message_with_pool(
                 Ok(value) => value,
                 Err(error) => return json!({"ok":false,"error":error}),
             };
-            let transactions: Vec<Value> = block.transactions.iter().map(|envelope| json!({
-                "publicKey":hex_encode(&envelope.public_key),
-                "transaction":envelope.transaction.canonical_bytes().map(|bytes|hex_encode(&bytes)).unwrap_or_default()
-            })).collect();
+            let mut transactions: Vec<Value> = Vec::with_capacity(block.transactions.len());
+            for envelope in &block.transactions {
+                let transaction_bytes = match envelope.transaction.canonical_bytes() {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":format!("cannot encode stored transaction: {error}")}),
+                };
+                transactions.push(json!({
+                    "publicKey":hex_encode(&envelope.public_key),
+                    "transaction":hex_encode(&transaction_bytes)
+                }));
+            }
             json!({"ok":true,"result":{"header":hex_encode(&header),"transactions":transactions}})
         }
         Some("sign_block") => {
