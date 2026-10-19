@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Runtime arrays/maps are now limited to 256 nested collection levels, preventing dynamically constructed nested values from exhausting the stack during validation or display. Added a loop-built nesting regression test.
+
 - Bytecode execution now reads at most 16 MiB plus one detection byte before decoding, preventing oversized files from being fully allocated before the decoder rejects them. Added a file-reader regression test.
 
 - Parser expression nesting is now capped at 256 levels, with regression tests for deeply nested parentheses and unary operators to prevent stack exhaustion.
