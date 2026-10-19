@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-: "\${RPC_URL:?Set RPC_URL, for example http://127.0.0.1:8545/}"
+: "${RPC_URL:?Set RPC_URL, for example http://127.0.0.1:8545/}"
 case "$RPC_URL" in
   http://*) ;;
   *) echo "FAIL: current node uses plain HTTP on loopback; do not send tokens over an untrusted network." >&2; exit 1 ;;
@@ -11,7 +11,7 @@ rpc_call() {
   method="$1"
   params="$2"
   id="$3"
-  if [ -n "\${RPC_TOKEN:-}" ]; then
+  if [ -n "${RPC_TOKEN:-}" ]; then
     curl --fail --silent --show-error --max-time 5 \
       -H 'Content-Type: application/json' \
       -H "Authorization: Bearer $RPC_TOKEN" \
@@ -33,7 +33,7 @@ printf '%s\n' "$INFO" | grep -q '"chainId"' || { echo "FAIL: chainId missing" >&
 printf '%s\n' "$INFO" | grep -q '"height"' || { echo "FAIL: height missing" >&2; exit 1; }
 echo "PASS: chain_getInfo returned chainId and height"
 
-if [ -n "\${RPC_TEST_ADDRESS:-}" ]; then
+if [ -n "${RPC_TEST_ADDRESS:-}" ]; then
   echo "Checking chain_getBalance..."
   BALANCE="$(rpc_call chain_getBalance "{\"address\":\"$RPC_TEST_ADDRESS\"}" 2)"
   printf '%s\n' "$BALANCE" | grep -q '"balance"' || { echo "FAIL: balance missing" >&2; exit 1; }
@@ -43,7 +43,7 @@ else
   echo "SKIP: set RPC_TEST_ADDRESS to check a known address"
 fi
 
-if [ -n "\${RPC_TEST_HEIGHT:-}" ]; then
+if [ -n "${RPC_TEST_HEIGHT:-}" ]; then
   HEIGHT="$RPC_TEST_HEIGHT"
 else
   HEIGHT="$(printf '%s\n' "$INFO" | sed -n 's/.*"height":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
