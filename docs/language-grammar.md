@@ -90,6 +90,16 @@ The parser currently accepts at most one comparison operator in a comparison exp
 - `push` and `put` return updated collections; they do not mutate the source variable implicitly. Indexed assignment (`items[0] := value`) updates the bound collection.
 - Built-ins include collection helpers such as `len`, `range`, `get`, `push`, `put`, `keys`, `values`, `first`, `last`, `reverse`, `split`, and `join`. The implementation's built-in registry is authoritative; this list is not exhaustive.
 
+## Current runtime semantics (draft)
+
+- **Integer arithmetic:** integer literals are decimal; arithmetic uses checked signed 64-bit operations. Overflow and division by zero return errors. Unary minus is checked too.
+- **Addition:** `+` accepts two integers or two strings. Mixed integer/string addition is a type error; string concatenation is bounded by the string-size limit.
+- **Comparisons:** `==` and `!=` compare runtime values structurally; values of different variants compare unequal. Ordered comparisons (`<`, `<=`, `>`, `>=`) require integers. Only one comparison operator is accepted per comparison expression.
+- **Conditions:** `if` and `repeat` accept booleans or integers; integer zero is false and nonzero is true. Strings, arrays, and maps are rejected as conditions. `not`, `and`, and `or` require booleans; `and`/`or` short-circuit.
+- **Collections:** array indexes must be non-negative integers and must be in bounds. Map keys must be strings; reading a missing map key is an error. Indexed array assignment replaces an existing element and does not append; indexed map assignment can insert or replace a key subject to limits.
+- **Functions:** function arguments are positional and arity must match. `return expression` returns a value; bare `return` returns without a value. Calling a missing/unresolved function or returning outside a function is an error.
+- **Errors:** compile-time syntax errors stop compilation; runtime type, bounds, overflow, division, and resource-limit errors stop the current run. This local VM has no transactional rollback or persistent state guarantee.
+
 ## Experimental contract DSL
 
 The current contract lowering accepts this additional outer syntax:
