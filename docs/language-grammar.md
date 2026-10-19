@@ -90,6 +90,19 @@ The parser currently accepts at most one comparison operator in a comparison exp
 - `push` and `put` return updated collections; they do not mutate the source variable implicitly. Indexed assignment (`items[0] := value`) updates the bound collection.
 - Built-ins include collection helpers such as `len`, `range`, `get`, `push`, `put`, `keys`, `values`, `first`, `last`, `reverse`, `split`, and `join`. The implementation's built-in registry is authoritative; this list is not exhaustive.
 
+## Experimental contract DSL
+
+The current contract lowering accepts this additional outer syntax:
+
+```ebnf
+contract-declaration = "contract", identifier, "{", { state-declaration | action-declaration | view-declaration }, "}" ;
+state-declaration    = "state", identifier, ":=", expression ;
+action-declaration   = "action", identifier, "(", [ parameters ], ")", "{", { statement | block-line }, "}" ;
+view-declaration     = "view", identifier, "(", [ parameters ], ")", "{", { statement | block-line }, "}" ;
+```
+
+This is a **local execution prototype**: state is initialized for a single VM run and is not persisted as a consensus-backed ledger. Durable state transitions, atomic rollback, caller authorization, deterministic gas, replay, and state-root commitments are not implemented production guarantees. See `contract-execution-v1.md` for the proposed host/runtime design.
+
 ## Diagnostics and resource limits
 
 - Lexer/parser diagnostics use one-based line and column positions; columns count Unicode scalar values, not terminal display cells.
