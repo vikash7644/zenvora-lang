@@ -929,12 +929,22 @@ JUMP 4
     #[test]
     fn verifier_rejects_unary_operators_when_the_operand_stack_is_empty() {
         let negation = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nNEG\\nJUMP 2\\n",
+            r#"ZENVORA_BYTECODE 2
+PROGRAM 0 2
+CODE
+NEG
+JUMP 2
+"#,
         ).unwrap();
         assert!(verify_v2_file(&negation).unwrap_err().contains("stack underflow"));
 
         let boolean_not = parse_v2_file(
-            "ZENVORA_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nNOT\\nJUMP 2\\n",
+            r#"ZENVORA_BYTECODE 2
+PROGRAM 0 2
+CODE
+NOT
+JUMP 2
+"#,
         ).unwrap();
         assert!(verify_v2_file(&boolean_not).unwrap_err().contains("stack underflow"));
     }
