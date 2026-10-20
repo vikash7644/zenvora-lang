@@ -4255,10 +4255,10 @@ repeat count < 5 {
     #[test]
     fn bytecode_v2_matches_source_for_integer_arithmetic_failures() {
         let cases = [
-            "show 9223372036854775807 + 1\\n",
-            "show 9223372036854775807 * 2\\n",
-            "show (-9223372036854775807 - 1) / -1\\n",
-            "show 1 / 0\\n",
+            "show 9223372036854775807 + 1\n",
+            "show 9223372036854775807 * 2\n",
+            "show (-9223372036854775807 - 1) / -1\n",
+            "show 1 / 0\n",
         ];
         for source in cases {
             let source_error = execute(source).unwrap_err();
