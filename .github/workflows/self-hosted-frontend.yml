@@ -64,6 +64,7 @@ jobs:
           grep -F 'index' parser-output.txt
           grep -F 'define' parser-output.txt
           grep -F 'show' parser-output.txt
+          grep -F 'assign' parser-output.txt
           grep -F 'error' parser-output.txt
           grep -F 'expected expression' parser-output.txt
           grep -F 'expected literal, name, or parenthesized expression' parser-output.txt
