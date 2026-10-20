@@ -12,7 +12,7 @@ use super::chain_protocol::address_from_public_key;
 use super::contract_runtime::{execute, ExecutionReceipt};
 use super::contract_state::{AccessMode, ContractState};
 
-const SIGNING_DOMAIN: &[u8] = b"ZENVORA_SIGNED_CONTRACT_CALL_V1\\0";
+const SIGNING_DOMAIN: &[u8] = b"ZENVORA_SIGNED_CONTRACT_CALL_V1\0";
 const MAX_CONTRACT_ID: usize = 64;
 const MAX_INVOCATION: usize = 4096;
 
@@ -41,7 +41,7 @@ impl SignedContractCall {
             return Err("contract ID is invalid".into());
         }
         if self.invocation.is_empty() || self.invocation.len() > MAX_INVOCATION
-            || self.invocation.contains(['\\n', '\\r'])
+            || self.invocation.contains('\n') || self.invocation.contains('\r')
             || !self.invocation.trim_start().starts_with("call ")
         {
             return Err("signed transactions must contain one bounded action invocation".into());
@@ -73,7 +73,7 @@ impl SignedContractCall {
             return Err("Ed25519 signature must be exactly 64 bytes".into());
         }
         let mut hasher = Sha256::new();
-        hasher.update(b"ZENVORA_SIGNED_CONTRACT_CALL_ID_V1\\0");
+        hasher.update(b"ZENVORA_SIGNED_CONTRACT_CALL_ID_V1\0");
         hasher.update(self.signing_bytes()?);
         hasher.update(&self.signature);
         Ok(hasher.finalize().into())
