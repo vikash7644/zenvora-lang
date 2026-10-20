@@ -61,7 +61,7 @@ pub fn execute(
 
 fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
     let trimmed = invocation.trim();
-    if trimmed.contains('\\n') || trimmed.contains('\\r') {
+    if trimmed.contains('\n') || trimmed.contains('\r') {
         return Err("contract invocation must be a single line".into());
     }
     let trimmed = trimmed.strip_suffix(';').unwrap_or(trimmed).trim();
