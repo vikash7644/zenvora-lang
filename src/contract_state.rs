@@ -115,6 +115,46 @@ impl ContractState {
         Ok(out)
     }
 
+    /// Persist a canonical snapshot with an atomic rename. The caller still must validate
+    /// the snapshot against replayed chain state before treating it as authoritative.
+    pub fn save_snapshot(&self, path: &std::path::Path) -> Result<(), String> {
+        use std::io::Write;
+        let bytes = self.encode_snapshot()?;
+        let file_name = path.file_name().ok_or_else(|| "snapshot path must name a file".to_string())?;
+        let mut temp_name = file_name.to_os_string();
+        temp_name.push(format!(".tmp-{}", std::process::id()));
+        let temp_path = path.with_file_name(temp_name);
+        let result = (|| {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true).create_new(true).open(&temp_path)
+                .map_err(|e| format!("cannot create temporary snapshot: {e}"))?;
+            file.write_all(&bytes).map_err(|e| format!("cannot write snapshot: {e}"))?;
+            file.sync_all().map_err(|e| format!("cannot sync snapshot: {e}"))?;
+            std::fs::rename(&temp_path, path).map_err(|e| format!("cannot atomically install snapshot: {e}"))?;
+            Ok(())
+        })();
+        if result.is_err() { let _ = std::fs::remove_file(&temp_path); }
+        result
+    }
+
+    /// Load a bounded canonical snapshot. This verifies encoding, not chain trust/replay.
+    pub fn load_snapshot(path: &std::path::Path) -> Result<Self, String> {
+        use std::io::Read;
+        const MAX_SNAPSHOT_BYTES: u64 = (MAX_CONTRACT_STORAGE_BYTES + 1024 * 1024) as u64;
+        let metadata = std::fs::metadata(path).map_err(|e| format!("cannot stat contract snapshot: {e}"))?;
+        if metadata.len() > MAX_SNAPSHOT_BYTES {
+            return Err("encoded contract snapshot exceeds size limit".into());
+        }
+        let mut file = std::fs::File::open(path).map_err(|e| format!("cannot open contract snapshot: {e}"))?;
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take(MAX_SNAPSHOT_BYTES + 1).read_to_end(&mut bytes)
+            .map_err(|e| format!("cannot read contract snapshot: {e}"))?;
+        if bytes.len() as u64 > MAX_SNAPSHOT_BYTES {
+            return Err("encoded contract snapshot exceeds size limit".into());
+        }
+        Self::decode_snapshot(&bytes)
+    }
+
     /// Decode only canonical, strictly sorted snapshots with bounded lengths and no trailing data.
     pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
         const DOMAIN: &[u8] = b"ZENVORA_CONTRACT_STATE_V1\0";
@@ -372,5 +412,20 @@ mod tests {
         encoded.push(0);
         assert!(ContractState::decode_snapshot(&encoded).is_err());
         assert!(ContractState::decode_snapshot(b"WRONG_VERSION").is_err());
+    }
+
+    #[test]
+    fn snapshot_survives_file_round_trip() {
+        let mut state = ContractState::new();
+        let mut action = state.begin("persisted", AccessMode::Action).unwrap();
+        action.set("key", b"value".to_vec()).unwrap();
+        state.commit(action).unwrap();
+        let path = std::env::temp_dir().join(format!("zenvora-contract-state-{}.bin", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        state.save_snapshot(&path).unwrap();
+        let restored = ContractState::load_snapshot(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(restored.state_root(), state.state_root());
+        assert_eq!(restored.get("persisted", "key").unwrap(), Some(&b"value"[..]));
     }
 }
