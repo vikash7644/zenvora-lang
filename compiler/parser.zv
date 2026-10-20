@@ -873,6 +873,136 @@ fn emit_bytecode_plan(ir) {
  return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
 }
 
+# Zenvora-written semantic checks for statement placement and supported AST shapes.
+fn validate_expression(ast) {
+ define kind := get(ast, "kind")
+ if kind == "number" or kind == "string" or kind == "boolean" or kind == "name" {
+  return ""
+ } otherwise {
+  if kind == "unary" {
+   return validate_expression(get(ast, "left"))
+  } otherwise {
+   if kind == "binary" or kind == "index" {
+    define left_error := validate_expression(get(ast, "left"))
+    if left_error != "" {
+     return left_error
+    }
+    return validate_expression(get(ast, "right"))
+   } otherwise {
+    if kind == "call" {
+     define callee_error := validate_expression(get(ast, "left"))
+     if callee_error != "" {
+      return callee_error
+     }
+     define args := get(ast, "right")
+     define pos := 0
+     repeat pos < len(args) {
+      define arg_error := validate_expression(get(args, pos))
+      if arg_error != "" {
+       return arg_error
+      }
+      pos := pos + 1
+     }
+     return ""
+    } otherwise {
+     return "unsupported expression node: " + kind
+    }
+   }
+  }
+ }
+}
+
+fn validate_statements(ast, function_depth, loop_depth) {
+ define pos := 0
+ repeat pos < len(ast) {
+  define statement := get(ast, pos)
+  define kind := get(statement, "kind")
+  define expression_error := ""
+  if kind == "define" or kind == "assign" or kind == "show" {
+   expression_error := validate_expression(get(statement, "left"))
+  } otherwise {
+   if kind == "if" {
+    expression_error := validate_expression(get(statement, "left"))
+    if expression_error == "" {
+     define branches := get(statement, "right")
+     expression_error := validate_statements(get(branches, "then"), function_depth, loop_depth)
+     if expression_error == "" {
+      expression_error := validate_statements(get(branches, "otherwise"), function_depth, loop_depth)
+     }
+    }
+   } otherwise {
+    if kind == "repeat" {
+     expression_error := validate_expression(get(statement, "left"))
+     if expression_error == "" {
+      expression_error := validate_statements(get(statement, "right"), function_depth, loop_depth + 1)
+     }
+    } otherwise {
+     if kind == "function" {
+      define params := get(statement, "left")
+      define param_pos := 0
+      repeat param_pos < len(params) {
+       define param := get(params, param_pos)
+       if contains(collect_tokens(array(), 0, 0), param) {
+        expression_error := "invalid function parameter"
+       }
+       define prior := 0
+       repeat prior < param_pos and expression_error == "" {
+        if get(params, prior) == param {
+         expression_error := "duplicate function parameter: " + param
+        }
+        prior := prior + 1
+       }
+       param_pos := param_pos + 1
+      }
+      if expression_error == "" {
+       expression_error := validate_statements(get(statement, "right"), function_depth + 1, 0)
+      }
+     } otherwise {
+      if kind == "return" {
+       if function_depth == 0 {
+        expression_error := "return outside function"
+       } otherwise {
+        expression_error := validate_expression(get(statement, "left"))
+       }
+      } otherwise {
+       if kind == "break" or kind == "continue" {
+        if loop_depth == 0 {
+         expression_error := kind + " outside loop"
+        }
+       } otherwise {
+        expression_error := "unsupported statement node: " + kind
+       }
+      }
+     }
+    }
+   }
+  }
+  if expression_error != "" {
+   return expression_error
+  }
+  pos := pos + 1
+ }
+ return ""
+}
+
+fn validate_program(ast) {
+ define seen_functions := array()
+ define pos := 0
+ repeat pos < len(ast) {
+  define statement := get(ast, pos)
+  if get(statement, "kind") == "function" {
+   define name := get(statement, "value")
+   if contains(seen_functions, name) {
+    return map("ok", false, "error", "duplicate function: " + name)
+   }
+   seen_functions := push(seen_functions, name)
+  }
+  pos := pos + 1
+ }
+ define error := validate_statements(ast, 0, 0)
+ return map("ok", error == "", "error", error)
+}
+
 define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nfn add(a, b) { if a > 0 { return a + b } otherwise { return b } }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
@@ -956,3 +1086,17 @@ show lowered_ir
 define bytecode_plan := emit_bytecode_plan(lowered_ir)
 show "ZENVORA_BYTECODE_PLAN"
 show bytecode_plan
+
+define valid_semantic_lexed := lex("define total := 0\nfn count_down(n) {\nrepeat n > 0 {\nif n > 2 {\nbreak\n} otherwise {\ncontinue\n}\n}\nreturn n\n}\n")
+define valid_semantic_ast := parse_program(get(valid_semantic_lexed, "tokens"))
+define valid_semantic_result := validate_program(get(valid_semantic_ast, "ast"))
+define invalid_break_lexed := lex("break\n")
+define invalid_break_ast := parse_program(get(invalid_break_lexed, "tokens"))
+define invalid_break_result := validate_program(get(invalid_break_ast, "ast"))
+define invalid_return_lexed := lex("return 1\n")
+define invalid_return_ast := parse_program(get(invalid_return_lexed, "tokens"))
+define invalid_return_result := validate_program(get(invalid_return_ast, "ast"))
+show "ZENVORA_SEMANTICS"
+show valid_semantic_result
+show get(invalid_break_result, "error")
+show get(invalid_return_result, "error")
