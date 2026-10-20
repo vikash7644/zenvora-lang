@@ -66,3 +66,6 @@ jobs:
           grep -F 'show' parser-output.txt
           grep -F 'error' parser-output.txt
           grep -F 'expected expression' parser-output.txt
+          grep -F 'expected literal, name, or parenthesized expression' parser-output.txt
+          grep -F 'expected closing bracket after index' parser-output.txt
+          grep -F 'expected closing parenthesis' parser-output.txt
