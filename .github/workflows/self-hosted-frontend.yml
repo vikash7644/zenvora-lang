@@ -52,3 +52,11 @@ jobs:
           grep -F 'boolean' frontend-output.txt
           grep -F 'punctuation' frontend-output.txt
           grep -F 'error' frontend-output.txt
+      - name: Execute Zenvora-written parser foundation
+        run: |
+          cargo run --locked --quiet -- compiler/parser.zv > parser-output.txt
+          cat parser-output.txt
+          grep -F 'binary' parser-output.txt
+          grep -F 'define' parser-output.txt
+          grep -F 'show' parser-output.txt
+          grep -F 'error' parser-output.txt
