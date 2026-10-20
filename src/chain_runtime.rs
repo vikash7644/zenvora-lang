@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::chain_protocol::TransactionV1;
 use sha2::{Digest, Sha256};
 
-use super::{compile, run_with_output};
+use super::{compile_for_vm, run_with_output};
 
 const TRANSFER_RULE: &str = r#"
 # Chain transfer execution uses the same experimental contract DSL exposed to language users.
@@ -396,7 +396,7 @@ impl ChainRuntime {
             .replace("state recipient_balance := 0", &format!("state recipient_balance := {recipient_before}"))
             .replace("state transfer_amount := 0", &format!("state transfer_amount := {amount}"));
 
-        let bytecode = compile(&source).map_err(|e| format!("Zenvora compile error: {e}"))?;
+        let bytecode = compile_for_vm(&source).map_err(|e| format!("Zenvora compile error: {e}"))?;
         let mut output = Vec::new();
         run_with_output(&bytecode, &mut |line| output.push(line))
             .map_err(|e| format!("Zenvora VM error: {e}"))?;
