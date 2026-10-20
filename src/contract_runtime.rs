@@ -160,7 +160,7 @@ fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
         if in_string {
             if escaped {
                 escaped = false;
-            } else if ch == '\\\\' {
+            } else if ch == '\\' {
                 escaped = true;
             } else if ch == '"' {
                 in_string = false;
