@@ -5,8 +5,9 @@ Status: **draft, not frozen for v1.0**. This document describes the current line
 ## Source layout
 
 - One statement or block header per physical line.
+- A top-level `use "relative/path.zv"` directive imports a source module relative to the file containing the directive. The loader expands imports before compilation and rejects cycles, invalid UTF-8, excessive depth/size, absolute paths, and Windows drive-prefixed paths.
 - Blank lines and lines whose first non-whitespace character is `#` are ignored. `#` outside a string literal ends the rest of that physical line, so trailing comments are accepted too.
-- A trailing semicolon is stripped by the current parser. The exact semicolon policy is not frozen yet.
+- The current compiler strips all trailing semicolons from each ordinary source line, so repeated trailing semicolons are accepted for now. A `use` directive accepts at most one optional trailing semicolon. This permissive behavior is not frozen for stable v1.0.
 - Braces delimit `if`, `repeat`, and function blocks. Indentation is not used to determine block nesting.
 - Identifiers are ASCII: a letter or underscore followed by letters, digits, or underscores.
 
@@ -14,7 +15,10 @@ Status: **draft, not frozen for v1.0**. This document describes the current line
 
 ```ebnf
 program          = { line } ;
-line             = blank-line | comment-line | function-header | statement | block-line ;
+line             = blank-line | comment-line | module-import | function-header | statement | block-line ;
+module-import    = "use", module-path ;
+module-path      = quote, { path-character }, quote ;
+path-character   = any-character except quote or backslash ;
 blank-line       = whitespace ;
 comment-line     = { whitespace }, "#", { any-character } ;
 function-header  = "fn", identifier, "(", [ parameters ], ")", "{" ;
@@ -79,7 +83,7 @@ primary          = integer | string | boolean
                  | "(", expression, ")" ;
 ```
 
-The parser currently accepts at most one comparison operator in a comparison expression; chained comparisons are not part of the grammar.
+The parser currently accepts at most one comparison operator in a comparison expression; chained comparisons are not part of the grammar. `otherwise if` is not a supported header; use a nested `if` inside an `otherwise` block. Multiple statements on one physical line are not supported.
 
 ## Literals and built-in collections
 
@@ -126,7 +130,7 @@ Only one contract block per source file is currently supported. This is a **loca
 - The current behavior for overflow, division edge cases, equality across value types, and comparison errors is described above; it still needs exhaustive regression coverage and an explicit v1.0 compatibility decision.
 - Function return-value rules and control-flow fallthrough rules need a single normative description.
 - Repeated trailing semicolons, `otherwise if`, and same-line multiple statements need an explicit accept/reject decision.
-- Module imports and the contract/state/action/view DSL have separate implementation paths. The contract execution proposal is not production behavior; see `contract-execution-v1.md`.
+- Module imports are expanded by `src/module_loader.rs` before compilation; the module path parser accepts a quoted path without escapes or backslashes and requires a relative path. The contract/state/action/view DSL has a separate lowering path. The contract execution proposal is not production behavior; see `contract-execution-v1.md`.
 - Bytecode v2 remains experimental until its format is frozen and independently security-reviewed.
 
 Do not use this draft alone to claim Zenvora Lang v1.0 is complete.
