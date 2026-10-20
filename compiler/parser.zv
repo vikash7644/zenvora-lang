@@ -27,20 +27,20 @@ fn parse_primary(tokens, pos) {
  define v := get(t, "value")
  define ln := get(t, "line")
  if k == "number" {
-  define literal_node := node("integer", v, "", "", ln)
-  return result(literal_node, pos + 1, "")
+  define literal_integer_node := node("integer", v, "", "", ln)
+  return result(literal_integer_node, pos + 1, "")
  }
  if k == "string" {
-  define literal_node := node("string", v, "", "", ln)
-  return result(literal_node, pos + 1, "")
+  define literal_string_node := node("string", v, "", "", ln)
+  return result(literal_string_node, pos + 1, "")
  }
  if k == "boolean" {
-  define literal_node := node("boolean", v, "", "", ln)
-  return result(literal_node, pos + 1, "")
+  define literal_boolean_node := node("boolean", v, "", "", ln)
+  return result(literal_boolean_node, pos + 1, "")
  }
  if k == "identifier" {
-  define literal_node := node("name", v, "", "", ln)
-  return result(literal_node, pos + 1, "")
+  define literal_name_node := node("name", v, "", "", ln)
+  return result(literal_name_node, pos + 1, "")
  }
  if v == "(" {
   define inner := parse_expr(tokens, pos + 1)
@@ -165,9 +165,9 @@ fn parse_program(tokens) {
        err := "expected expression after :="
       } otherwise {
        define name_value := get(name_token, "value")
-       define expr_ast := get(expr, "ast")
-       define statement_node := node("define", name_value, expr_ast, "", ln)
-       ast := push(ast, statement_node)
+       define define_expr_ast := get(expr, "ast")
+       define define_statement_node := node("define", name_value, define_expr_ast, "", ln)
+       ast := push(ast, define_statement_node)
        pos := get(expr, "pos")
       }
      }
@@ -182,9 +182,9 @@ fn parse_program(tokens) {
      if get(expr, "pos") == pos + 1 {
       err := "expected expression after show"
      } otherwise {
-      define expr_ast := get(expr, "ast")
-      define statement_node := node("show", "", expr_ast, "", ln)
-      ast := push(ast, statement_node)
+      define show_expr_ast := get(expr, "ast")
+      define show_statement_node := node("show", "", show_expr_ast, "", ln)
+      ast := push(ast, show_statement_node)
       pos := get(expr, "pos")
      }
     }
