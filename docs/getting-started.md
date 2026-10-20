@@ -49,6 +49,19 @@ Hello, Zenvora
 
 The `--check` command parses and compiles the file and its relative imports without executing the program. It is not a full static type checker; some errors can still occur at runtime.
 
+The native Engine entry points provide the same compiler/VM path explicitly:
+
+```sh
+cargo run -- --engine-check hello.zv
+cargo run -- --engine-run hello.zv
+cargo run -- --engine-run examples/modules.zv
+```
+
+- `--engine-check` loads relative modules, compiles, and verifies the bytecode without running user code.
+- `--engine-run` loads relative modules and executes the verified program in the native Rust VM.
+- These commands are a native engine-core milestone; they do not yet make the compiler a stable external Rust library API or turn the browser demo into the native VM.
+
+
 ## 3. Learn by executable examples
 
 Start with these files in the repository:
@@ -163,7 +176,7 @@ See [Contributing](../CONTRIBUTING.md) for the change checklist.
 
 - The language is not statically typed; several invalid operations are reported at runtime.
 - Module imports are relative and do not yet provide package namespaces or a package manager.
-- The `contract/state/action/view` DSL lowers to globals/functions for one local VM run. State is not persisted between runs, and this is not a secure contract runtime.
+- The `contract/state/action/view` path has an experimental local runtime with versioned snapshots, gas accounting, and rollback tests. It is not yet wired into a production chain transaction/consensus path and is not a secure production contract runtime.
 - Bytecode v2 is experimental and not a stable long-term file format.
 - The chain-related code is a local prototype; it is not a decentralized public testnet/mainnet and must not be exposed to the public internet.
 - A production wallet, DEX, native machine-code backend, and mainnet are not delivered.
