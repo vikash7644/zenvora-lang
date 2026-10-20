@@ -41,12 +41,10 @@ impl SignedContractCall {
         {
             return Err("contract ID is invalid".into());
         }
-        if self.invocation.is_empty() || self.invocation.len() > MAX_INVOCATION
-            || self.invocation.contains('\n') || self.invocation.contains('\r')
-            || !self.invocation.trim_start().starts_with("call ")
-        {
+        if self.invocation.is_empty() || self.invocation.len() > MAX_INVOCATION {
             return Err("signed transactions must contain one bounded action invocation".into());
         }
+        super::contract_runtime::validate_signed_action_invocation(&self.invocation)?;
         if self.gas_limit == 0 || self.gas_price == 0 {
             return Err("gas limit and gas price must be nonzero".into());
         }
@@ -329,6 +327,24 @@ mod tests {
         };
         tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
         tx
+    }
+
+    #[test]
+    fn signing_rejects_malformed_or_non_action_invocations_before_admission() {
+        let key = SigningKey::from_bytes(&[41; 32]);
+        let mut tx = signed_call(&key, 0, "call increment(1)", 100_000);
+        assert!(tx.signing_bytes().is_ok());
+
+        for invalid in [
+            "call increment(1); show current()",
+            "call increment(1) trailing",
+            "call increment((1)",
+            "show current()",
+            "call increment(1)\\nshow current()",
+        ] {
+            tx.invocation = invalid.into();
+            assert!(tx.signing_bytes().is_err(), "unexpectedly accepted invocation: {invalid:?}");
+        }
     }
 
     #[test]
