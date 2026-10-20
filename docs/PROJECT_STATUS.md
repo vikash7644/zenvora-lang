@@ -16,14 +16,14 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 - [x] Add source-vs-bytecode-v2 execution comparison tests for collections/builtins/functions and branch/loop output.
 - [x] Fix escaped newline sequences in the regression fixtures (commit `b340e2a02240943836d4e2325edb7ea96ade5445`).
 - [x] Correct both source-vs-v2 regression tests to call the v2 decoder, not the legacy v1 decoder (commit `38b701ad9758f9a5fd85dc2a6ee20ed56ce1d67e`).
-- [ ] Run and inspect the **latest** main compiler/VM CI on the exact latest commit.
-- [ ] Run and inspect the **latest** Bytecode v2 fuzz workflow on the exact latest commit.
-- [ ] Fix every compile, Clippy, unit-test, fuzz, or example failure; rerun after fixes.
+- [x] Run and inspect the **latest** main compiler/VM CI on commit `ef45ff34dc05003d58db468c194b4f31413babec` — all jobs and steps passed.
+- [x] Run and inspect the **latest** Bytecode v2 fuzz workflow on the same commit — bounded parser/verifier/serializer fuzz campaign passed.
+- [x] No compile, Clippy, unit-test, fuzz, or example failures were reported by these two workflows on that commit.
 - [ ] Verify verifier coverage for jump/function boundaries, stack underflow, stack depth at control-flow joins, call target/argument counts, return-kind consistency, unreachable regions, and resource limits.
 - [ ] Review the differential suite for edge cases (errors, nested calls, strings, collections, short-circuit branches, loops, and function returns).
 - [ ] Do not call Bytecode v2 stable or production-safe; its format is experimental.
 
-Latest status when audited: the newest GitHub Actions run for commit `38b701a` was **queued**, not passed. The Actions API had not produced job records yet, so there is no test result to report. Queued runs are not evidence of test success.
+Latest verified status: commit `ef45ff34dc05003d58db468c194b4f31413babec` (`ef45ff3`) has a successful main compiler/VM CI run and a successful Bytecode v2 fuzz run. Main CI passed interpreter tests, compiler/VM tests, Clippy, optimized release CLI build, language examples, bytecode v1/v2 smoke tests, and the Rust compiler HTTP API smoke test. The bounded parser/verifier/serializer fuzz campaign also passed. This verifies these workflows on that commit only; it does not establish that the whole language is release-ready or that Bytecode v2 is stable.
 
 ## Language feature and release checklist
 
