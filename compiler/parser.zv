@@ -942,9 +942,6 @@ fn validate_statements(ast, function_depth, loop_depth) {
       define param_pos := 0
       repeat param_pos < len(params) {
        define param := get(params, param_pos)
-       if contains(collect_tokens(array(), 0, 0), param) {
-        expression_error := "invalid function parameter"
-       }
        define prior := 0
        repeat prior < param_pos and expression_error == "" {
         if get(params, prior) == param {
