@@ -27,6 +27,13 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 
 Main CI passed on current compiler-source commit `def75b956aa4f52188119fc09d5c9edb2bc9423f` (run [39366836207](https://github.com/vikash7644/zenvora-lang/actions/runs/39366836207)). It passed compiler/VM checks, Clippy, all tests, optimized CLI build, `cargo package --locked`, compiler API smoke tests, editor validation, VSIX packaging/upload, and execution of every checked-in `.zv` example through the release CLI. Playground CI passed on commit `bc9bda48c013183424e98c6d695a590264ced6cc` (run [39366614987](https://github.com/vikash7644/zenvora-lang/actions/runs/39366614987)), including regression tests for `if/otherwise` parsing, nested branches, function calls, recursion, and standard-library helpers. A later test-only change in `src/main.rs` fixes newline fixtures for arithmetic-error parity; the fuzz workflow for that exact source SHA is pending and must pass before the current Bytecode v2 gate can be marked green.
 
+## Contract runtime implementation slice (2026-10-20)
+
+- Added `src/contract_state.rs` and wired it into the Rust test target.
+- Implemented deterministic sorted-key state-root hashing, bounded contract IDs/keys/values/storage size, per-contract storage namespaces, isolated write/delete overlays, atomic commit via candidate-state replacement, and read-only `view` overlays that reject writes/commits.
+- Added unit tests for overlay invisibility before commit, discarded-overlay rollback, view write rejection, contract namespace isolation, overlay-local deletes, insertion-order-independent roots, and oversized-value rejection.
+- This is a tested **storage primitive**, not yet the full contract runtime: it is not persisted to disk, is not connected to `chain_runtime` transaction execution or the contract DSL, and has no authorization/signature binding or gas charging. Do not mark the release blockers complete until those integrations and restart/replay tests land.
+
 ## Language feature and release checklist
 
 | Area | Current assessment | Remaining completion gate |
