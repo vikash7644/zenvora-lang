@@ -69,5 +69,6 @@ examples.find(button => button.dataset.example === "stdlib").click();
 assert.ok(elements.code.value.includes("range("), "standard-library example loads");
 examples.find(button => button.dataset.example === "combined").click();
 run(elements.code.value, "Building with Zenvora\n3\n1\nBuild step\n3\n42", "combined demo with nested otherwise blocks");
+run('show factorial(5)\nfn factorial(n) {\n if n <= 1 {\n  return 1\n } otherwise {\n  return n * factorial(n - 1)\n }\n}', "120", "recursive function calls and return values");
 
-console.log("Playground tests passed: expressions, branching, nested otherwise blocks, loops, functions, collections, standard library, and error handling.");
+console.log("Playground tests passed: expressions, branching, nested otherwise blocks, loops, recursive functions, collections, standard library, and error handling.");
