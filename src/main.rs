@@ -6,6 +6,7 @@ use ed25519_dalek::{Signer, SigningKey};
 use sha2::{Digest, Sha256};
 
 mod module_loader;
+mod engine;
 mod chain_runtime;
 mod chain_protocol;
 mod chain_consensus;
