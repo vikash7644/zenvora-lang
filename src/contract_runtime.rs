@@ -11,6 +11,43 @@ pub struct ExecutionReceipt {
     pub state_root: [u8; 32],
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractCall {
+    pub invocation: String,
+    pub mode: AccessMode,
+    pub gas_limit: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockExecutionReceipt {
+    pub calls: Vec<ExecutionReceipt>,
+    pub final_state_root: [u8; 32],
+}
+
+/// Replay a block's ordered contract calls on a candidate copy. State is published only
+/// after every call succeeds and the deterministic final root matches the block commitment.
+pub fn replay_block(
+    source: &str,
+    contract_id: &str,
+    calls: &[ContractCall],
+    state: &mut ContractState,
+    expected_final_root: [u8; 32],
+) -> Result<BlockExecutionReceipt, String> {
+    let mut candidate = state.clone();
+    let mut receipts = Vec::with_capacity(calls.len());
+    for (index, call) in calls.iter().enumerate() {
+        let receipt = execute(source, contract_id, &call.invocation, call.mode, &mut candidate, call.gas_limit)
+            .map_err(|error| format!("contract call {} failed during replay: {error}", index + 1))?;
+        receipts.push(receipt);
+    }
+    let final_state_root = candidate.state_root();
+    if final_state_root != expected_final_root {
+        return Err("replayed contract state root does not match block commitment".into());
+    }
+    *state = candidate;
+    Ok(BlockExecutionReceipt { calls: receipts, final_state_root })
+}
+
 pub fn execute(
     source: &str,
     contract_id: &str,
@@ -218,6 +255,28 @@ mod tests {
         ).unwrap_err();
         assert!(error.contains("single line"), "{error}");
         assert_eq!(state.get("counter", "count").unwrap(), None);
+    }
+
+    #[test]
+    fn block_replay_commits_only_when_final_state_root_matches() {
+        use super::{replay_block, ContractCall};
+        let calls = vec![
+            ContractCall { invocation: "call increment(3)".into(), mode: AccessMode::Action, gas_limit: 100_000 },
+            ContractCall { invocation: "call increment(4)".into(), mode: AccessMode::Action, gas_limit: 100_000 },
+        ];
+        let mut expected = ContractState::new();
+        for call in &calls {
+            execute(COUNTER, "counter", &call.invocation, call.mode, &mut expected, call.gas_limit).unwrap();
+        }
+        let expected_root = expected.state_root();
+        let mut replayed = ContractState::new();
+        let receipt = replay_block(COUNTER, "counter", &calls, &mut replayed, expected_root).unwrap();
+        assert_eq!(receipt.final_state_root, expected_root);
+        assert_eq!(replayed.state_root(), expected_root);
+
+        let mut rejected = ContractState::new();
+        assert!(replay_block(COUNTER, "counter", &calls, &mut rejected, [0; 32]).is_err());
+        assert_eq!(rejected.state_root(), ContractState::new().state_root());
     }
 
     #[test]
