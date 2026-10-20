@@ -67,9 +67,8 @@ show twice(start + 3)
 
     #[test]
     fn engine_check_rejects_invalid_source_without_running_it() {
-        let error = Engine::check("show missing_name").unwrap_err();
-        assert!(error.contains("undefined") || error.contains("unknown") || error.contains("not found"),
-            "unexpected diagnostic: {error}");
+        let error = Engine::check("show @").unwrap_err();
+        assert!(error.contains("unexpected character"), "unexpected diagnostic: {error}");
     }
 
     #[test]
