@@ -49,7 +49,9 @@ pub fn execute(
         let parsed: i64 = value.parse().map_err(|_| format!(
             "contract state '{name}' must evaluate to an integer in runtime v1"
         ))?;
-        pending.set(name, parsed.to_string().into_bytes())?;
+        if mode == AccessMode::Action {
+            pending.set(name, parsed.to_string().into_bytes())?;
+        }
     }
     if mode == AccessMode::Action {
         state.commit(pending)?;
