@@ -15,6 +15,7 @@ mod compiler_api;
 mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
+mod contract_state;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
