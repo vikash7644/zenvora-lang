@@ -1370,7 +1370,7 @@ show get(invalid_return_result, "error")
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
 show bytecode_verification
-define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nfn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\nfn choose(a, b) {\nif a > 0 {\nreturn add(a, b)\n} otherwise {\nreturn b\n}\n}\nshow choose(2, 5)\nshow choose(0, 7)\n"
+define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nfn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\nfn choose(a, b) {\nif a > 0 {\nreturn add(a, b)\n} otherwise {\nreturn b\n}\n}\nshow choose(2, 5)\nshow choose(0, 7)\nfn factorial(n) {\nif n <= 1 {\nreturn 1\n} otherwise {\nreturn n * factorial(n - 1)\n}\n}\nshow factorial(5)\n"
 define runnable_lexed := lex(runnable_source)
 define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
@@ -1379,7 +1379,7 @@ define runnable_result := execute_bytecode_plan(runnable_plan)
 define runnable_output := get(runnable_result, "output")
 show "ZENVORA_VM"
 show runnable_result
-if get(runnable_result, "ok") and len(runnable_output) == 4 and get(runnable_output, 0) == "14" and get(runnable_output, 1) == "42" and get(runnable_output, 2) == "7" and get(runnable_output, 3) == "7" {
+if get(runnable_result, "ok") and len(runnable_output) == 5 and get(runnable_output, 0) == "14" and get(runnable_output, 1) == "42" and get(runnable_output, 2) == "7" and get(runnable_output, 3) == "7" and get(runnable_output, 4) == "120" {
  show "ZENVORA_VM_ASSERTIONS_PASS"
 } otherwise {
  show "ZENVORA_VM_ASSERTIONS_FAIL"
