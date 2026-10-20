@@ -3212,8 +3212,8 @@ fn main() {
             process::exit(2);
         }
         if args[1] == "--engine-check" {
-            match engine::Engine::run_file(&args[2]) {
-                Ok(result) => println!("Zenvora engine check passed: {} instruction(s)", result.instruction_count),
+            match engine::Engine::check_file(&args[2]) {
+                Ok(instruction_count) => println!("Zenvora engine check passed: {instruction_count} instruction(s)"),
                 Err(error) => {
                     eprintln!("Zenvora engine error: {error}");
                     process::exit(1);
