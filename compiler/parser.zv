@@ -22,40 +22,31 @@ fn parse_primary(tokens, pos) {
  define k := get(t, "kind")
  define v := get(t, "value")
  define ln := get(t, "line")
- if k == "number" {
-  define literal_integer_node := node("integer", v, "", "", ln)
-  return result(literal_integer_node, pos + 1, "")
- } otherwise {
-  if k == "string" {
-   define literal_string_node := node("string", v, "", "", ln)
-   return result(literal_string_node, pos + 1, "")
-  } otherwise {
-   if k == "boolean" {
-    define literal_boolean_node := node("boolean", v, "", "", ln)
-    return result(literal_boolean_node, pos + 1, "")
-   } otherwise {
-    if k == "identifier" {
-     define literal_name_node := node("name", v, "", "", ln)
-     return result(literal_name_node, pos + 1, "")
-    } otherwise {
-     if v == "(" {
-      define inner := parse_expr(tokens, pos + 1)
-      if get(inner, "error") != "" {
-       return inner
-      }
-      define after := get(inner, "pos")
-      if after >= len(tokens) or token_value(tokens, after) != ")" {
-       return result("", after, "expected closing parenthesis")
-      }
-      define inner_ast := get(inner, "ast")
-      return result(inner_ast, after + 1, "")
-     } otherwise {
-      return result("", pos, "expected expression")
-     }
-    }
-   }
+ if k == "number" or k == "string" or k == "boolean" {
+  define literal_kind := k
+  if k == "number" {
+   literal_kind := "integer"
   }
+  define literal_node := node(literal_kind, v, "", "", ln)
+  return result(literal_node, pos + 1, "")
  }
+ if k == "identifier" {
+  define name_node := node("name", v, "", "", ln)
+  return result(name_node, pos + 1, "")
+ }
+ if v == "(" {
+  define inner := parse_expr(tokens, pos + 1)
+  if get(inner, "error") != "" {
+   return inner
+  }
+  define after := get(inner, "pos")
+  if after >= len(tokens) or token_value(tokens, after) != ")" {
+   return result("", after, "expected closing parenthesis")
+  }
+  define inner_ast := get(inner, "ast")
+  return result(inner_ast, after + 1, "")
+ }
+ return result("", pos, "expected expression")
 }
 fn parse_mul(tokens, pos) {
  define left_result := parse_primary(tokens, pos)
