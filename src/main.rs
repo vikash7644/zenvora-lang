@@ -2424,6 +2424,92 @@ fn serialize_bytecode_v2(code: &[Op], layout: &bytecode_v2::ProgramLayout) -> Re
     bytecode_v2::serialize_v2_file(&file)
 }
 
+fn contract_abi_and_artifact(source: &str) -> Result<serde_json::Value, String> {
+    let (code, layout) = compile_with_layout(source)?;
+    let bytecode = serialize_bytecode_v2(&code, &layout)?;
+    let mut contract_name = None;
+    let mut states = Vec::new();
+    let mut methods = Vec::new();
+    let mut in_contract = false;
+    for raw in source.lines() {
+        let line = raw.trim();
+        if !in_contract {
+            if let Some(name) = line.strip_prefix("contract ").and_then(|rest| rest.strip_suffix('{')) {
+                if contract_name.is_some() {
+                    return Err("contract artifacts currently support one contract per source file".into());
+                }
+                contract_name = Some(name.trim().to_string());
+                in_contract = true;
+            }
+            continue;
+        }
+        if line == "}" {
+            in_contract = false;
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("state ") {
+            let (name, _) = rest.split_once(":=").ok_or_else(|| "malformed contract state declaration".to_string())?;
+            states.push(serde_json::json!({"name": name.trim(), "type": "integer"}));
+            continue;
+        }
+        for (kind, prefix) in [("action", "action "), ("view", "view ")] {
+            if let Some(header) = line.strip_prefix(prefix).and_then(|rest| rest.strip_suffix('{')) {
+                let (name, args) = header.trim().split_once('(')
+                    .ok_or_else(|| format!("malformed {kind} declaration"))?;
+                let args = args.strip_suffix(')').ok_or_else(|| format!("malformed {kind} parameters"))?;
+                let parameters: Vec<serde_json::Value> = if args.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    args.split(',').map(|arg| {
+                        let name = arg.trim();
+                        if valid_identifier(name) {
+                            Ok(serde_json::json!({"name": name, "type": "dynamic"}))
+                        } else {
+                            Err(format!("invalid {kind} parameter '{name}'"))
+                        }
+                    }).collect::<Result<_, _>>()?
+                };
+                methods.push(serde_json::json!({
+                    "name": name.trim(),
+                    "kind": kind,
+                    "inputs": parameters,
+                    "outputs": if kind == "view" { serde_json::json!([{"type":"dynamic"}]) } else { serde_json::json!([]) }
+                }));
+                break;
+            }
+        }
+    }
+    let name = contract_name.ok_or_else(|| "source contains no contract declaration".to_string())?;
+    if in_contract {
+        return Err("contract is missing its closing brace".into());
+    }
+    let source_hash = Sha256::digest(source.as_bytes());
+    let source_hash = source_hash.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    Ok(serde_json::json!({
+        "format": "ZENVORA_CONTRACT_ARTIFACT_V1",
+        "compiler_version": env!("CARGO_PKG_VERSION"),
+        "contract": name,
+        "source_sha256": source_hash,
+        "abi": {"version": 1, "states": states, "methods": methods},
+        "bytecode_v2": bytecode
+    }))
+}
+
+fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), String> {
+    let source = read_program(source_path)?;
+    let artifact = contract_abi_and_artifact(&source)?;
+    let json = serde_json::to_string_pretty(&artifact)
+        .map_err(|error| format!("cannot encode contract artifact: {error}"))?;
+    let temp_path = format!("{output_path}.tmp");
+    fs::write(&temp_path, format!("{json}\n"))
+        .map_err(|error| format!("cannot write temporary artifact: {error}"))?;
+    fs::rename(&temp_path, output_path)
+        .map_err(|error| {
+            let _ = fs::remove_file(&temp_path);
+            format!("cannot install artifact at {output_path}: {error}")
+        })
+}
+
 fn write_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String> {
     let source = read_program(source_path)?;
     let (code, layout) = compile_with_layout(&source)?;
@@ -3046,6 +3132,7 @@ fn main() {
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
+        [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
             let source = read_program(path).unwrap_or_else(|error| {
@@ -3055,7 +3142,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
