@@ -1,0 +1,195 @@
+# Zenvora-written recursive-descent parser foundation.
+# Current supported statements: define name := expression; show expression.
+# Expressions: literals, names, parentheses, *, /, +, -, comparisons, and/or.
+use "token_stream.zv"
+
+fn node(kind, value, left, right, line) {
+ return map("kind", kind, "value", value, "left", left, "right", right, "line", line)
+}
+fn result(ast, pos, err) {
+ return map("ast", ast, "pos", pos, "error", err)
+}
+fn at(tokens, pos) {
+ return get(tokens, pos)
+}
+fn val(tokens, pos) {
+ return get(at(tokens, pos), "value")
+}
+fn line_at(tokens, pos) {
+ return get(at(tokens, pos), "line")
+}
+fn kind_at(tokens, pos) {
+ return get(at(tokens, pos), "kind")
+}
+
+fn parse_primary(tokens, pos) {
+ if pos >= len(tokens) {
+  return result(null, pos, "expected expression")
+ }
+ define t := at(tokens, pos)
+ define k := get(t, "kind")
+ define v := get(t, "value")
+ define ln := get(t, "line")
+ if k == "number" {
+  return result(node("integer", v, null, null, ln), pos + 1, "")
+ }
+ if k == "string" {
+  return result(node("string", v, null, null, ln), pos + 1, "")
+ }
+ if k == "boolean" {
+  return result(node("boolean", v, null, null, ln), pos + 1, "")
+ }
+ if k == "identifier" {
+  return result(node("name", v, null, null, ln), pos + 1, "")
+ }
+ if v == "(" {
+  define inner := parse_expr(tokens, pos + 1)
+  if get(inner, "error") != "" {
+   return inner
+  }
+  define after := get(inner, "pos")
+  if after >= len(tokens) or val(tokens, after) != ")" {
+   return result(null, after, "expected closing parenthesis")
+  }
+  return result(get(inner, "ast"), after + 1, "")
+ }
+ return result(null, pos, "expected expression")
+}
+
+fn parse_mul(tokens, pos) {
+ define left_result := parse_primary(tokens, pos)
+ if get(left_result, "error") != "" {
+  return left_result
+ }
+ define left := get(left_result, "ast")
+ define next := get(left_result, "pos")
+ define ln := get(left, "line")
+ repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "*" or val(tokens, next) == "/") {
+  define op := val(tokens, next)
+  define right_result := parse_primary(tokens, next + 1)
+  if get(right_result, "error") != "" {
+   return right_result
+  }
+  left := node("binary", op, left, get(right_result, "ast"), ln)
+  next := get(right_result, "pos")
+ }
+ return result(left, next, "")
+}
+
+fn parse_add(tokens, pos) {
+ define left_result := parse_mul(tokens, pos)
+ if get(left_result, "error") != "" {
+  return left_result
+ }
+ define left := get(left_result, "ast")
+ define next := get(left_result, "pos")
+ define ln := get(left, "line")
+ repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "+" or val(tokens, next) == "-") {
+  define op := val(tokens, next)
+  define right_result := parse_mul(tokens, next + 1)
+  if get(right_result, "error") != "" {
+   return right_result
+  }
+  left := node("binary", op, left, get(right_result, "ast"), ln)
+  next := get(right_result, "pos")
+ }
+ return result(left, next, "")
+}
+
+fn parse_compare(tokens, pos) {
+ define left_result := parse_add(tokens, pos)
+ if get(left_result, "error") != "" {
+  return left_result
+ }
+ define left := get(left_result, "ast")
+ define next := get(left_result, "pos")
+ define ln := get(left, "line")
+ repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "==" or val(tokens, next) == "!=" or val(tokens, next) == "<" or val(tokens, next) == "<=" or val(tokens, next) == ">" or val(tokens, next) == ">=") {
+  define op := val(tokens, next)
+  define right_result := parse_add(tokens, next + 1)
+  if get(right_result, "error") != "" {
+   return right_result
+  }
+  left := node("binary", op, left, get(right_result, "ast"), ln)
+  next := get(right_result, "pos")
+ }
+ return result(left, next, "")
+}
+
+fn parse_expr(tokens, pos) {
+ define left_result := parse_compare(tokens, pos)
+ if get(left_result, "error") != "" {
+  return left_result
+ }
+ define left := get(left_result, "ast")
+ define next := get(left_result, "pos")
+ define ln := get(left, "line")
+ repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "and" or val(tokens, next) == "or") {
+  define op := val(tokens, next)
+  define right_result := parse_compare(tokens, next + 1)
+  if get(right_result, "error") != "" {
+   return right_result
+  }
+  left := node("binary", op, left, get(right_result, "ast"), ln)
+  next := get(right_result, "pos")
+ }
+ return result(left, next, "")
+}
+
+fn parse_program(tokens) {
+ define ast := array()
+ define pos := 0
+ define err := ""
+ repeat pos < len(tokens) and err == "" {
+  define start := at(tokens, pos)
+  define ln := get(start, "line")
+  define kw := get(start, "value")
+  if kw == "define" {
+   if pos + 2 >= len(tokens) {
+    err := "incomplete define statement"
+   } otherwise {
+    define name_token := at(tokens, pos + 1)
+    if get(name_token, "kind") != "identifier" or val(tokens, pos + 2) != ":=" {
+     err := "expected define name := expression"
+    } otherwise {
+     define expr := parse_expr(tokens, pos + 3)
+     if get(expr, "error") != "" {
+      err := get(expr, "error")
+     } otherwise {
+      if get(expr, "pos") == pos + 3 {
+       err := "expected expression after :="
+      } otherwise {
+       ast := push(ast, node("define", get(name_token, "value"), get(expr, "ast"), null, ln))
+       pos := get(expr, "pos")
+      }
+     }
+    }
+   }
+  } otherwise {
+   if kw == "show" {
+    define expr := parse_expr(tokens, pos + 1)
+    if get(expr, "error") != "" {
+     err := get(expr, "error")
+    } otherwise {
+     if get(expr, "pos") == pos + 1 {
+      err := "expected expression after show"
+     } otherwise {
+      ast := push(ast, node("show", "", get(expr, "ast"), null, ln))
+      pos := get(expr, "pos")
+     }
+    }
+   } otherwise {
+    err := "unsupported statement"
+   }
+  }
+  if pos < len(tokens) and line_at(tokens, pos) == ln and err == "" {
+   err := "unexpected token at end of statement"
+  }
+ }
+ return map("ast", ast, "error", err)
+}
+
+define sample := "define answer := 2 + 3 * 4\nshow answer\n"
+define lexed := lex(sample)
+define parsed := parse_program(get(lexed, "tokens"))
+show parsed
