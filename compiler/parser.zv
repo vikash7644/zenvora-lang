@@ -634,7 +634,7 @@ fn lower_expression(ast) {
  define kind := get(ast, "kind")
  define value := get(ast, "value")
  if kind == "number" or kind == "string" or kind == "boolean" {
-  out := push(out, map("op", "const", "value", value, "line", get(ast, "line")))
+  out := push(out, map("op", "const", "value", value, "type", kind, "line", get(ast, "line")))
  } otherwise {
   if kind == "name" {
    out := push(out, map("op", "load", "name", value, "line", get(ast, "line")))
@@ -748,7 +748,7 @@ fn emit_expression(code_ir) {
   define item := get(code_ir, pos)
   define op := get(item, "op")
   if op == "const" {
-   out := push(out, map("op", "push_const", "value", get(item, "value"), "line", get(item, "line")))
+   out := push(out, map("op", "push_const", "value", get(item, "value"), "type", get(item, "type"), "line", get(item, "line")))
   } otherwise {
    if op == "load" {
     out := push(out, map("op", "load", "name", get(item, "name"), "line", get(item, "line")))
@@ -1117,6 +1117,178 @@ show get(bad_fn_param_parse, "error")
 show get(bad_fn_block_parse, "error")
 show parsed
 
+
+# Minimal Zenvora-written bytecode-plan VM. This executes emitted instructions in Zenvora,
+# rather than asking the Rust reference VM to execute the plan.
+fn pop_stack(stack) {
+ if len(stack) == 0 {
+  return map("stack", stack, "value", "", "error", "operand stack underflow")
+ }
+ define last := get(stack, len(stack) - 1)
+ define rest := array()
+ define i := 0
+ repeat i < len(stack) - 1 {
+  rest := push(rest, get(stack, i))
+  i := i + 1
+ }
+ return map("stack", rest, "value", last, "error", "")
+}
+fn vm_truthy(value) {
+ return value == true
+}
+fn vm_binary(operator, left, right) {
+ if operator == "+" {
+  if type_of(left) == "string" or type_of(right) == "string" {
+   return map("value", to_string(left) + to_string(right), "error", "")
+  }
+  return map("value", left + right, "error", "")
+ } otherwise {
+  if operator == "-" { return map("value", left - right, "error", "") } otherwise {
+   if operator == "*" { return map("value", left * right, "error", "") } otherwise {
+    if operator == "/" {
+     if right == 0 { return map("value", 0, "error", "division by zero") }
+     return map("value", left / right, "error", "")
+    } otherwise {
+     if operator == "==" { return map("value", left == right, "error", "") } otherwise {
+      if operator == "!=" { return map("value", left != right, "error", "") } otherwise {
+       if operator == "<" { return map("value", left < right, "error", "") } otherwise {
+        if operator == "<=" { return map("value", left <= right, "error", "") } otherwise {
+         if operator == ">" { return map("value", left > right, "error", "") } otherwise {
+          if operator == ">=" { return map("value", left >= right, "error", "") } otherwise {
+           if operator == "and" { return map("value", left and right, "error", "") } otherwise {
+            if operator == "or" { return map("value", left or right, "error", "") }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+ return map("value", "", "error", "unsupported binary operator: " + operator)
+}
+fn execute_plan_code(code, initial_env, initial_output) {
+ define env := initial_env
+ define output := initial_output
+ define stack := array()
+ define pc := 0
+ define err := ""
+ repeat pc < len(code) and err == "" {
+  define ins := get(code, pc)
+  define op := get(ins, "op")
+  if op == "push_const" {
+   define value := get(ins, "value")
+   if get(ins, "type") == "number" { value := to_int(value) } otherwise {
+    if get(ins, "type") == "boolean" { value := value == "true" }
+   }
+   stack := push(stack, value)
+  } otherwise {
+   if op == "load" {
+    define name := get(ins, "name")
+    if not contains(env, name) {
+     err := "undefined variable: " + name
+    } otherwise {
+     stack := push(stack, get(env, name))
+    }
+   } otherwise {
+    if op == "declare" or op == "store" {
+     define popped := pop_stack(stack)
+     stack := get(popped, "stack")
+     if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
+      env := put(env, get(ins, "name"), get(popped, "value"))
+     }
+    } otherwise {
+     if op == "print" {
+      define popped := pop_stack(stack)
+      stack := get(popped, "stack")
+      if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
+       output := push(output, to_string(get(popped, "value")))
+      }
+     } otherwise {
+      if op == "unary" {
+       define popped := pop_stack(stack)
+       stack := get(popped, "stack")
+       if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
+        define value := get(popped, "value")
+        define operator := get(ins, "operator")
+        if operator == "-" { stack := push(stack, 0 - value) } otherwise {
+         if operator == "!" or operator == "not" { stack := push(stack, not value) } otherwise {
+          err := "unsupported unary operator: " + operator
+         }
+        }
+       }
+      } otherwise {
+       if op == "binary" {
+        define right := pop_stack(stack)
+        stack := get(right, "stack")
+        define left := pop_stack(stack)
+        stack := get(left, "stack")
+        if get(right, "error") != "" or get(left, "error") != "" {
+         err := "operand stack underflow"
+        } otherwise {
+         define evaluated := vm_binary(get(ins, "operator"), get(left, "value"), get(right, "value"))
+         if get(evaluated, "error") != "" { err := get(evaluated, "error") } otherwise {
+          stack := push(stack, get(evaluated, "value"))
+         }
+        }
+       } otherwise {
+        if op == "index" {
+         define index_value := pop_stack(stack)
+         stack := get(index_value, "stack")
+         define collection := pop_stack(stack)
+         stack := get(collection, "stack")
+         if get(index_value, "error") != "" or get(collection, "error") != "" {
+          err := "operand stack underflow"
+         } otherwise {
+          define index := get(index_value, "value")
+          define target := get(collection, "value")
+          if type_of(index) != "integer" or index < 0 or index >= len(target) {
+           err := "invalid collection index"
+          } otherwise {
+           stack := push(stack, get(target, index))
+          }
+         }
+        } otherwise {
+         if op == "jump" {
+          pc := get(ins, "target") - 1
+         } otherwise {
+          if op == "jump_if_false" {
+           define popped := pop_stack(stack)
+           stack := get(popped, "stack")
+           if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
+            if not get(popped, "value") { pc := get(ins, "target") - 1 }
+           }
+          } otherwise {
+           if op == "return" {
+            pc := len(code)
+           } otherwise {
+            err := "unsupported VM opcode: " + op
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+  pc := pc + 1
+ }
+ return map("environment", env, "output", output, "error", err)
+}
+fn execute_bytecode_plan(plan) {
+ define verification := verify_bytecode_plan(plan)
+ if not get(verification, "ok") {
+  return map("ok", false, "output", array(), "error", get(verification, "error"))
+ }
+ define executed := execute_plan_code(get(plan, "main"), map(), array())
+ return map("ok", get(executed, "error") == "", "output", get(executed, "output"), "error", get(executed, "error"), "environment", get(executed, "environment"))
+}
+
 # Exercise the Zenvora-written AST-to-IR lowering on the parsed source above.
 define lowered_ir := lower_program(parsed_ast)
 show "ZENVORA_IR"
@@ -1143,3 +1315,12 @@ show get(invalid_return_result, "error")
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
 show bytecode_verification
+define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nif answer > 10 {\nshow 99\n} otherwise {\nshow 0\n}\nrepeat answer > 12 {\nanswer := answer - 1\n}\nshow answer\n"
+define runnable_lexed := lex(runnable_source)
+define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
+define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
+define runnable_plan := emit_bytecode_plan(runnable_ir)
+define runnable_result := execute_bytecode_plan(runnable_plan)
+show "ZENVORA_VM"
+show runnable_result
+
