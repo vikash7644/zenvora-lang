@@ -1456,6 +1456,21 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 _ => unreachable!(),
             }
         }
+        "char_at" => {
+            arity(2)?;
+            let Value::Str(value) = &args[0] else {
+                return Err("type error: char_at expects a string as its first argument".into());
+            };
+            let Value::Int(index) = args[1] else {
+                return Err("type error: char_at expects an integer index".into());
+            };
+            if index < 0 {
+                return Err("char_at index must be non-negative".into());
+            }
+            value.chars().nth(index as usize)
+                .map(|ch| Value::Str(ch.to_string()))
+                .ok_or_else(|| "char_at index is out of range".to_string())
+        }
         "to_int" => {
             arity(1)?;
             match &args[0] {
