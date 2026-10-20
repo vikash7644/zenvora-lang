@@ -80,3 +80,11 @@ jobs:
           grep -F 'expected closing parenthesis' parser-output.txt
           grep -F 'expected function parameter name' parser-output.txt
           grep -F 'expected closing brace' parser-output.txt
+          grep -F 'ZENVORA_IR' parser-output.txt
+          grep -F 'declare' parser-output.txt
+          grep -F 'branch' parser-output.txt
+          grep -F 'loop' parser-output.txt
+          grep -F 'function' parser-output.txt
+          grep -F 'binary' parser-output.txt
+          grep -F 'call' parser-output.txt
+          grep -F 'return' parser-output.txt
