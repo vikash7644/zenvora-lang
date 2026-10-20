@@ -11,6 +11,9 @@ assert.match(html, /data-example="stdlib"/, "standard library example button exi
 assert.match(html, /id="terminal-command"/, "terminal command input exists");
 assert.match(html, /Zenvora Helper \(offline\)/, "offline helper limitation is disclosed");
 assert.match(html, /terminalNative/, "optional native Rust API integration exists");
+assert.match(html, /id="run-native"/, "direct Rust VM run button exists");
+assert.match(html, /runNativeFromEditor/, "direct Rust VM runner is wired to the editor");
+assert.match(html, /RUST VM UNAVAILABLE/, "local Rust API failure is reported honestly");
 assert.match(html, /127\.0\.0\.1:8787/, "native API uses the documented loopback endpoint");
 assert.match(html, /cargo run -- --compiler-api/, "native API startup instructions are present");
 
@@ -28,7 +31,7 @@ class FakeElement {
   click() { assert.ok(this.listeners.click, "expected click handler"); return this.listeners.click(); }
 }
 
-const ids = ["code", "output", "status", "run", "reset", "copy", "terminal-form", "terminal-command", "terminal-output"];
+const ids = ["code", "output", "status", "run", "run-native", "reset", "copy", "terminal-form", "terminal-command", "terminal-output"];
 const elements = Object.fromEntries(ids.map(id => [id, new FakeElement()]));
 const editorMatch = html.match(/<textarea id="code"[^>]*>([\s\S]*?)<\/textarea>/);
 assert.ok(editorMatch, "playground editor exists");
