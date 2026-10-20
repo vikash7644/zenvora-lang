@@ -62,3 +62,4 @@ jobs:
           grep -F 'define' parser-output.txt
           grep -F 'show' parser-output.txt
           grep -F 'error' parser-output.txt
+          grep -F 'unsupported statement' parser-output.txt
