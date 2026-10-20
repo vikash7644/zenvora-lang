@@ -18,10 +18,6 @@ fn val(tokens, pos) {
 fn line_at(tokens, pos) {
  return get(at(tokens, pos), "line")
 }
-fn kind_at(tokens, pos) {
- return get(at(tokens, pos), "kind")
-}
-
 fn parse_primary(tokens, pos) {
  if pos >= len(tokens) {
   return result("", pos, "expected expression")
