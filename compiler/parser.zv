@@ -733,6 +733,146 @@ fn lower_program(ast) {
  return out
 }
 
+# Zenvora-written bytecode-plan emitter. It produces explicit op/operand records and patched jump targets.
+# The reference runtime still owns serialization/verification/execution; this emitter is the next bootstrap stage.
+fn patch_jump(code, index, target) {
+ define old_instruction := get(code, index)
+ code[index] := put(old_instruction, "target", target)
+ return code
+}
+
+fn emit_expression(code_ir) {
+ define out := array()
+ define pos := 0
+ repeat pos < len(code_ir) {
+  define item := get(code_ir, pos)
+  define op := get(item, "op")
+  if op == "const" {
+   out := push(out, map("op", "push_const", "value", get(item, "value"), "line", get(item, "line")))
+  } otherwise {
+   if op == "load" {
+    out := push(out, map("op", "load", "name", get(item, "name"), "line", get(item, "line")))
+   } otherwise {
+    if op == "unary" {
+     out := push(out, map("op", "unary", "operator", get(item, "operator"), "line", get(item, "line")))
+    } otherwise {
+     if op == "binary" {
+      out := push(out, map("op", "binary", "operator", get(item, "operator"), "line", get(item, "line")))
+     } otherwise {
+      if op == "index" {
+       out := push(out, map("op", "index", "line", get(item, "line")))
+      } otherwise {
+       if op == "call" {
+        out := push(out, map("op", "call", "name", get(item, "name"), "argc", get(item, "argc"), "line", get(item, "line")))
+       } otherwise {
+        out := push(out, map("op", "compile_error", "message", "unsupported expression IR", "kind", op, "line", get(item, "line")))
+       }
+      }
+     }
+    }
+   }
+  }
+  pos := pos + 1
+ }
+ return out
+}
+
+fn emit_statements(ir) {
+ define out := array()
+ define pos := 0
+ repeat pos < len(ir) {
+  define item := get(ir, pos)
+  define op := get(item, "op")
+  define line := get(item, "line")
+  if op == "declare" or op == "store" or op == "print" or op == "return" {
+   out := append_instructions(out, emit_expression(get(item, "code")))
+   if op == "declare" {
+    out := push(out, map("op", "declare", "name", get(item, "name"), "line", line))
+   } otherwise {
+    if op == "store" {
+     out := push(out, map("op", "store", "name", get(item, "name"), "line", line))
+    } otherwise {
+     if op == "print" {
+      out := push(out, map("op", "print", "line", line))
+     } otherwise {
+      out := push(out, map("op", "return", "line", line))
+     }
+    }
+   }
+  } otherwise {
+   if op == "branch" {
+    out := append_instructions(out, emit_expression(get(item, "condition")))
+    define false_jump := len(out)
+    out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
+    out := append_instructions(out, emit_statements(get(item, "then")))
+    define otherwise := get(item, "otherwise")
+    if len(otherwise) > 0 {
+     define end_jump := len(out)
+     out := push(out, map("op", "jump", "target", -1, "line", line))
+     out := patch_jump(out, false_jump, len(out))
+     out := append_instructions(out, emit_statements(otherwise))
+     out := patch_jump(out, end_jump, len(out))
+    } otherwise {
+     out := patch_jump(out, false_jump, len(out))
+    }
+   } otherwise {
+    if op == "loop" {
+     define loop_start := len(out)
+     out := append_instructions(out, emit_expression(get(item, "condition")))
+     define exit_jump := len(out)
+     out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
+     define body_start := len(out)
+     out := append_instructions(out, emit_statements(get(item, "body")))
+     out := push(out, map("op", "jump", "target", loop_start, "line", line))
+     define loop_end := len(out)
+     out := patch_jump(out, exit_jump, loop_end)
+     define scan := body_start
+     repeat scan < loop_end {
+      define candidate := get(out, scan)
+      if get(candidate, "op") == "break" {
+       out[scan] := map("op", "jump", "target", loop_end, "line", get(candidate, "line"))
+      } otherwise {
+       if get(candidate, "op") == "continue" {
+        out[scan] := map("op", "jump", "target", loop_start, "line", get(candidate, "line"))
+       }
+      }
+      scan := scan + 1
+     }
+    } otherwise {
+     if op == "break" or op == "continue" {
+      out := push(out, map("op", op, "line", line))
+     } otherwise {
+      if op == "function" {
+       out := push(out, map("op", "nested_function", "name", get(item, "name"), "line", line))
+      } otherwise {
+       out := push(out, map("op", "compile_error", "message", "unsupported statement IR", "kind", op, "line", line))
+      }
+     }
+    }
+   }
+  }
+  pos := pos + 1
+ }
+ return out
+}
+
+fn emit_bytecode_plan(ir) {
+ define main := array()
+ define functions := array()
+ define pos := 0
+ repeat pos < len(ir) {
+  define item := get(ir, pos)
+  if get(item, "op") == "function" {
+   define function_code := emit_statements(get(item, "body"))
+   functions := push(functions, map("name", get(item, "name"), "parameters", get(item, "parameters"), "code", function_code, "line", get(item, "line")))
+  } otherwise {
+   main := append_instructions(main, emit_statements(array(item)))
+  }
+  pos := pos + 1
+ }
+ return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
+}
+
 define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nfn add(a, b) { if a > 0 { return a + b } otherwise { return b } }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
@@ -812,3 +952,7 @@ show parsed
 define lowered_ir := lower_program(parsed_ast)
 show "ZENVORA_IR"
 show lowered_ir
+
+define bytecode_plan := emit_bytecode_plan(lowered_ir)
+show "ZENVORA_BYTECODE_PLAN"
+show bytecode_plan
