@@ -2430,8 +2430,12 @@ fn contract_abi_and_artifact(source: &str) -> Result<serde_json::Value, String> 
     let bytecode = serialize_bytecode_v2(&code, &layout)?;
     let mut contract_name = None;
     let mut states = Vec::new();
+    let mut state_names = HashSet::new();
     let mut methods = Vec::new();
+    let mut method_names = HashSet::new();
     let mut in_contract = false;
+    let mut contract_depth = 0i32;
+
     for raw in source.lines() {
         let line = raw.trim();
         if !in_contract {
@@ -2439,49 +2443,74 @@ fn contract_abi_and_artifact(source: &str) -> Result<serde_json::Value, String> 
                 if contract_name.is_some() {
                     return Err("contract artifacts currently support one contract per source file".into());
                 }
-                contract_name = Some(name.trim().to_string());
+                let name = name.trim();
+                if !valid_identifier(name) {
+                    return Err("invalid contract name in artifact source".into());
+                }
+                contract_name = Some(name.to_string());
                 in_contract = true;
             }
+            if in_contract {
+                let (opens, closes) = count_block_braces(raw);
+                contract_depth += opens - closes;
+            }
             continue;
         }
-        if line == "}" {
-            in_contract = false;
-            continue;
-        }
+
         if let Some(rest) = line.strip_prefix("state ") {
             let (name, _) = rest.split_once(":=").ok_or_else(|| "malformed contract state declaration".to_string())?;
-            states.push(serde_json::json!({"name": name.trim(), "type": "integer"}));
-            continue;
-        }
-        for (kind, prefix) in [("action", "action "), ("view", "view ")] {
-            if let Some(header) = line.strip_prefix(prefix).and_then(|rest| rest.strip_suffix('{')) {
-                let (name, args) = header.trim().split_once('(')
-                    .ok_or_else(|| format!("malformed {kind} declaration"))?;
-                let args = args.strip_suffix(')').ok_or_else(|| format!("malformed {kind} parameters"))?;
-                let parameters: Vec<serde_json::Value> = if args.trim().is_empty() {
-                    Vec::new()
-                } else {
-                    args.split(',').map(|arg| {
-                        let name = arg.trim();
-                        if valid_identifier(name) {
-                            Ok(serde_json::json!({"name": name, "type": "dynamic"}))
-                        } else {
-                            Err(format!("invalid {kind} parameter '{name}'"))
-                        }
-                    }).collect::<Result<_, _>>()?
-                };
-                methods.push(serde_json::json!({
-                    "name": name.trim(),
-                    "kind": kind,
-                    "inputs": parameters,
-                    "outputs": if kind == "view" { serde_json::json!([{"type":"dynamic"}]) } else { serde_json::json!([]) }
-                }));
-                break;
+            let name = name.trim();
+            if !valid_identifier(name) {
+                return Err(format!("invalid contract state name '{name}'"));
             }
+            if !state_names.insert(name.to_string()) {
+                return Err(format!("duplicate contract state '{name}'"));
+            }
+            states.push(serde_json::json!({"name": name, "type": "integer"}));
+        } else {
+            for (kind, prefix) in [("action", "action "), ("view", "view ")] {
+                if let Some(header) = line.strip_prefix(prefix).and_then(|rest| rest.strip_suffix('{')) {
+                    let (name, args) = header.trim().split_once('(')
+                        .ok_or_else(|| format!("malformed {kind} declaration"))?;
+                    let name = name.trim();
+                    if !valid_identifier(name) {
+                        return Err(format!("invalid {kind} name '{name}'"));
+                    }
+                    if !method_names.insert(name.to_string()) {
+                        return Err(format!("duplicate contract method '{name}'"));
+                    }
+                    let args = args.strip_suffix(')').ok_or_else(|| format!("malformed {kind} parameters"))?;
+                    let parameters: Vec<serde_json::Value> = if args.trim().is_empty() {
+                        Vec::new()
+                    } else {
+                        args.split(',').map(|arg| {
+                            let name = arg.trim();
+                            if valid_identifier(name) {
+                                Ok(serde_json::json!({"name": name, "type": "dynamic"}))
+                            } else {
+                                Err(format!("invalid {kind} parameter '{name}'"))
+                            }
+                        }).collect::<Result<_, _>>()?
+                    };
+                    methods.push(serde_json::json!({
+                        "name": name,
+                        "kind": kind,
+                        "inputs": parameters,
+                        "outputs": if kind == "view" { serde_json::json!([{"type":"dynamic"}]) } else { serde_json::json!([]) }
+                    }));
+                    break;
+                }
+            }
+        }
+
+        let (opens, closes) = count_block_braces(raw);
+        contract_depth += opens - closes;
+        if contract_depth <= 0 {
+            in_contract = false;
         }
     }
     let name = contract_name.ok_or_else(|| "source contains no contract declaration".to_string())?;
-    if in_contract {
+    if in_contract || contract_depth != 0 {
         return Err("contract is missing its closing brace".into());
     }
     let source_hash = Sha256::digest(source.as_bytes());
@@ -4002,6 +4031,14 @@ mod tests {
         assert!(compile(source).unwrap_err().contains("cannot directly assign to contract state 'count'"));
         let good = "contract Counter {\nstate count := 0\nview current() {\nreturn count\n}\n}\nshow current()\n";
         assert_eq!(execute(good).unwrap(), vec!["0"]);
+    }
+
+    #[test]
+    fn contract_artifact_tracks_methods_after_nested_blocks() {
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\nif amount > 0 {\ncount := count + amount\n} otherwise {\ncount := count - amount\n}\n}\nview current() {\nreturn count\n}\n}\n";
+        let artifact = super::contract_abi_and_artifact(source).unwrap();
+        assert_eq!(artifact["abi"]["methods"].as_array().unwrap().len(), 2);
+        assert_eq!(artifact["abi"]["methods"][1]["name"], "current");
     }
 
     #[test]
