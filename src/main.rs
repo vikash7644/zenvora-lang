@@ -960,7 +960,11 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
             }
         }
         code.extend(body_code);
-        if can_fall_through {
+        // Keep a terminal instruction at the end of every function region.
+        // The v2 verifier also analyzes disconnected unreachable code, so a
+        // source-level statement after an unconditional return must not leave
+        // the function region ending in a fall-through instruction.
+        if can_fall_through || !matches!(code.last(), Some(Op::Return | Op::ReturnValue)) {
             code.push(Op::Return);
         }
         regions.push((entry, code.len(), name.clone(), params.clone()));
@@ -2567,7 +2571,13 @@ fn run_bytecode(path: &str) -> Result<(), String> {
 fn compile_for_vm(source: &str) -> Result<Vec<Op>, String> {
     let (compiled, layout) = compile_with_layout(source)?;
     let bytecode = serialize_bytecode_v2(&compiled, &layout)?;
-    deserialize_bytecode(&bytecode)
+    deserialize_bytecode(&bytecode).map_err(|error| {
+        if error.contains("return instruction outside a function") {
+            "return used outside a function call".to_string()
+        } else {
+            error
+        }
+    })
 }
 
 fn run_chain_command(args: &[String]) -> Result<(), String> {
