@@ -170,9 +170,9 @@ mod tests {
         let temp = TempDir::new();
         for index in 0..=super::MAX_MODULE_DEPTH {
             let source = if index == super::MAX_MODULE_DEPTH {
-                "show 1\\n".to_string()
+                "show 1\n".to_string()
             } else {
-                format!("use \"module_{next}.zv\"\\n", next = index + 1)
+                format!("use \"module_{next}.zv\"\n", next = index + 1)
             };
             fs::write(temp.0.join(format!("module_{index}.zv")), source).unwrap();
         }
@@ -184,8 +184,8 @@ mod tests {
     #[test]
     fn rejects_trailing_text_after_a_quoted_module_path() {
         let temp = TempDir::new();
-        fs::write(temp.0.join("main.zv"), "use \"child.zv\" extra\\n").unwrap();
-        fs::write(temp.0.join("child.zv"), "show 1\\n").unwrap();
+        fs::write(temp.0.join("main.zv"), "use \"child.zv\" extra\n").unwrap();
+        fs::write(temp.0.join("child.zv"), "show 1\n").unwrap();
 
         let error = load(&temp.0.join("main.zv")).unwrap_err();
         assert!(error.contains("unexpected text after module path"), "{error}");
