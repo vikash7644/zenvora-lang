@@ -2570,14 +2570,16 @@ fn run_bytecode(path: &str) -> Result<(), String> {
 /// This makes normal source execution use the compiler -> bytecode -> verifier -> VM path.
 fn compile_for_vm(source: &str) -> Result<Vec<Op>, String> {
     let (compiled, layout) = compile_with_layout(source)?;
-    let bytecode = serialize_bytecode_v2(&compiled, &layout)?;
-    deserialize_bytecode(&bytecode).map_err(|error| {
-        if error.contains("return instruction outside a function") {
-            "return used outside a function call".to_string()
-        } else {
-            error
-        }
-    })
+    let bytecode = serialize_bytecode_v2(&compiled, &layout).map_err(map_vm_compile_error)?;
+    deserialize_bytecode(&bytecode).map_err(map_vm_compile_error)
+}
+
+fn map_vm_compile_error(error: String) -> String {
+    if error.contains("return instruction outside a function") {
+        "return used outside a function call".to_string()
+    } else {
+        error
+    }
 }
 
 fn run_chain_command(args: &[String]) -> Result<(), String> {
