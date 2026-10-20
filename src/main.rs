@@ -4172,4 +4172,40 @@ if total == 7 {
         assert_eq!(actual, expected);
         assert_eq!(actual, vec!["verified"]);
     }
+
+    #[test]
+    fn bytecode_v2_matches_source_for_nested_calls_collections_and_runtime_errors() {
+        let source = r#"define profile := map("name", "Zenvora", "level", 6)
+define updated := put(profile, "level", add(3, 4))
+show get(updated, "level")
+show get(profile, "level")
+show join(array("BHYVORIX", "Chain"), "-")
+show nested(5)
+fn add(left, right) {
+    return left + right
+}
+fn nested(value) {
+    return add(add(value, 1), add(2, 3))
+}
+"#;
+        let expected = execute(source).unwrap();
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec!["7", "6", "BHYVORIX-Chain", "11"]);
+
+        let failing_source = "show 1 / 0\\n";
+        let source_error = execute(failing_source).unwrap_err();
+        let (failing_code, failing_layout) = super::compile_with_layout(failing_source).unwrap();
+        let failing_encoded = super::serialize_bytecode_v2(&failing_code, &failing_layout).unwrap();
+        let failing_decoded = super::deserialize_bytecode_v2(&failing_encoded).unwrap();
+        let mut output = Vec::new();
+        let bytecode_error = super::run_with_output(&failing_decoded, &mut |line| output.push(line)).unwrap_err();
+        assert_eq!(bytecode_error, source_error);
+    }
+
+
 }
