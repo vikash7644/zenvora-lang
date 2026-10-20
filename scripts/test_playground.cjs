@@ -34,7 +34,7 @@ class FakeElement {
   click() { assert.ok(this.listeners.click, "expected click handler"); return this.listeners.click(); }
 }
 
-const ids = ["code", "output", "status", "run", "reset", "copy", "check", "format", "download", "terminal-form", "terminal-input", "terminal-help", "terminal-clear", "terminal-run", "terminal-examples", "chat-status", "chat-messages", "chat-form", "chat-input"];
+const ids = ["code", "output", "status", "run", "run-native", "reset", "copy", "check", "format", "download", "terminal-form", "terminal-input", "terminal-help", "terminal-clear", "terminal-run", "terminal-examples", "chat-status", "chat-messages", "chat-form", "chat-input"];
 const elements = Object.fromEntries(ids.map(id => [id, new FakeElement()]));
 const editorMatch = html.match(/<textarea id="code"[^>]*>([\s\S]*?)<\/textarea>/);
 assert.ok(editorMatch, "playground editor exists");
