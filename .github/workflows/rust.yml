@@ -43,6 +43,9 @@ jobs:
       - name: Validate distributable Rust package
         run: cargo package --locked
 
+      - name: Execute every Zenvora Lang example
+        run: bash scripts/check_examples.sh
+
       - name: Smoke-test optimized release CLI version
         run: ./target/release/zv --version
 
