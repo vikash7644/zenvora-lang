@@ -1,7 +1,6 @@
-# First Zenvora-written compiler component.
-# Stage B0: whitespace-delimited token stream for the bootstrap frontend.
-# Contract: caller supplies source with operators/punctuation separated by spaces.
-# This is deliberately not advertised as the full source lexer.
+# Zenvora-written compiler frontend, stage B0.
+# Input contract: source tokens/operators must already be whitespace-separated.
+# This is a bootstrap component, not yet a complete lexer.
 
 fn tokenize_normalized(source) {
     define raw := split(trim(source), " ")
@@ -18,12 +17,60 @@ fn tokenize_normalized(source) {
     return tokens
 }
 
-fn token_count(source) {
-    return len(tokenize_normalized(source))
+fn token_kind(token) {
+    if token == "define" {
+        return "keyword"
+    }
+    if token == "show" {
+        return "keyword"
+    }
+    if token == "fn" {
+        return "keyword"
+    }
+    if token == "call" {
+        return "keyword"
+    }
+    if token == "return" {
+        return "keyword"
+    }
+    if token == "if" {
+        return "keyword"
+    }
+    if token == "otherwise" {
+        return "keyword"
+    }
+    if token == "repeat" {
+        return "keyword"
+    }
+    if token == "true" or token == "false" {
+        return "boolean"
+    }
+    if token == ":=" or token == "==" or token == "!=" or token == "<" or token == "<=" or token == ">" or token == ">=" {
+        return "operator"
+    }
+    if token == "+" or token == "-" or token == "*" or token == "/" or token == "and" or token == "or" or token == "not" {
+        return "operator"
+    }
+    if token == "(" or token == ")" or token == "[" or token == "]" or token == "{" or token == "}" or token == "," {
+        return "punctuation"
+    }
+    return "atom"
 }
 
-# Smoke fixture: expected tokens are ["define", "answer", ":=", "40", "+", "2"].
+fn classify_normalized(source) {
+    define tokens := tokenize_normalized(source)
+    define typed := array()
+    define index := 0
+
+    repeat index < len(tokens) {
+        define token := get(tokens, index)
+        typed := push(typed, token_kind(token))
+        index := index + 1
+    }
+    return typed
+}
+
+# Smoke fixture: token order and token categories are deterministic.
 define sample := "define answer := 40 + 2"
-define sample_tokens := tokenize_normalized(sample)
-show sample_tokens
-show token_count(sample)
+show tokenize_normalized(sample)
+show classify_normalized(sample)
