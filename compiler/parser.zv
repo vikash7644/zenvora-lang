@@ -10,11 +10,11 @@ fn result(ast, pos, err) {
 fn at(tokens, pos) {
  return get(tokens, pos)
 }
-fn val(tokens, pos) {
+fn token_value(tokens, pos) {
  define t := at(tokens, pos)
  return get(t, "value")
 }
-fn line_at(tokens, pos) {
+fn token_line(tokens, pos) {
  define t := at(tokens, pos)
  return get(t, "line")
 }
@@ -48,7 +48,7 @@ fn parse_primary(tokens, pos) {
    return inner
   }
   define after := get(inner, "pos")
-  if after >= len(tokens) or val(tokens, after) != ")" {
+  if after >= len(tokens) or token_value(tokens, after) != ")" {
    return result("", after, "expected closing parenthesis")
   }
   define inner_ast := get(inner, "ast")
@@ -65,8 +65,8 @@ fn parse_mul(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "*" or val(tokens, next) == "/") {
-  define op := val(tokens, next)
+ repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "*" or token_value(tokens, next) == "/") {
+  define op := token_value(tokens, next)
   define right_result := parse_primary(tokens, next + 1)
   if get(right_result, "error") != "" {
    return right_result
@@ -86,8 +86,8 @@ fn parse_add(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "+" or val(tokens, next) == "-") {
-  define op := val(tokens, next)
+ repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "+" or token_value(tokens, next) == "-") {
+  define op := token_value(tokens, next)
   define right_result := parse_mul(tokens, next + 1)
   if get(right_result, "error") != "" {
    return right_result
@@ -107,8 +107,8 @@ fn parse_compare(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "==" or val(tokens, next) == "!=" or val(tokens, next) == "<" or val(tokens, next) == "<=" or val(tokens, next) == ">" or val(tokens, next) == ">=") {
-  define op := val(tokens, next)
+ repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "==" or token_value(tokens, next) == "!=" or token_value(tokens, next) == "<" or token_value(tokens, next) == "<=" or token_value(tokens, next) == ">" or token_value(tokens, next) == ">=") {
+  define op := token_value(tokens, next)
   define right_result := parse_add(tokens, next + 1)
   if get(right_result, "error") != "" {
    return right_result
@@ -128,8 +128,8 @@ fn parse_expr(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and line_at(tokens, next) == ln and (val(tokens, next) == "and" or val(tokens, next) == "or") {
-  define op := val(tokens, next)
+ repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "and" or token_value(tokens, next) == "or") {
+  define op := token_value(tokens, next)
   define right_result := parse_compare(tokens, next + 1)
   if get(right_result, "error") != "" {
    return right_result
@@ -154,7 +154,7 @@ fn parse_program(tokens) {
     err := "incomplete define statement"
    } otherwise {
     define name_token := at(tokens, pos + 1)
-    if get(name_token, "kind") != "identifier" or val(tokens, pos + 2) != ":=" {
+    if get(name_token, "kind") != "identifier" or token_value(tokens, pos + 2) != ":=" {
      err := "expected define name := expression"
     } otherwise {
      define expr := parse_expr(tokens, pos + 3)
@@ -192,7 +192,7 @@ fn parse_program(tokens) {
     err := "unsupported statement"
    }
   }
-  if pos < len(tokens) and line_at(tokens, pos) == ln and err == "" {
+  if pos < len(tokens) and token_line(tokens, pos) == ln and err == "" {
    err := "unexpected token at end of statement"
   }
  }
