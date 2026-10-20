@@ -10,7 +10,7 @@ fuzz_target!(|data: &[u8]| {
     // Parsing is bounded by MAX_V2_FILE_BYTES before any large decode/allocation.
     let input = String::from_utf8_lossy(data);
     if let Ok(parsed) = bytecode_v2::parse_v2_file(&input) {
-        let _ = bytecode_v2::verify_v2_file(&parsed);
+        let verification_before = bytecode_v2::verify_v2_file(&parsed);
 
         // Exercise the serializer and parser as a round-trip property: every
         // structurally parsed file must serialize and parse back identically.
@@ -19,6 +19,10 @@ fuzz_target!(|data: &[u8]| {
         let reparsed = bytecode_v2::parse_v2_file(&serialized)
             .expect("serialized v2 bytecode must parse successfully");
         assert_eq!(reparsed, parsed, "v2 serialize/parse round-trip changed the file");
-        let _ = bytecode_v2::verify_v2_file(&reparsed);
+        let verification_after = bytecode_v2::verify_v2_file(&reparsed);
+        assert_eq!(
+            verification_after, verification_before,
+            "v2 verification result changed after serialize/parse round-trip"
+        );
     }
 });

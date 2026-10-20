@@ -94,7 +94,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 if source.len() > MAX_SOURCE_BYTES {
                     return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"source exceeds 48 KiB"}));
                 }
-                let result = match super::compile(source) {
+                let result = match super::compile_for_vm(source) {
                     Ok(code) => {
                         let mut lines = Vec::new();
                         match super::run_with_output(&code, &mut |line| lines.push(line)) {

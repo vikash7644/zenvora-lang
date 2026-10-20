@@ -2,7 +2,7 @@
 //! Version 1 deliberately supports integer state only; unsupported state types fail closed.
 use super::contract_gas::GasMeter;
 use super::contract_state::{AccessMode, ContractState};
-use super::{compile, run_with_gas};
+use super::{compile_for_vm, run_with_gas};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionReceipt {
@@ -56,6 +56,32 @@ pub fn execute(
     state: &mut ContractState,
     gas_limit: u64,
 ) -> Result<ExecutionReceipt, String> {
+    let mut gas_used_on_error = 0;
+    execute_inner(source, contract_id, invocation, mode, state, gas_limit, &mut gas_used_on_error)
+}
+
+pub fn execute_with_gas_usage(
+    source: &str,
+    contract_id: &str,
+    invocation: &str,
+    mode: AccessMode,
+    state: &mut ContractState,
+    gas_limit: u64,
+) -> Result<ExecutionReceipt, (String, u64)> {
+    let mut gas_used_on_error = 0;
+    execute_inner(source, contract_id, invocation, mode, state, gas_limit, &mut gas_used_on_error)
+        .map_err(|error| (error, gas_used_on_error))
+}
+
+fn execute_inner(
+    source: &str,
+    contract_id: &str,
+    invocation: &str,
+    mode: AccessMode,
+    state: &mut ContractState,
+    gas_limit: u64,
+    gas_used_on_error: &mut u64,
+) -> Result<ExecutionReceipt, String> {
     let overlay = state.begin(contract_id, mode)?;
     let (contract_name, state_vars, methods, rewritten) = prepare_source(source, state, &overlay)?;
     let (invocation_kind, method_name) = parse_invocation(invocation)?;
@@ -73,10 +99,13 @@ pub fn execute(
     for (name, _) in &state_vars {
         program.push_str(&format!("show {name}\n"));
     }
-    let code = compile(&program)?;
+    let code = compile_for_vm(&program)?;
     let mut output = Vec::new();
     let mut meter = GasMeter::new(gas_limit);
-    run_with_gas(&code, &mut |line| output.push(line), &mut meter)?;
+    let vm_result = run_with_gas(&code, &mut |line| output.push(line), &mut meter);
+    // Preserve deterministic gas accounting even when the VM returns an execution error.
+    *gas_used_on_error = meter.used();
+    vm_result?;
     if output.len() < state_vars.len() {
         return Err("VM did not return all contract state values".into());
     }
@@ -96,6 +125,16 @@ pub fn execute(
     Ok(ExecutionReceipt { output, gas_used: meter.used(), state_root: state.state_root() })
 }
 
+/// Validate a signed transaction's invocation before it is accepted for signing/admission.
+/// Keep this check shared with execution so the signed payload grammar cannot drift.
+pub(super) fn validate_signed_action_invocation(invocation: &str) -> Result<(), String> {
+    let (kind, _) = parse_invocation(invocation)?;
+    if kind != "action" {
+        return Err("signed contract transactions must invoke an action".into());
+    }
+    Ok(())
+}
+
 fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
     let trimmed = invocation.trim();
     if trimmed.contains('\n') || trimmed.contains('\r') {
@@ -113,14 +152,51 @@ fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
         return Err("invocation must be 'call action_name(args)' or 'show view_name(args)'".into());
     };
     let rest = rest.trim();
-    let (name, _) = rest.split_once('(')
+    let (name, args) = rest.split_once('(')
         .ok_or_else(|| "invocation must include method parentheses".to_string())?;
     let name = name.trim();
-    if !rest.ends_with(')') {
-        return Err("contract invocation must end with a closing parenthesis".into());
-    }
     if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err("invalid contract method name".into());
+    }
+
+    // The invocation is embedded into a compiled source program. Validate that its first
+    // top-level closing parenthesis ends the whole invocation, so a signed call cannot smuggle
+    // a second statement after a syntactically valid first call.
+    let mut depth = 1_i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut closing = None;
+    for (offset, ch) in args.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return Err("unbalanced parentheses in contract invocation".into());
+                }
+                if depth == 0 {
+                    closing = Some(offset + 1);
+                    break;
+                }
+            }
+            ';' => return Err("contract invocation must contain exactly one statement".into()),
+            _ => {}
+        }
+    }
+    let closing = closing.ok_or_else(|| "contract invocation is missing its closing parenthesis".to_string())?;
+    if !args[closing..].trim().is_empty() || in_string || depth != 0 {
+        return Err("contract invocation must contain exactly one complete call".into());
     }
     Ok((kind, name))
 }
@@ -277,6 +353,16 @@ mod tests {
         let mut rejected = ContractState::new();
         assert!(replay_block(COUNTER, "counter", &calls, &mut rejected, [0; 32]).is_err());
         assert_eq!(rejected.state_root(), ContractState::new().state_root());
+    }
+
+    #[test]
+    fn invocation_rejects_trailing_statements_and_unbalanced_arguments() {
+        use super::parse_invocation;
+        assert!(parse_invocation("call increment(3); call increment(9)").is_err());
+        assert!(parse_invocation("call increment(3) trailing").is_err());
+        assert!(parse_invocation("call increment((3)").is_err());
+        assert_eq!(parse_invocation("call increment((3 + 1))").unwrap(), ("action", "increment"));
+        assert_eq!(parse_invocation("show current()").unwrap(), ("view", "current"));
     }
 
     #[test]

@@ -19,6 +19,7 @@ mod bytecode_v2;
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
+mod contract_transaction;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -959,7 +960,11 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
             }
         }
         code.extend(body_code);
-        if can_fall_through {
+        // Keep a terminal instruction at the end of every function region.
+        // The v2 verifier also analyzes disconnected unreachable code, so a
+        // source-level statement after an unconditional return must not leave
+        // the function region ending in a fall-through instruction.
+        if can_fall_through || !matches!(code.last(), Some(Op::Return | Op::ReturnValue)) {
             code.push(Op::Return);
         }
         regions.push((entry, code.len(), name.clone(), params.clone()));
@@ -2560,6 +2565,23 @@ fn run_bytecode(path: &str) -> Result<(), String> {
     run(&code)
 }
 
+/// Compile source into canonical bytecode v2, verify the emitted program, decode it
+/// through the same loader used by the VM, and return only executable instructions.
+/// This makes normal source execution use the compiler -> bytecode -> verifier -> VM path.
+fn compile_for_vm(source: &str) -> Result<Vec<Op>, String> {
+    let (compiled, layout) = compile_with_layout(source)?;
+    let bytecode = serialize_bytecode_v2(&compiled, &layout).map_err(map_vm_compile_error)?;
+    deserialize_bytecode(&bytecode).map_err(map_vm_compile_error)
+}
+
+fn map_vm_compile_error(error: String) -> String {
+    if error.contains("return instruction outside a function") {
+        "return used outside a function call".to_string()
+    } else {
+        error
+    }
+}
+
 fn run_chain_command(args: &[String]) -> Result<(), String> {
     use std::path::Path;
     match args {
@@ -3229,7 +3251,7 @@ fn main() {
                 eprintln!("Zenvora error: {error}");
                 process::exit(1)
             });
-            compile(&source).and_then(|code| run(&code))
+            compile_for_vm(&source).and_then(|code| run(&code))
         }
         _ => {
             eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
@@ -3401,14 +3423,14 @@ mod tests {
     }
 
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
-        let code = compile(source)?;
+        let code = super::compile_for_vm(source)?;
         let mut output = Vec::new();
         run_with_output(&code, &mut |line| output.push(line))?;
         Ok(output)
     }
 
     fn execute(source: &str) -> Result<Vec<String>, String> {
-        let code = compile(source)?;
+        let code = super::compile_for_vm(source)?;
         let mut output = Vec::new();
         run_with_output(&code, &mut |line| output.push(line))?;
         Ok(output)
@@ -4265,6 +4287,18 @@ show index_of(array(7, "x", true), false)
 
         std::fs::remove_file(source_path).unwrap();
         std::fs::remove_file(bytecode_path).unwrap();
+    }
+
+    #[test]
+    fn normal_source_execution_runs_verified_compiler_bytecode_in_the_vm() {
+        let source = "define base := 20\nshow double(base + 1)\nfn double(value) {\n return value * 2\n}\n";
+        let compiled = super::compile_for_vm(source).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&compiled, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+
+        let direct = super::compile(source).unwrap();
+        assert_eq!(compiled, direct, "verified bytecode decoding must preserve compiler output");
     }
 
     #[test]
