@@ -1,8 +1,8 @@
 //! Experimental signed contract-call admission and fee settlement.
 //!
-//! This is a local runtime harness, not a consensus protocol. Failed admitted calls consume
-//! the transaction nonce and the full declared fee cap because the current executor does not
-//! expose gas used on errors. Successful calls pay gas_used * gas_price and receive the remainder.
+//! This is a local runtime harness, not a consensus protocol. Admitted failures consume the
+//! transaction nonce; ordinary failures pay measured gas (at least the base charge), while
+//! out-of-gas failures pay the full gas limit. Successful calls pay gas_used * gas_price.
 use std::collections::BTreeMap;
 
 use ed25519_dalek::{Signature, VerifyingKey};
@@ -121,7 +121,8 @@ impl ContractFeeLedger {
 
     /// Verify, reserve, execute, and settle a signed action atomically with respect to contract
     /// state. Invalid admission never mutates state or balances. An admitted execution failure
-    /// leaves contract state untouched but consumes its nonce and fee cap.
+    /// leaves contract state untouched but consumes its nonce and the measured failure fee
+    /// (or the full gas limit for out-of-gas).
     pub fn apply_signed_action(
         &mut self,
         transaction: &SignedContractCall,
