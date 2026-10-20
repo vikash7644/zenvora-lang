@@ -155,6 +155,44 @@ mod tests {
     }
 
     #[test]
+    fn rejects_module_source_that_is_not_utf8() {
+        let temp = TempDir::new();
+        let path = temp.0.join("invalid_utf8.zv");
+        fs::write(&path, [0xff, 0xfe, 0x80]).unwrap();
+
+        let error = load(&path).unwrap_err();
+        assert!(error.contains("module source is not valid UTF-8"), "{error}");
+        assert!(error.contains("invalid_utf8.zv"), "{error}");
+    }
+
+    #[test]
+    fn rejects_import_chains_that_exceed_the_depth_limit() {
+        let temp = TempDir::new();
+        for index in 0..=super::MAX_MODULE_DEPTH {
+            let source = if index == super::MAX_MODULE_DEPTH {
+                "show 1\\n".to_string()
+            } else {
+                format!("use \"module_{next}.zv\"\\n", next = index + 1)
+            };
+            fs::write(temp.0.join(format!("module_{index}.zv")), source).unwrap();
+        }
+
+        let error = load(&temp.0.join("module_0.zv")).unwrap_err();
+        assert!(error.contains("module import depth exceeds safety limit"), "{error}");
+    }
+
+    #[test]
+    fn rejects_trailing_text_after_a_quoted_module_path() {
+        let temp = TempDir::new();
+        fs::write(temp.0.join("main.zv"), "use \"child.zv\" extra\\n").unwrap();
+        fs::write(temp.0.join("child.zv"), "show 1\\n").unwrap();
+
+        let error = load(&temp.0.join("main.zv")).unwrap_err();
+        assert!(error.contains("unexpected text after module path"), "{error}");
+        assert!(error.contains("main.zv:1"), "{error}");
+    }
+
+    #[test]
     fn rejects_oversized_module_source_before_unbounded_reading() {
         let temp = TempDir::new();
         let path = temp.0.join("large.zv");
