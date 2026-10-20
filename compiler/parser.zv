@@ -805,12 +805,12 @@ fn emit_statements(ir) {
     define false_jump := len(out)
     out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
     out := append_instructions(out, emit_statements(get(item, "then")))
-    define otherwise := get(item, "otherwise")
-    if len(otherwise) > 0 {
+    define otherwise_code := get(item, "otherwise")
+    if len(otherwise_code) > 0 {
      define end_jump := len(out)
      out := push(out, map("op", "jump", "target", -1, "line", line))
      out := patch_jump(out, false_jump, len(out))
-     out := append_instructions(out, emit_statements(otherwise))
+     out := append_instructions(out, emit_statements(otherwise_code))
      out := patch_jump(out, end_jump, len(out))
     } otherwise {
      out := patch_jump(out, false_jump, len(out))
