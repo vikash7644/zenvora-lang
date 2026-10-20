@@ -95,26 +95,28 @@ fn prepare_source(
 ) -> Result<(String, Vec<(String, String)>, std::collections::BTreeMap<String, &'static str>, String), String> {
     let mut contract_name = None;
     let mut in_contract = false;
+    let mut contract_depth = 0i32;
     let mut state_vars = Vec::new();
     let mut methods = std::collections::BTreeMap::new();
     let mut rewritten = String::new();
+
     for raw in source.lines() {
         let line = raw.trim();
         if !in_contract {
             if let Some(name) = line.strip_prefix("contract ").and_then(|v| v.strip_suffix('{')) {
+                if contract_name.is_some() {
+                    return Err("only one contract block per source file is currently supported".into());
+                }
                 contract_name = Some(name.trim().to_string());
                 in_contract = true;
+                let (opens, closes) = super::count_block_braces(raw);
+                contract_depth += opens - closes;
             }
             rewritten.push_str(raw);
             rewritten.push('\n');
             continue;
         }
-        if line == "}" {
-            in_contract = false;
-            rewritten.push_str(raw);
-            rewritten.push('\n');
-            continue;
-        }
+
         if let Some(rest) = line.strip_prefix("state ") {
             let (name, initial) = rest.split_once(":=")
                 .ok_or_else(|| format!("invalid state declaration: {line}"))?;
@@ -130,20 +132,36 @@ fn prepare_source(
             ))?;
             state_vars.push((name.to_string(), value.clone()));
             rewritten.push_str(&format!("state {name} := {value}\n"));
+            let (opens, closes) = super::count_block_braces(raw);
+            contract_depth += opens - closes;
+            if contract_depth <= 0 { in_contract = false; }
             continue;
         }
+
         for (kind, prefix) in [("action", "action "), ("view", "view ")] {
             if let Some(header) = line.strip_prefix(prefix).and_then(|v| v.strip_suffix('{')) {
                 let name = header.split_once('(').map(|(name, _)| name.trim())
                     .ok_or_else(|| format!("invalid {kind} header: {line}"))?;
-                methods.insert(name.to_string(), kind);
+                if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                    return Err(format!("invalid {kind} name in contract header: {line}"));
+                }
+                if methods.insert(name.to_string(), kind).is_some() {
+                    return Err(format!("duplicate contract method '{name}'"));
+                }
                 break;
             }
         }
+
         rewritten.push_str(raw);
         rewritten.push('\n');
+        let (opens, closes) = super::count_block_braces(raw);
+        contract_depth += opens - closes;
+        if contract_depth <= 0 { in_contract = false; }
     }
-    if in_contract { return Err("contract is missing its closing brace".into()); }
+
+    if in_contract || contract_depth != 0 {
+        return Err("contract is missing its closing brace".into());
+    }
     let contract_name = contract_name.ok_or_else(|| "source contains no contract declaration".to_string())?;
     if state_vars.is_empty() { return Err("contract must declare at least one state variable in runtime v1".into()); }
     Ok((contract_name, state_vars, methods, rewritten))
@@ -174,6 +192,17 @@ mod tests {
         let before = state.state_root();
         assert!(execute(COUNTER, "counter", "call increment(4)", AccessMode::Action, &mut state, 21_001).is_err());
         assert_eq!(state.state_root(), before);
+    }
+
+    #[test]
+    fn action_with_nested_if_otherwise_persists_state() {
+        let source = "contract Counter {\nstate count := 0\naction add(amount) {\nif amount > 0 {\ncount := count + amount\n} otherwise {\ncount := count - amount\n}\n}\nview current() {\nreturn count\n}\n}\n";
+        let mut state = ContractState::new();
+        execute(source, "counter", "call add(3)", AccessMode::Action, &mut state, 100_000).unwrap();
+        execute(source, "counter", "call add(-2)", AccessMode::Action, &mut state, 100_000).unwrap();
+        let view = execute(source, "counter", "show current()", AccessMode::View, &mut state, 100_000).unwrap();
+        assert_eq!(view.output, vec!["5"]);
+        assert_eq!(state.get("counter", "count").unwrap(), Some(&b"5"[..]));
     }
 
     #[test]
