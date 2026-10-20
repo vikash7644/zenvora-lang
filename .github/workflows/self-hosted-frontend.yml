@@ -49,4 +49,6 @@ jobs:
           grep -F 'identifier' frontend-output.txt
           grep -F 'string' frontend-output.txt
           grep -F 'number' frontend-output.txt
+          grep -F 'boolean' frontend-output.txt
+          grep -F 'punctuation' frontend-output.txt
           grep -F 'error' frontend-output.txt
