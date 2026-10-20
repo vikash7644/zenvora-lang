@@ -73,7 +73,7 @@ jobs:
           grep -F 'jump_if_false' parser-output.txt
           grep -F 'target' parser-output.txt
           grep -F 'parameters' parser-output.txt
-          grep -F 'compile_error' parser-output.txt
+          ! grep -F 'compile_error' parser-output.txt
           grep -F 'break' parser-output.txt
           grep -F 'continue' parser-output.txt
           grep -F 'if' parser-output.txt
