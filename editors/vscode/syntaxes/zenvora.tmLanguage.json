@@ -1,0 +1,163 @@
+{
+  "scopeName": "source.zenvora",
+  "name": "Zenvora Lang",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#function-declarations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#builtins"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.zenvora",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.zenvora",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.zenvora",
+          "match": "\\\\(?:[\"\\\\nrt])"
+        },
+        {
+          "name": "invalid.illegal.escape.zenvora",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "function-declarations": {
+      "patterns": [
+        {
+          "name": "meta.function.zenvora",
+          "begin": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.declaration.function.zenvora"
+            },
+            "2": {
+              "name": "entity.name.function.zenvora"
+            },
+            "3": {
+              "name": "punctuation.section.parameters.begin.zenvora"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.parameters.end.zenvora"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#strings"
+            },
+            {
+              "name": "variable.parameter.zenvora",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.zenvora",
+          "match": "\\b(?:define|show|print|if|otherwise|repeat|break|continue|return|call|use|contract|state|action|view|fn)\\b"
+        },
+        {
+          "name": "keyword.operator.word.zenvora",
+          "match": "\\b(?:and|or|not)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.zenvora",
+          "match": "\\b(?:true|false)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.zenvora",
+          "match": "\\b(?:len|range|array|map|get|push|put|keys|values|first|last|reverse|split|join|type_of|to_string|assert|abs|min|max)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.zenvora",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.zenvora",
+          "match": ":="
+        },
+        {
+          "name": "keyword.operator.comparison.zenvora",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.zenvora",
+          "match": "[+*/-]"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.block.begin.zenvora",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.block.end.zenvora",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.separator.zenvora",
+          "match": "[(),;[\\]]"
+        }
+      ]
+    }
+  }
+}
