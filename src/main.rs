@@ -3,6 +3,7 @@ use std::{env, fs, process};
 use std::path::Path;
 use std::io::Read;
 use ed25519_dalek::{Signer, SigningKey};
+use sha2::{Digest, Sha256};
 
 mod module_loader;
 mod chain_runtime;
