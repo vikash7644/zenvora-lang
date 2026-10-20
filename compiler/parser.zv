@@ -185,8 +185,8 @@ fn parse_program(tokens) {
 
 use "token_stream.zv"
 
-define sample := "define answer := 2 + 3 * 4\nshow answer\n"
-define lexed := lex(sample)
+define parser_source := "define answer := 2 + 3 * 4\nshow answer\n"
+define lexed := lex(parser_source)
 define parsed := parse_program(get(lexed, "tokens"))
 assert(get(lexed, "error") == "", "lexer failed on parser fixture")
 assert(get(parsed, "error") == "", "parser failed on valid fixture")
