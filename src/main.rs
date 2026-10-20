@@ -4335,23 +4335,23 @@ fn factorial(n) {
     #[test]
     fn vm_charges_the_deterministic_gas_schedule_per_executed_instruction() {
         let code = compile("show 1 + 2").unwrap();
-        let mut meter = contract_gas::GasMeter::new(100_000);
+        let mut meter = super::contract_gas::GasMeter::new(100_000);
         let mut output = Vec::new();
-        run_with_gas(&code, &mut |line| output.push(line), &mut meter).unwrap();
+        super::run_with_gas(&code, &mut |line| output.push(line), &mut meter).unwrap();
         assert_eq!(output, vec!["3"]);
-        assert!(meter.used() > contract_gas::BASE_EXECUTION_GAS);
+        assert!(meter.used() > super::contract_gas::BASE_EXECUTION_GAS);
         assert!(meter.used() < meter.limit());
     }
 
     #[test]
     fn vm_stops_before_executing_an_instruction_when_gas_is_exhausted() {
         let code = compile("show 1 + 2").unwrap();
-        let mut meter = contract_gas::GasMeter::new(contract_gas::BASE_EXECUTION_GAS + 1);
+        let mut meter = super::contract_gas::GasMeter::new(super::contract_gas::BASE_EXECUTION_GAS + 1);
         let mut output = Vec::new();
-        let error = run_with_gas(&code, &mut |line| output.push(line), &mut meter).unwrap_err();
+        let error = super::run_with_gas(&code, &mut |line| output.push(line), &mut meter).unwrap_err();
         assert_eq!(error, "out of gas");
         assert!(output.is_empty(), "out-of-gas execution must not print a partial result");
-        assert_eq!(meter.used(), contract_gas::BASE_EXECUTION_GAS + 1);
+        assert_eq!(meter.used(), super::contract_gas::BASE_EXECUTION_GAS + 1);
     }
 
 }
