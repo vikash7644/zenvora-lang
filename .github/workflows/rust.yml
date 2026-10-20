@@ -186,3 +186,20 @@ jobs:
 
       - name: Validate VS Code metadata and TextMate grammar
         run: python scripts/check_vscode_extension.py
+
+      - name: Set up Node.js for VSIX packaging
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Package installable VS Code extension
+        working-directory: editors/vscode
+        run: npx --yes @vscode/vsce package --no-dependencies --out zenvora-lang.vsix
+
+      - name: Upload VS Code extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenvora-vscode-extension
+          path: editors/vscode/zenvora-lang.vsix
+          if-no-files-found: error
+          retention-days: 7
