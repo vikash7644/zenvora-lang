@@ -53,7 +53,7 @@ pub fn is_supported_builtin(name: &str) -> bool {
     matches!(name,
         "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" |
         "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" |
-        "starts_with" | "ends_with" | "split" | "join" | "replace" | "first" | "last" |
+        "starts_with" | "ends_with" | "split" | "join" | "replace" | "char_at" | "first" | "last" |
         "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" |
         "to_int" | "index_of" | "unique" | "assert_eq" | "gcd" | "lcm" | "factorial" |
         "is_prime" | "fibonacci" | "pow_int" | "mean" | "speed" | "density" | "molarity" |
