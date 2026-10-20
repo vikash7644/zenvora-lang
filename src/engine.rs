@@ -40,6 +40,12 @@ impl Engine {
         Ok(ExecutionResult { output, instruction_count })
     }
 
+    /// Load a file and its relative imports, compile it, and verify bytecode without execution.
+    pub fn check_file(path: impl AsRef<Path>) -> Result<usize, String> {
+        let source = super::module_loader::load(path.as_ref())?;
+        Self::check(&source)
+    }
+
     /// Load a file and its relative `use "module.zv"` imports, then run the expanded program.
     pub fn run_file(path: impl AsRef<Path>) -> Result<ExecutionResult, String> {
         let source = super::module_loader::load(path.as_ref())?;
