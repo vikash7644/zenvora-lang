@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           target/debug/zvbuild init build-tool-smoke
           ZENVORA_COMPILER="$PWD/target/debug/zv" target/debug/zvbuild build build-tool-smoke
-          target/debug/zv --run-bytecode build-tool-smoke/build/main.zvb > build-output.txt
+          ZENVORA_COMPILER="$PWD/target/debug/zv" target/debug/zvbuild run build-tool-smoke > build-output.txt
           grep -F 'Hello from Zenvora Build!' build-output.txt
           grep -F '42' build-output.txt
           ZENVORA_COMPILER="$PWD/target/debug/zv" target/debug/zvbuild clean build-tool-smoke
