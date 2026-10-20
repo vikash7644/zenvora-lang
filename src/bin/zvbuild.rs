@@ -50,7 +50,7 @@ fn parse_manifest(text: &str) -> Result<Project, String> {
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
-        println!("Zenvora Build (zvbuild)\nUsage:\n  zvbuild init [project-dir]\n  zvbuild build [project-dir]\n  zvbuild clean [project-dir]\n\nProject manifest: Zenvora.toml (name, entry, output).");
+        println!("Zenvora Build (zvbuild)\nUsage:\n  zvbuild init [project-dir]\n  zvbuild build [project-dir]\n  zvbuild run [project-dir]\n  zvbuild clean [project-dir]\n\nProject manifest: Zenvora.toml (name, entry, output).");
         return Ok(());
     }
     let command = args[0].as_str();
@@ -94,6 +94,27 @@ fn run() -> Result<(), String> {
             println!("Build succeeded: {}", project.name);
             println!("Source: {}", source.display());
             println!("Artifact: {}", output.display());
+            Ok(())
+        }
+        "run" => {
+            let manifest_path = root.join("Zenvora.toml");
+            let manifest = fs::read_to_string(&manifest_path)
+                .map_err(|e| format!("cannot read {}: {e}", manifest_path.display()))?;
+            let project = parse_manifest(&manifest)?;
+            let source = root.join(&project.entry);
+            if !source.is_file() { return Err(format!("entry source does not exist: {}", source.display())); }
+            let output = root.join(&project.output);
+            if let Some(parent) = output.parent() { fs::create_dir_all(parent).map_err(|e| format!("cannot create build directory: {e}"))?; }
+            let compiler = env::var_os("ZENVORA_COMPILER").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("zv"));
+            let check = Command::new(&compiler).arg("--check").arg(&source).status()
+                .map_err(|e| format!("cannot start compiler '{}': {e}; set ZENVORA_COMPILER to the zv executable path", compiler.display()))?;
+            if !check.success() { return Err(format!("compile check failed for project '{}'", project.name)); }
+            let emit = Command::new(&compiler).arg("--emit-bytecode").arg(&source).arg(&output).status()
+                .map_err(|e| format!("cannot start compiler '{}': {e}", compiler.display()))?;
+            if !emit.success() { return Err(format!("bytecode generation failed for project '{}'", project.name)); }
+            let execution = Command::new(&compiler).arg("--run-bytecode").arg(&output).status()
+                .map_err(|e| format!("cannot start compiler '{}': {e}", compiler.display()))?;
+            if !execution.success() { return Err(format!("program execution failed for project '{}'", project.name)); }
             Ok(())
         }
         "clean" => {
