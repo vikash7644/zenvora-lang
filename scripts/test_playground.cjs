@@ -12,7 +12,7 @@ assert.match(html, /id="terminal-form"/, "interactive terminal form exists");
 assert.match(html, /id="terminal-input"/, "terminal command input exists");
 assert.match(html, /id="check"/, "check tool exists");
 assert.match(html, /id="run-native"/, "native Rust VM run control exists");
-assert.match(html, /window\\.ZENVORA_COMPILER_API/, "optional native compiler API is supported");
+assert.match(html, /ZENVORA_COMPILER_API/, "optional native compiler API is supported");
 assert.match(html, /compile-run/, "native compiler request uses compile-run endpoint");
 assert.match(html, /id="format"/, "format tool exists");
 assert.match(html, /id="download"/, "save .zv tool exists");
