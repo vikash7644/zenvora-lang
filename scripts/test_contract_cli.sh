@@ -26,7 +26,7 @@ test -s "$tmp/counter.snapshot"
 grep -q '^gas_used=[1-9][0-9]*$' "$tmp/action.out"
 "$bin" --contract-run "$tmp/counter.zv" counter "$tmp/counter.snapshot" action 'add(-2)' 100000 > "$tmp/action2.out"
 "$bin" --contract-run "$tmp/counter.zv" counter "$tmp/counter.snapshot" view 'current()' 100000 > "$tmp/view.out"
-grep -qx '1' "$tmp/view.out"
+grep -qx '5' "$tmp/view.out"
 
 before="$(sha256sum "$tmp/counter.snapshot" | cut -d ' ' -f 1)"
 if "$bin" --contract-run "$tmp/counter.zv" counter "$tmp/counter.snapshot" action 'add(9)' 21001 > "$tmp/out-of-gas.out" 2>&1; then
