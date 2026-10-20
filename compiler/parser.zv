@@ -250,7 +250,18 @@ fn parse_program(tokens) {
      }
     }
    } otherwise {
-    err := "unsupported statement"
+    if get(start, "kind") == "identifier" and pos + 1 < len(tokens) and get(at(tokens, pos + 1), "value") == ":=" {
+     define expr := parse_expr(tokens, pos + 2)
+     if get(expr, "error") != "" {
+      err := get(expr, "error")
+     } otherwise {
+      define assignment_node := node("assign", get(start, "value"), get(expr, "ast"), "", ln)
+      ast := push(ast, assignment_node)
+      pos := get(expr, "pos")
+     }
+    } otherwise {
+     err := "unsupported statement"
+    }
    }
   }
   if pos < len(tokens) and get(at(tokens, pos), "line") == ln and err == "" {
@@ -433,7 +444,7 @@ fn lex(source) {
  return map("tokens", out, "error", err)
 }
 
-define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\n"
+define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\nanswer := 42\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
 define parsed := parse_program(parser_tokens)
@@ -449,6 +460,7 @@ define call_statement := get(parsed_ast, 4)
 define call_expr := get(call_statement, "left")
 define index_statement := get(parsed_ast, 5)
 define index_expr := get(index_statement, "left")
+define assignment_statement := get(parsed_ast, 6)
 define bad_lexed := lex("define broken :=\n")
 define bad_tokens := get(bad_lexed, "tokens")
 define bad_parse := parse_program(bad_tokens)
@@ -469,6 +481,7 @@ show get(inverted_expr, "kind")
 show get(inverted_expr, "value")
 show get(call_expr, "kind")
 show get(index_expr, "kind")
+show get(assignment_statement, "kind")
 show get(bad_parse, "error")
 show get(bad_call_parse, "error")
 show get(bad_index_parse, "error")
