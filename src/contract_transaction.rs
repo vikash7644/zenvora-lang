@@ -447,8 +447,6 @@ mod tests {
         assert_eq!(ledger.balance(&tx.sender), 99);
         assert!(ledger.receipts().is_empty());
     }
-}
-
 
     #[test]
     fn runtime_failure_after_partial_state_write_rolls_back_contract_state() {
@@ -490,3 +488,4 @@ mod tests {
         assert_eq!(state.state_root(), before_root);
         assert_eq!(ledger.nonce(&tx.sender), 1);
     }
+}
