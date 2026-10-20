@@ -32,5 +32,13 @@
         "path": "./syntaxes/zenvora.tmLanguage.json"
       }
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vikash7644/zenvora-lang.git"
+  },
+  "homepage": "https://github.com/vikash7644/zenvora-lang/tree/main/editors/vscode",
+  "bugs": {
+    "url": "https://github.com/vikash7644/zenvora-lang/issues"
   }
 }
