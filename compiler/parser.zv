@@ -618,7 +618,7 @@ fn lex(source) {
  return map("tokens", out, "error", err)
 }
 
-define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nfn add(a, b) { return a + b }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
+define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nfn add(a, b) { if a > 0 { return a + b } otherwise { return b } }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
 define parsed := parse_program(parser_tokens)
@@ -676,6 +676,9 @@ show get(get(logic_expr, "right"), "value")
 show get(if_statement, "kind")
 show get(repeat_statement, "kind")
 show get(function_statement, "kind")
+show get(function_statement, "value")
+show get(function_statement, "left")
+show get(get(function_statement, "right"), "kind")
 show get(assignment_statement, "kind")
 show get(return_statement, "kind")
 show get(break_statement, "kind")
