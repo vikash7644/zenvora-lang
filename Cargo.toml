@@ -4,6 +4,11 @@ version = "0.8.0"
 edition = "2021"
 description = "Zenvora Lang compiler and bytecode virtual machine"
 license = "MIT"
+homepage = "https://vikash7644.github.io/zenvora-lang/"
+repository = "https://github.com/vikash7644/zenvora-lang"
+readme = "README.md"
+keywords = ["programming-language", "compiler", "virtual-machine"]
+categories = ["command-line-utilities", "development-tools"]
 default-run = "zv"
 
 [[bin]]
