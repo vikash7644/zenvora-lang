@@ -1305,7 +1305,9 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
               }
               fn_index := fn_index + 1
              }
-             if not found_fn and err == "" { err := "undefined function: " + fn_name }
+             if not found_fn and err == "" {
+              err := "undefined function: " + fn_name
+             }
             }
            } otherwise {
             if op == "return" {
