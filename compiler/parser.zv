@@ -1171,9 +1171,6 @@ fn vm_binary(operator, left, right) {
  return map("value", "", "error", "unsupported binary operator: " + operator)
 }
 fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
- if call_depth > 64 {
-  return map("environment", initial_env, "output", initial_output, "error", "function call depth exceeds safety limit", "returned", false, "return_value", "")
- }
  define env := initial_env
  define output := initial_output
  define stack := array()
