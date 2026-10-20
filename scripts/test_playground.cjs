@@ -83,6 +83,7 @@ function terminal(command) {
   return elements["terminal-output"].textContent;
 }
 assert.match(terminal("help"), /Available commands/, "terminal help command");
+assert.ok(terminal("help").split("\n").includes("  run              Run in the browser demo"), "terminal help uses real line breaks");
 assert.match(terminal("ls"), /hello.zv/, "terminal lists virtual workspace");
 assert.match(terminal("chat functions"), /Declare functions/, "offline helper answers language questions");
 assert.match(terminal("check"), /CHECK OK/, "terminal delimiter check");
