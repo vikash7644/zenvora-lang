@@ -3418,7 +3418,7 @@ mod tests {
     }
 
     fn execute(source: &str) -> Result<Vec<String>, String> {
-        let code = compile(source)?;
+        let code = super::compile_for_vm(source)?;
         let mut output = Vec::new();
         run_with_output(&code, &mut |line| output.push(line))?;
         Ok(output)
