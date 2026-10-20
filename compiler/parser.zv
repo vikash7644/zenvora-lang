@@ -1,8 +1,6 @@
 # Zenvora-written recursive-descent parser foundation.
 # Current supported statements: define name := expression; show expression.
 # Expressions: literals, names, parentheses, *, /, +, -, comparisons, and/or.
-use "token_stream.zv"
-
 fn node(kind, value, left, right, line) {
  return map("kind", kind, "value", value, "left", left, "right", right, "line", line)
 }
@@ -184,6 +182,8 @@ fn parse_program(tokens) {
  }
  return map("ast", ast, "error", err)
 }
+
+use "token_stream.zv"
 
 define sample := "define answer := 2 + 3 * 4\nshow answer\n"
 define lexed := lex(sample)
