@@ -4208,4 +4208,39 @@ fn nested(value) {
     }
 
 
+
+    #[test]
+    fn bytecode_v2_matches_source_for_break_continue_and_recursive_returns() {
+        let source = r#"define count := 0
+repeat count < 5 {
+    count := count + 1
+    if count == 2 {
+        continue
+    }
+    show count
+    if count == 4 {
+        break
+    }
+}
+show factorial(6)
+fn factorial(n) {
+    if n <= 1 {
+        return 1
+    } otherwise {
+        return n * factorial(n - 1)
+    }
+}
+"#;
+        let expected = execute(source).unwrap();
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec!["1", "3", "4", "720"]);
+    }
+
+
 }
