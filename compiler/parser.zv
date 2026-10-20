@@ -92,7 +92,8 @@ fn parse_add(tokens, pos) {
   if get(right_result, "error") != "" {
    return right_result
   }
-  left := node("binary", op, left, get(right_result, "ast"), ln)
+  define right_ast := get(right_result, "ast")
+  left := node("binary", op, left, right_ast, ln)
   next := get(right_result, "pos")
  }
  return result(left, next, "")
@@ -112,7 +113,8 @@ fn parse_compare(tokens, pos) {
   if get(right_result, "error") != "" {
    return right_result
   }
-  left := node("binary", op, left, get(right_result, "ast"), ln)
+  define right_ast := get(right_result, "ast")
+  left := node("binary", op, left, right_ast, ln)
   next := get(right_result, "pos")
  }
  return result(left, next, "")
@@ -132,7 +134,8 @@ fn parse_expr(tokens, pos) {
   if get(right_result, "error") != "" {
    return right_result
   }
-  left := node("binary", op, left, get(right_result, "ast"), ln)
+  define right_ast := get(right_result, "ast")
+  left := node("binary", op, left, right_ast, ln)
   next := get(right_result, "pos")
  }
  return result(left, next, "")
