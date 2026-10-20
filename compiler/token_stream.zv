@@ -1,9 +1,19 @@
 # Character-level lexer written in Zenvora. Tokens include kind/value/line/column.
-fn space(c) { return c == " " or c == "\t" or c == "\n" or c == "\r" }
-fn letter(c) { return index_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c) >= 0 }
-fn digit(c) { return index_of("0123456789", c) >= 0 }
-fn word(c) { return letter(c) or digit(c) }
-fn token(k, v, l, c) { return map("kind", k, "value", v, "line", l, "column", c) }
+fn space(c) {
+ return c == " " or c == "\t" or c == "\n" or c == "\r"
+}
+fn letter(c) {
+ return index_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c) >= 0
+}
+fn digit(c) {
+ return index_of("0123456789", c) >= 0
+}
+fn word(c) {
+ return letter(c) or digit(c)
+}
+fn token(k, v, l, c) {
+ return map("kind", k, "value", v, "line", l, "column", c)
+}
 
 fn lex(source) {
  define out := array()
@@ -22,11 +32,19 @@ fn lex(source) {
  repeat i < n and err == "" {
   c := char_at(source, i)
   if space(c) {
-   if c == "\n" { line := line + 1 col := 1 } otherwise { col := col + 1 }
+   if c == "\n" {
+    line := line + 1
+    col := 1
+   } otherwise {
+    col := col + 1
+   }
    i := i + 1
   } otherwise {
    if c == "#" {
-    repeat i < n and char_at(source, i) != "\n" { i := i + 1 col := col + 1 }
+    repeat i < n and char_at(source, i) != "\n" {
+     i := i + 1
+     col := col + 1
+    }
    } otherwise {
     start_line := line
     start_col := col
@@ -38,16 +56,32 @@ fn lex(source) {
      col := col + 1
      repeat i < n and not closed and err == "" {
       c := char_at(source, i)
-      if c == "\"" { closed := true i := i + 1 col := col + 1 } otherwise {
+      if c == "\"" {
+       closed := true
+       i := i + 1
+       col := col + 1
+      } otherwise {
        if c == "\\" {
         i := i + 1
         col := col + 1
-        if i >= n { err := "unterminated escape" } otherwise {
+        if i >= n {
+         err := "unterminated escape"
+        } otherwise {
          d := char_at(source, i)
-         if d == "n" { v := v + "\n" } otherwise {
-          if d == "t" { v := v + "\t" } otherwise {
-           if d == "r" { v := v + "\r" } otherwise {
-            if d == "\"" or d == "\\" { v := v + d } otherwise { err := "unsupported escape" }
+         if d == "n" {
+          v := v + "\n"
+         } otherwise {
+          if d == "t" {
+           v := v + "\t"
+          } otherwise {
+           if d == "r" {
+            v := v + "\r"
+           } otherwise {
+            if d == "\"" or d == "\\" {
+             v := v + d
+            } otherwise {
+             err := "unsupported escape"
+            }
            }
           }
          }
@@ -55,7 +89,9 @@ fn lex(source) {
          col := col + 1
         }
        } otherwise {
-        if c == "\n" { err := "newline in string literal" } otherwise {
+        if c == "\n" {
+         err := "newline in string literal"
+        } otherwise {
          v := v + c
          i := i + 1
          col := col + 1
@@ -63,8 +99,12 @@ fn lex(source) {
        }
       }
      }
-     if err == "" and not closed { err := "unterminated string literal" }
-     if err == "" { out := push(out, token(k, v, start_line, start_col)) }
+     if err == "" and not closed {
+      err := "unterminated string literal"
+     }
+     if err == "" {
+      out := push(out, token(k, v, start_line, start_col))
+     }
     } otherwise {
      if letter(c) {
       k := "identifier"
@@ -76,8 +116,12 @@ fn lex(source) {
       if v == "define" or v == "show" or v == "fn" or v == "call" or v == "return" or v == "if" or v == "otherwise" or v == "repeat" or v == "break" or v == "continue" or v == "use" or v == "contract" or v == "state" or v == "action" or v == "view" {
        k := "keyword"
       } otherwise {
-       if v == "true" or v == "false" { k := "boolean" } otherwise {
-        if v == "and" or v == "or" or v == "not" { k := "operator" }
+       if v == "true" or v == "false" {
+        k := "boolean"
+       } otherwise {
+        if v == "and" or v == "or" or v == "not" {
+         k := "operator"
+        }
        }
       }
       out := push(out, token(k, v, start_line, start_col))
@@ -92,8 +136,10 @@ fn lex(source) {
        out := push(out, token(k, v, start_line, start_col))
       } otherwise {
        d := ""
-       if i + 1 < n { d := char_at(source, i + 1) }
-       if c == ":" and d == "=" or c == "=" and d == "=" or c == "!" and d == "=" or c == "<" and d == "=" or c == ">" and d == "=" {
+       if i + 1 < n {
+        d := char_at(source, i + 1)
+       }
+       if (c == ":" and d == "=") or (c == "=" and d == "=") or (c == "!" and d == "=") or (c == "<" and d == "=") or (c == ">" and d == "=") {
         v := c + d
         k := "operator"
         i := i + 2
@@ -101,10 +147,20 @@ fn lex(source) {
         out := push(out, token(k, v, start_line, start_col))
        } otherwise {
         v := c
-        if c == "+" or c == "-" or c == "*" or c == "/" or c == "=" or c == "<" or c == ">" or c == "!" { k := "operator" } otherwise {
-         if c == "(" or c == ")" or c == "[" or c == "]" or c == "{" or c == "}" or c == "," { k := "punctuation" } otherwise { err := "unexpected character" }
+        if c == "+" or c == "-" or c == "*" or c == "/" or c == "=" or c == "<" or c == ">" or c == "!" {
+         k := "operator"
+        } otherwise {
+         if c == "(" or c == ")" or c == "[" or c == "]" or c == "{" or c == "}" or c == "," {
+          k := "punctuation"
+         } otherwise {
+          err := "unexpected character"
+         }
         }
-        if err == "" { out := push(out, token(k, v, start_line, start_col)) i := i + 1 col := col + 1 }
+        if err == "" {
+         out := push(out, token(k, v, start_line, start_col))
+         i := i + 1
+         col := col + 1
+        }
        }
       }
      }
