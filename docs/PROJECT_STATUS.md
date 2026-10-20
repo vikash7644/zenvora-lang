@@ -47,9 +47,10 @@ Latest verified status: commit `ef45ff34dc05003d58db468c194b4f31413babec` (`ef45
 
 ## Latest verification (2026-10-20)
 
-- Main CI passed on commit `c48cdfb143c74ce92b8e6a512fa8a668fa085292` (run [39363980426](https://github.com/vikash7644/zenvora-lang/actions/runs/39363980426)). This includes compiler/VM check, Clippy, all tests, optimized CLI build, distributable package check, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and the editor-support validation job.
+- Main CI passed on commit `53a04473465ae17c72d7ea42a1a36dda5c56bdb8` (run [39363980426](https://github.com/vikash7644/zenvora-lang/actions/runs/39363980426)). This includes compiler/VM check, Clippy, all tests, optimized CLI build, distributable package check, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and the editor-support validation job.
 - Interpreter MVP CI also passed on the same commit. These green runs verify the current revision's automated checks; they do not remove the documented stable-v1 blockers below.
 - VS Code editor source is in `editors/vscode/`; the extension is not yet published to the Marketplace, and GitHub Linguist recognition remains an upstream task.
+- Added a differential Bytecode v2 test for nested function calls, map/array built-ins, and runtime-error parity with source execution; the full main CI passed after correcting the test fixture.
 
 ## Required CI evidence before calling the current milestone complete
 
