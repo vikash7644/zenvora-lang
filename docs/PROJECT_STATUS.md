@@ -13,17 +13,18 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 ## Current gate: Bytecode v2
 
 - [x] Add regression tests for malformed instruction records, invalid jump operands, builtin stack underflow, `RETURN` in main, function fallthrough, invalid parameter identifiers, and parser/serializer round trips.
-- [x] Add source-vs-bytecode-v2 execution comparison tests for collections/builtins/functions and branch/loop output.
+- [x] Add source-vs-bytecode-v2 execution comparison tests for collections/builtins/functions, branch/loop output, `break`/`continue`, recursive returns, and runtime-error parity.
 - [x] Fix escaped newline sequences in the regression fixtures (commit `b340e2a02240943836d4e2325edb7ea96ade5445`).
 - [x] Correct both source-vs-v2 regression tests to call the v2 decoder, not the legacy v1 decoder (commit `38b701ad9758f9a5fd85dc2a6ee20ed56ce1d67e`).
 - [x] Run and inspect the **latest** main compiler/VM CI on commit `ef45ff34dc05003d58db468c194b4f31413babec` — all jobs and steps passed.
 - [x] Run and inspect the **latest** Bytecode v2 fuzz workflow on the same commit — bounded parser/verifier/serializer fuzz campaign passed.
 - [x] No compile, Clippy, unit-test, fuzz, or example failures were reported by these two workflows on that commit.
 - [ ] Verify verifier coverage for jump/function boundaries, stack underflow, stack depth at control-flow joins, call target/argument counts, return-kind consistency, unreachable regions, and resource limits.
-- [ ] Review the differential suite for edge cases (errors, nested calls, strings, collections, short-circuit branches, loops, and function returns).
+- [x] Review/add differential coverage for nested calls, strings, collections, short-circuit branches, loops, `break`/`continue`, recursive returns, and runtime-error parity.
+- [ ] Expand differential/property testing further and run the bounded Bytecode v2 fuzz workflow against the current release candidate SHA.
 - [ ] Do not call Bytecode v2 stable or production-safe; its format is experimental.
 
-Latest verified status: commit `ef45ff34dc05003d58db468c194b4f31413babec` (`ef45ff3`) has a successful main compiler/VM CI run and a successful Bytecode v2 fuzz run. Main CI passed interpreter tests, compiler/VM tests, Clippy, optimized release CLI build, language examples, bytecode v1/v2 smoke tests, and the Rust compiler HTTP API smoke test. The bounded parser/verifier/serializer fuzz campaign also passed. This verifies these workflows on that commit only; it does not establish that the whole language is release-ready or that Bytecode v2 is stable.
+Latest verified status: commit `42f5eb76cd28818b203d7daca3bf171a3f793d58` (`42f5eb7`) passed main compiler/VM CI run [39364968396](https://github.com/vikash7644/zenvora-lang/actions/runs/39364968396). It passed compile checks, Clippy, all tests, optimized CLI build, distributable package check, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor validation. The current SHA has not yet had a matching Bytecode v2 fuzz run; older fuzz results do not prove fuzz coverage for this revision. This does not establish that the whole language is release-ready or that Bytecode v2 is stable.
 
 ## Language feature and release checklist
 
@@ -42,15 +43,16 @@ Latest verified status: commit `ef45ff34dc05003d58db468c194b4f31413babec` (`ef45
 | Browser playground | Separate JavaScript demo, not the Rust compiler/VM | Clearly disclose parity gaps; decide/build a real WASM or secure backend integration and test it |
 | Websites, games, AI agents | Not supported as full first-class capabilities yet | Needs standard libraries/runtime APIs, project templates, rendering/game support, and safe tool/network integration |
 | Documentation and examples | Existing docs/examples | Reconcile feature claims with executable tests and clearly label prototype limitations |
-| Editor support | VS Code `.zv` language registration, TextMate grammar, bracket/comment configuration, and automated metadata/regex validation implemented; CI passed on `c48cdfb143c74ce92b8e6a512fa8a668fa085292` | Language server, diagnostics, completion, debugging, Marketplace packaging/publishing, and upstream GitHub Linguist recognition are still pending |
+| Editor support | VS Code `.zv` language registration, TextMate grammar, bracket/comment configuration, and automated metadata/regex validation implemented; CI passed on `42f5eb76cd28818b203d7daca3bf171a3f793d58` | Language server, diagnostics, completion, debugging, Marketplace packaging/publishing, and upstream GitHub Linguist recognition are still pending |
 | Release readiness | Not complete | All required CI green on one commit, examples verified, security/limitations reviewed, release checklist completed |
 
 ## Latest verification (2026-10-20)
 
-- Main CI passed on commit `53a04473465ae17c72d7ea42a1a36dda5c56bdb8` (run [39363980426](https://github.com/vikash7644/zenvora-lang/actions/runs/39363980426)). This includes compiler/VM check, Clippy, all tests, optimized CLI build, distributable package check, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and the editor-support validation job.
-- Interpreter MVP CI also passed on the same commit. These green runs verify the current revision's automated checks; they do not remove the documented stable-v1 blockers below.
+- Main CI passed on commit `42f5eb76cd28818b203d7daca3bf171a3f793d58` (run [39364968396](https://github.com/vikash7644/zenvora-lang/actions/runs/39364968396)). This includes compiler/VM check, Clippy, all tests, optimized CLI build, distributable package check, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor-support validation.
+- Interpreter MVP and editor-validation jobs passed on the same commit. The compiler change removes an unnecessary unconditional jump after a terminating `if` branch and computes function fallthrough before relocating local jump targets. This fixed a Bytecode v2 rejection of recursive functions with value returns in both `if/otherwise` branches.
+- Added differential Bytecode v2 tests for nested calls, map/array built-ins, runtime-error parity, `break`/`continue`, and recursive returns. Main CI passes on the current source revision.
 - VS Code editor source is in `editors/vscode/`; the extension is not yet published to the Marketplace, and GitHub Linguist recognition remains an upstream task.
-- Added a differential Bytecode v2 test for nested function calls, map/array built-ins, and runtime-error parity with source execution; the full main CI passed after correcting the test fixture.
+- A matching fuzz workflow for this exact SHA remains a release gate; previous fuzz success is not evidence for the current SHA.
 
 ## Required CI evidence before calling the current milestone complete
 
