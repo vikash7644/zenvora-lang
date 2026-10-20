@@ -3491,6 +3491,14 @@ mod tests {
         assert!(execute("show bmi_x10(70, 0)\n").unwrap_err().contains("must be positive"));
     }
 
+
+    #[test]
+    fn compiler_executes_nested_functions_conditionals_loops_and_expression_precedence() {
+        let source = "define answer := 0\nfn add_or_fallback(a, b) {\nif a > 0 {\nreturn a + b\n} otherwise {\nreturn b\n}\n}\nshow add_or_fallback(2, 3)\nshow add_or_fallback(0, 7)\nrepeat answer < 3 {\nanswer := answer + 1\n}\nshow answer\nshow true or false and false\nshow array(10, 20)[1]\n";
+        let output = execute(source).unwrap();
+        assert_eq!(output, vec!["5", "7", "3", "true", "20"]);
+    }
+
     #[test]
     fn logical_and_or_short_circuit_the_right_operand() {
         let output = execute("show false and (1 / 0 == 0)\nshow true or (1 / 0 == 0)\nshow true and true\nshow false or true\nshow skip_and()\nshow skip_or()\nfn skip_and() {\nreturn false and (1 / 0 == 0)\n}\nfn skip_or() {\nreturn true or (1 / 0 == 0)\n}\n").unwrap();
