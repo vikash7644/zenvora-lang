@@ -4197,7 +4197,7 @@ fn nested(value) {
         assert_eq!(actual, expected);
         assert_eq!(actual, vec!["7", "6", "BHYVORIX-Chain", "11"]);
 
-        let failing_source = "show 1 / 0\\n";
+        let failing_source = "show 1 / 0\n";
         let source_error = execute(failing_source).unwrap_err();
         let (failing_code, failing_layout) = super::compile_with_layout(failing_source).unwrap();
         let failing_encoded = super::serialize_bytecode_v2(&failing_code, &failing_layout).unwrap();
