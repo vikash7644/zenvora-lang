@@ -14,7 +14,7 @@ fn token_value(tokens, pos) {
  define t := at(tokens, pos)
  return get(t, "value")
 }
-fn token_line(tokens, pos) {
+fn line_of_token(tokens, pos) {
  define t := at(tokens, pos)
  return get(t, "line")
 }
@@ -65,7 +65,7 @@ fn parse_mul(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "*" or token_value(tokens, next) == "/") {
+ repeat next < len(tokens) and line_of_token(tokens, next) == ln and (token_value(tokens, next) == "*" or token_value(tokens, next) == "/") {
   define op := token_value(tokens, next)
   define right_result := parse_primary(tokens, next + 1)
   if get(right_result, "error") != "" {
@@ -86,7 +86,7 @@ fn parse_add(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "+" or token_value(tokens, next) == "-") {
+ repeat next < len(tokens) and line_of_token(tokens, next) == ln and (token_value(tokens, next) == "+" or token_value(tokens, next) == "-") {
   define op := token_value(tokens, next)
   define right_result := parse_mul(tokens, next + 1)
   if get(right_result, "error") != "" {
@@ -107,7 +107,7 @@ fn parse_compare(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "==" or token_value(tokens, next) == "!=" or token_value(tokens, next) == "<" or token_value(tokens, next) == "<=" or token_value(tokens, next) == ">" or token_value(tokens, next) == ">=") {
+ repeat next < len(tokens) and line_of_token(tokens, next) == ln and (token_value(tokens, next) == "==" or token_value(tokens, next) == "!=" or token_value(tokens, next) == "<" or token_value(tokens, next) == "<=" or token_value(tokens, next) == ">" or token_value(tokens, next) == ">=") {
   define op := token_value(tokens, next)
   define right_result := parse_add(tokens, next + 1)
   if get(right_result, "error") != "" {
@@ -128,7 +128,7 @@ fn parse_expr(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and token_line(tokens, next) == ln and (token_value(tokens, next) == "and" or token_value(tokens, next) == "or") {
+ repeat next < len(tokens) and line_of_token(tokens, next) == ln and (token_value(tokens, next) == "and" or token_value(tokens, next) == "or") {
   define op := token_value(tokens, next)
   define right_result := parse_compare(tokens, next + 1)
   if get(right_result, "error") != "" {
@@ -192,7 +192,7 @@ fn parse_program(tokens) {
     err := "unsupported statement"
    }
   }
-  if pos < len(tokens) and token_line(tokens, pos) == ln and err == "" {
+  if pos < len(tokens) and line_of_token(tokens, pos) == ln and err == "" {
    err := "unexpected token at end of statement"
   }
  }
