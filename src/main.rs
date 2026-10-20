@@ -2568,7 +2568,7 @@ fn run_bytecode(path: &str) -> Result<(), String> {
 /// Compile source into canonical bytecode v2, verify the emitted program, decode it
 /// through the same loader used by the VM, and return only executable instructions.
 /// This makes normal source execution use the compiler -> bytecode -> verifier -> VM path.
-pub(super) fn compile_for_vm(source: &str) -> Result<Vec<Op>, String> {
+fn compile_for_vm(source: &str) -> Result<Vec<Op>, String> {
     let (compiled, layout) = compile_with_layout(source)?;
     let bytecode = serialize_bytecode_v2(&compiled, &layout)?;
     deserialize_bytecode(&bytecode).map_err(|error| {
