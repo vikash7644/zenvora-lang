@@ -11,10 +11,12 @@ fn at(tokens, pos) {
  return get(tokens, pos)
 }
 fn val(tokens, pos) {
- return get(at(tokens, pos), "value")
+ define t := at(tokens, pos)
+ return get(t, "value")
 }
 fn line_at(tokens, pos) {
- return get(at(tokens, pos), "line")
+ define t := at(tokens, pos)
+ return get(t, "line")
 }
 fn parse_primary(tokens, pos) {
  if pos >= len(tokens) {
@@ -25,16 +27,20 @@ fn parse_primary(tokens, pos) {
  define v := get(t, "value")
  define ln := get(t, "line")
  if k == "number" {
-  return result(node("integer", v, "", "", ln), pos + 1, "")
+  define literal_node := node("integer", v, "", "", ln)
+  return result(literal_node, pos + 1, "")
  }
  if k == "string" {
-  return result(node("string", v, "", "", ln), pos + 1, "")
+  define literal_node := node("string", v, "", "", ln)
+  return result(literal_node, pos + 1, "")
  }
  if k == "boolean" {
-  return result(node("boolean", v, "", "", ln), pos + 1, "")
+  define literal_node := node("boolean", v, "", "", ln)
+  return result(literal_node, pos + 1, "")
  }
  if k == "identifier" {
-  return result(node("name", v, "", "", ln), pos + 1, "")
+  define literal_node := node("name", v, "", "", ln)
+  return result(literal_node, pos + 1, "")
  }
  if v == "(" {
   define inner := parse_expr(tokens, pos + 1)
@@ -45,7 +51,8 @@ fn parse_primary(tokens, pos) {
   if after >= len(tokens) or val(tokens, after) != ")" {
    return result("", after, "expected closing parenthesis")
   }
-  return result(get(inner, "ast"), after + 1, "")
+  define inner_ast := get(inner, "ast")
+  return result(inner_ast, after + 1, "")
  }
  return result("", pos, "expected expression")
 }
@@ -64,7 +71,8 @@ fn parse_mul(tokens, pos) {
   if get(right_result, "error") != "" {
    return right_result
   }
-  left := node("binary", op, left, get(right_result, "ast"), ln)
+  define right_ast := get(right_result, "ast")
+  left := node("binary", op, left, right_ast, ln)
   next := get(right_result, "pos")
  }
  return result(left, next, "")
@@ -153,7 +161,10 @@ fn parse_program(tokens) {
       if get(expr, "pos") == pos + 3 {
        err := "expected expression after :="
       } otherwise {
-       ast := push(ast, node("define", get(name_token, "value"), get(expr, "ast"), "", ln))
+       define name_value := get(name_token, "value")
+       define expr_ast := get(expr, "ast")
+       define statement_node := node("define", name_value, expr_ast, "", ln)
+       ast := push(ast, statement_node)
        pos := get(expr, "pos")
       }
      }
@@ -168,7 +179,9 @@ fn parse_program(tokens) {
      if get(expr, "pos") == pos + 1 {
       err := "expected expression after show"
      } otherwise {
-      ast := push(ast, node("show", "", get(expr, "ast"), "", ln))
+      define expr_ast := get(expr, "ast")
+      define statement_node := node("show", "", expr_ast, "", ln)
+      ast := push(ast, statement_node)
       pos := get(expr, "pos")
      }
     }
@@ -358,15 +371,19 @@ fn lex(source) {
 
 define parser_source := "define answer := 2 + 3 * 4\nshow answer\n"
 define lexed := lex(parser_source)
-define parsed := parse_program(get(lexed, "tokens"))
+define parser_tokens := get(lexed, "tokens")
+define parsed := parse_program(parser_tokens)
 assert(get(lexed, "error") == "", "lexer failed on parser fixture")
 assert(get(parsed, "error") == "", "parser failed on valid fixture")
-define first := get(get(parsed, "ast"), 0)
+define parsed_ast := get(parsed, "ast")
+define first := get(parsed_ast, 0)
 assert(get(first, "kind") == "define", "first AST node should be define")
-assert(get(get(first, "left"), "value") == "+", "addition should be the root expression")
-define multiplied := get(get(first, "left"), "right")
+define first_expr := get(first, "left")
+assert(get(first_expr, "value") == "+", "addition should be the root expression")
+define multiplied := get(first_expr, "right")
 assert(get(multiplied, "value") == "*", "multiplication must bind tighter than addition")
 define bad_lexed := lex("define broken :=\n")
-define bad_parse := parse_program(get(bad_lexed, "tokens"))
+define bad_tokens := get(bad_lexed, "tokens")
+define bad_parse := parse_program(bad_tokens)
 assert(get(bad_parse, "error") != "", "missing expression must be rejected")
 show parsed
