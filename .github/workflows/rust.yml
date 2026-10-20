@@ -165,3 +165,18 @@ jobs:
 
       - name: Run shared hello example
         run: cargo run -- ../examples/hello.zv
+
+  editor-support:
+    name: Validate Zenvora editor support
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate VS Code metadata and TextMate grammar
+        run: python scripts/check_vscode_extension.py
