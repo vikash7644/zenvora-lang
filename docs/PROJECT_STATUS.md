@@ -24,7 +24,7 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 - [x] Run bounded Bytecode v2 fuzz campaign against source commit `d61a4a37d71e8a2d3fde8dc0b7fb5e33b93fa95b` (run [39365146054](https://github.com/vikash7644/zenvora-lang/actions/runs/39365146054)); result: success. The two later commits only update CI package verification and this status ledger.
 - [ ] Do not call Bytecode v2 stable or production-safe; its format is experimental.
 
-Latest main CI passed on commit `65bbf4f1918c9e64e7b4e676238f39bcc0e68b1c` (run [39365418462](https://github.com/vikash7644/zenvora-lang/actions/runs/39365418462)). It passed compiler/VM checks, Clippy, all tests, optimized CLI build, full `cargo package --locked`, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor validation. The bounded Bytecode v2 fuzz campaign passed on source commit `d61a4a37d71e8a2d3fde8dc0b7fb5e33b93fa95b` (run [39365146054](https://github.com/vikash7644/zenvora-lang/actions/runs/39365146054)); the two later commits changed CI package verification and this status document, not compiler source. This clears the current Bytecode v2 CI/fuzz gate, but does not make v2 stable or the whole language production-ready.
+Main CI passed on implementation/manifest commit `52ff34f496efbb92ef87290043ab943f66551ce6` (run [39366238057](https://github.com/vikash7644/zenvora-lang/actions/runs/39366238057)). It passed compiler/VM checks, Clippy, all tests, optimized CLI build, `cargo package --locked`, compiler API smoke tests, editor validation, and the release-CLI sweep that executes every checked-in `.zv` example. The bounded Bytecode v2 fuzz campaign passed on compiler-source commit `d61a4a37d71e8a2d3fde8dc0b7fb5e33b93fa95b` (run [39365146054](https://github.com/vikash7644/zenvora-lang/actions/runs/39365146054)); compiler source has not changed since that fuzzed revision. This clears the current automated Bytecode v2 gate, but does not make v2 stable or the whole language production-ready.
 
 ## Language feature and release checklist
 
@@ -42,17 +42,17 @@ Latest main CI passed on commit `65bbf4f1918c9e64e7b4e676238f39bcc0e68b1c` (run 
 | CLI/project scaffolding | Implemented with regression tests | `--new` creates runnable files, validates names, and refuses to overwrite an existing project path |
 | Browser playground | Separate JavaScript demo, not the Rust compiler/VM | Clearly disclose parity gaps; decide/build a real WASM or secure backend integration and test it |
 | Websites, games, AI agents | Not supported as full first-class capabilities yet | Needs standard libraries/runtime APIs, project templates, rendering/game support, and safe tool/network integration |
-| Documentation and examples | Existing docs/examples | Reconcile feature claims with executable tests and clearly label prototype limitations |
-| Editor support | VS Code `.zv` language registration, TextMate grammar, bracket/comment configuration, and automated metadata/regex validation implemented; CI passed on `42f5eb76cd28818b203d7daca3bf171a3f793d58` | Language server, diagnostics, completion, debugging, Marketplace packaging/publishing, and upstream GitHub Linguist recognition are still pending |
+| Documentation and examples | Existing docs/examples; CI now executes every checked-in `.zv` example | Continue reconciling feature claims with executable tests and clearly label prototype limitations |
+| Editor support | VS Code `.zv` language registration, TextMate grammar, bracket/comment configuration, and automated metadata/regex validation implemented; CI passed on `52ff34f496efbb92ef87290043ab943f66551ce6` | Language server, diagnostics, completion, debugging, Marketplace packaging/publishing, and upstream GitHub Linguist recognition are still pending |
 | Release readiness | Not complete | All required CI green on one commit, examples verified, security/limitations reviewed, release checklist completed |
 
 ## Latest verification (2026-10-20)
 
-- Main CI passed on current main commit `65bbf4f1918c9e64e7b4e676238f39bcc0e68b1c` (run [39365418462](https://github.com/vikash7644/zenvora-lang/actions/runs/39365418462)). This includes compiler/VM check, Clippy, all tests, optimized CLI build, full `cargo package --locked` verification, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor-support validation.
+- Main CI passed on implementation/manifest commit `52ff34f496efbb92ef87290043ab943f66551ce6` (run [39366238057](https://github.com/vikash7644/zenvora-lang/actions/runs/39366238057)). This includes compiler/VM check, Clippy, all tests, optimized CLI build, full `cargo package --locked` verification, every checked-in `.zv` example executed through the optimized release CLI, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor-support validation.
 - Interpreter MVP and editor-validation jobs passed on the same commit. The compiler change removes an unnecessary unconditional jump after a terminating `if` branch and computes function fallthrough before relocating local jump targets. This fixed a Bytecode v2 rejection of recursive functions with value returns in both `if/otherwise` branches.
 - Added differential Bytecode v2 tests for nested calls, map/array built-ins, runtime-error parity, `break`/`continue`, and recursive returns. Main CI passes on the current source revision.
 - VS Code editor source is in `editors/vscode/`; the extension is not yet published to the Marketplace, and GitHub Linguist recognition remains an upstream task.
-- The bounded Bytecode v2 fuzz workflow passed on compiler-source commit `d61a4a37d71e8a2d3fde8dc0b7fb5e33b93fa95b` (run [39365146054](https://github.com/vikash7644/zenvora-lang/actions/runs/39365146054)); later commits only strengthened CI package verification and updated this ledger. Stable v1 is still blocked by the contract-runtime, real-compiler playground, grammar/semantics, editor, and release tasks listed below.
+- The bounded Bytecode v2 fuzz workflow passed on compiler-source commit `d61a4a37d71e8a2d3fde8dc0b7fb5e33b93fa95b` (run [39365146054](https://github.com/vikash7644/zenvora-lang/actions/runs/39365146054)); compiler source is unchanged since that fuzzed revision. The all-example CI sweep caught and fixed unsupported bracket-array syntax in `examples/science.zv`, then passed on `52ff34f`. Stable v1 remains blocked by the contract runtime, real-compiler playground, grammar/semantics, editor, and release tasks listed below.
 
 ## Required CI evidence before calling the current milestone complete
 
@@ -63,12 +63,13 @@ Latest main CI passed on commit `65bbf4f1918c9e64e7b4e676238f39bcc0e68b1c` (run 
 
 ## Scope order
 
-1. Finish and verify Bytecode v2 gate.
-2. Run a compiler/VM feature-by-feature audit and fix gaps found by tests.
+1. Keep the Bytecode v2 regression and bounded-fuzz gate green; the format remains experimental.
+2. Continue the compiler/VM feature-by-feature audit and fix gaps found by tests.
 3. Close module, standard-library, CLI, docs, and example mismatches.
-4. Improve the playground path without pretending the JavaScript demo is the real compiler.
-5. Review contract DSL limitations and specify the missing runtime/security requirements; do not describe the current DSL as a production smart-contract system.
-6. Only after Zenvora Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Do not mix chain branding into the Zenvora Lang name.
+4. Replace the demo-only playground execution path with a secure real-compiler integration and test parity.
+5. Implement and independently test contract state persistence, atomic rollback, authorization, deterministic gas, ABI, and deployment before describing contracts as production-ready.
+6. Finish editor/LSP and release packaging, then complete the release checklist.
+7. Only after Zenvora Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Do not mix chain branding into the Zenvora Lang name.
 
 ## Continuity note
 
