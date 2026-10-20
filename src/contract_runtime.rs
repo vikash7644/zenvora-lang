@@ -2,7 +2,7 @@
 //! Version 1 deliberately supports integer state only; unsupported state types fail closed.
 use super::contract_gas::GasMeter;
 use super::contract_state::{AccessMode, ContractState};
-use super::{compile, run_with_gas};
+use super::{compile_for_vm, run_with_gas};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionReceipt {
@@ -99,7 +99,7 @@ fn execute_inner(
     for (name, _) in &state_vars {
         program.push_str(&format!("show {name}\n"));
     }
-    let code = compile(&program)?;
+    let code = compile_for_vm(&program)?;
     let mut output = Vec::new();
     let mut meter = GasMeter::new(gas_limit);
     let vm_result = run_with_gas(&code, &mut |line| output.push(line), &mut meter);
