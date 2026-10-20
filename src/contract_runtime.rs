@@ -56,6 +56,32 @@ pub fn execute(
     state: &mut ContractState,
     gas_limit: u64,
 ) -> Result<ExecutionReceipt, String> {
+    let mut gas_used_on_error = 0;
+    execute_inner(source, contract_id, invocation, mode, state, gas_limit, &mut gas_used_on_error)
+}
+
+pub fn execute_with_gas_usage(
+    source: &str,
+    contract_id: &str,
+    invocation: &str,
+    mode: AccessMode,
+    state: &mut ContractState,
+    gas_limit: u64,
+) -> Result<ExecutionReceipt, (String, u64)> {
+    let mut gas_used_on_error = 0;
+    execute_inner(source, contract_id, invocation, mode, state, gas_limit, &mut gas_used_on_error)
+        .map_err(|error| (error, gas_used_on_error))
+}
+
+fn execute_inner(
+    source: &str,
+    contract_id: &str,
+    invocation: &str,
+    mode: AccessMode,
+    state: &mut ContractState,
+    gas_limit: u64,
+    gas_used_on_error: &mut u64,
+) -> Result<ExecutionReceipt, String> {
     let overlay = state.begin(contract_id, mode)?;
     let (contract_name, state_vars, methods, rewritten) = prepare_source(source, state, &overlay)?;
     let (invocation_kind, method_name) = parse_invocation(invocation)?;
@@ -76,7 +102,10 @@ pub fn execute(
     let code = compile(&program)?;
     let mut output = Vec::new();
     let mut meter = GasMeter::new(gas_limit);
-    run_with_gas(&code, &mut |line| output.push(line), &mut meter)?;
+    let vm_result = run_with_gas(&code, &mut |line| output.push(line), &mut meter);
+    // Preserve deterministic gas accounting even when the VM returns an execution error.
+    *gas_used_on_error = meter.used();
+    vm_result?;
     if output.len() < state_vars.len() {
         return Err("VM did not return all contract state values".into());
     }
