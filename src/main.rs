@@ -1627,6 +1627,27 @@ fn run_with_output<F>(code: &[Op], output: &mut F) -> Result<(), String>
 where
     F: FnMut(String),
 {
+    run_with_output_metered(code, output, None)
+}
+
+fn run_with_gas<F>(code: &[Op], output: &mut F, meter: &mut contract_gas::GasMeter) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    run_with_output_metered(code, output, Some(meter))
+}
+
+fn run_with_output_metered<F>(
+    code: &[Op],
+    output: &mut F,
+    mut gas_meter: Option<&mut contract_gas::GasMeter>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    if let Some(meter) = gas_meter.as_deref_mut() {
+        meter.charge(contract_gas::BASE_EXECUTION_GAS)?;
+    }
     let mut stack: Vec<Value> = Vec::new();
     let mut stack_value_bytes = 0usize;
     let mut runtime_state_bytes = 0usize;
@@ -1644,6 +1665,19 @@ where
         steps += 1;
         if steps > MAX_STEPS {
             return Err("execution exceeded safety limit (1,000,000 instructions)".into());
+        }
+        if let Some(meter) = gas_meter.as_deref_mut() {
+            let cost = match code.get(pc) {
+                Some(Op::Load(_)) => contract_gas::LOCAL_READ_GAS,
+                Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => contract_gas::LOCAL_WRITE_GAS,
+                Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => contract_gas::CONDITIONAL_BRANCH_GAS,
+                Some(Op::Call(_, _) | Op::CallTarget { .. }) => contract_gas::FUNCTION_CALL_GAS,
+                Some(Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Neg | Op::Not | Op::And | Op::Or
+                    | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge) => contract_gas::INTEGER_OPERATION_GAS,
+                Some(_) => 1,
+                None => return Err("instruction pointer out of range".into()),
+            };
+            meter.charge(cost)?;
         }
         match &code[pc] {
             Op::Push(n) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Int(*n))?,
