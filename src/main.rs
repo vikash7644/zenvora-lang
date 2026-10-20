@@ -2572,7 +2572,7 @@ fn compile_for_vm(source: &str) -> Result<Vec<Op>, String> {
     let (compiled, layout) = compile_with_layout(source)?;
     let bytecode = serialize_bytecode_v2(&compiled, &layout)?;
     deserialize_bytecode(&bytecode).map_err(|error| {
-        if error.contains("return at instruction") && error.contains("outside a function") {
+        if error.contains("return instruction outside a function") {
             "return used outside a function call".to_string()
         } else {
             error
