@@ -4006,7 +4006,7 @@ mod tests {
 
     #[test]
     fn contract_artifact_contains_abi_source_hash_and_verified_bytecode_v2() {
-        let source = "contract Counter {\\nstate count := 0\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
         let artifact = super::contract_abi_and_artifact(source).unwrap();
         assert_eq!(artifact["format"], "ZENVORA_CONTRACT_ARTIFACT_V1");
         assert_eq!(artifact["contract"], "Counter");
