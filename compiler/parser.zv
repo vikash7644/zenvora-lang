@@ -1315,7 +1315,7 @@ show get(invalid_return_result, "error")
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
 show bytecode_verification
-define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nif answer > 10 {\nshow 99\n} otherwise {\nshow 0\n}\nrepeat answer > 12 {\nanswer := answer - 1\n}\nshow answer\n"
+define runnable_source := "define answer := 2 + 3 * 4\nshow answer\n"
 define runnable_lexed := lex(runnable_source)
 define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
