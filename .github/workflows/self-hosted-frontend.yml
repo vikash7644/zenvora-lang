@@ -1,0 +1,49 @@
+name: Zenvora self-hosted frontend smoke
+
+on:
+  pull_request:
+    paths:
+      - "compiler/token_stream.zv"
+      - ".github/workflows/self-hosted-frontend.yml"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  push:
+    branches:
+      - main
+      - self-hosted-compiler-foundation
+    paths:
+      - "compiler/token_stream.zv"
+      - ".github/workflows/self-hosted-frontend.yml"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  normalized-token-stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Compile Zenvora reference runtime
+        run: cargo test --locked
+      - name: Execute Zenvora-written token component
+        run: |
+          cargo run --locked --quiet -- compiler/token_stream.zv > frontend-output.txt
+          cat frontend-output.txt
+          grep -F 'keyword' frontend-output.txt
+          grep -F 'operator' frontend-output.txt
+          grep -F 'atom' frontend-output.txt
