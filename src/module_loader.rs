@@ -118,6 +118,14 @@ fn parse_module_path(input: &str) -> Result<&str, &'static str> {
     if path.is_empty() {
         return Err("module path cannot be empty");
     }
+    // Keep imports portable and rooted at the importing file's directory.
+    // Path::is_absolute alone is host-dependent (e.g. C:/... is not absolute on Unix).
+    if path.starts_with('/')
+        || path.as_bytes().get(1) == Some(&b':')
+        || Path::new(path).is_absolute()
+    {
+        return Err("module path must be relative");
+    }
     if path.contains('\\') {
         return Err("module paths must use forward slashes");
     }
@@ -179,6 +187,16 @@ mod tests {
 
         let error = load(&temp.0.join("module_0.zv")).unwrap_err();
         assert!(error.contains("module import depth exceeds safety limit"), "{error}");
+    }
+
+    #[test]
+    fn rejects_absolute_and_drive_prefixed_module_paths_portably() {
+        let temp = TempDir::new();
+        for module_path in ["/tmp/secret.zv", "C:/private/secret.zv", "D:relative-on-windows.zv"] {
+            fs::write(temp.0.join("main.zv"), format!("use \"{module_path}\"\n")).unwrap();
+            let error = load(&temp.0.join("main.zv")).unwrap_err();
+            assert!(error.contains("module path must be relative"), "{module_path}: {error}");
+        }
     }
 
     #[test]
