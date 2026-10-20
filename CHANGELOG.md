@@ -4,6 +4,9 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Fixed `examples/science.zv` to construct integer arrays with the supported `array(...)` builtin rather than unsupported bracket-array syntax. Added a CI sweep that executes every checked-in `.zv` example with the optimized release CLI.
+- Added Cargo package homepage, repository, README, keywords, and category metadata for cleaner distribution metadata.
+
 - Collection builtins `push`, `put`, `get`, `first`, `last`, `reverse`, `keys`, and `values` now move owned collection data where possible instead of cloning it a second time, reducing temporary allocations.
 
 - Indexed array/map assignment now updates the bound collection in place instead of cloning the entire collection for every write, while preserving bounds, type, depth, and memory checks.
