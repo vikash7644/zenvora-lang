@@ -1,6 +1,6 @@
 # Zenvora Lang — Mission Status and Completion Gate
 
-Last audited: 2026-10-19  
+Last audited: 2026-10-20  
 Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
@@ -42,11 +42,18 @@ Latest verified status: commit `ef45ff34dc05003d58db468c194b4f31413babec` (`ef45
 | Browser playground | Separate JavaScript demo, not the Rust compiler/VM | Clearly disclose parity gaps; decide/build a real WASM or secure backend integration and test it |
 | Websites, games, AI agents | Not supported as full first-class capabilities yet | Needs standard libraries/runtime APIs, project templates, rendering/game support, and safe tool/network integration |
 | Documentation and examples | Existing docs/examples | Reconcile feature claims with executable tests and clearly label prototype limitations |
+| Editor support | VS Code `.zv` language registration, TextMate grammar, bracket/comment configuration, and automated metadata/regex validation implemented; CI passed on `c48cdfb143c74ce92b8e6a512fa8a668fa085292` | Language server, diagnostics, completion, debugging, Marketplace packaging/publishing, and upstream GitHub Linguist recognition are still pending |
 | Release readiness | Not complete | All required CI green on one commit, examples verified, security/limitations reviewed, release checklist completed |
+
+## Latest verification (2026-10-20)
+
+- Main CI passed on commit `c48cdfb143c74ce92b8e6a512fa8a668fa085292` (run [39363980426](https://github.com/vikash7644/zenvora-lang/actions/runs/39363980426)). This includes compiler/VM check, Clippy, all tests, optimized CLI build, distributable package check, language examples, bytecode v1/v2 smoke tests, compiler API smoke tests, and the editor-support validation job.
+- Interpreter MVP CI also passed on the same commit. These green runs verify the current revision's automated checks; they do not remove the documented stable-v1 blockers below.
+- VS Code editor source is in `editors/vscode/`; the extension is not yet published to the Marketplace, and GitHub Linguist recognition remains an upstream task.
 
 ## Required CI evidence before calling the current milestone complete
 
-1. Main workflow is green on the latest `main` SHA, including `cargo check --locked --all-targets`, Clippy, all tests, release build, examples, CLI checks, and bytecode v1/v2 smoke tests.
+1. Main workflow is green on the latest `main` SHA, including `cargo check --locked --all-targets`, Clippy, all tests, optimized release build, `cargo package --locked --no-verify`, examples, CLI checks, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor metadata/regex validation.
 2. Bytecode v2 fuzz workflow is green on that same SHA (or its explicitly documented matching source SHA).
 3. Any red check has a root cause, a committed fix, and a rerun showing green.
 4. No claim of production readiness based only on unit tests or a queued workflow.
