@@ -1000,6 +1000,48 @@ fn validate_program(ast) {
  return map("ok", error == "", "error", error)
 }
 
+# Verifier for the Zenvora-authored bytecode plan: validates opcode set and jump bounds.
+fn verify_code(code) {
+ define allowed := array("push_const", "load", "unary", "binary", "index", "call", "declare", "store", "print", "return", "jump_if_false", "jump", "break", "continue", "nested_function")
+ define pos := 0
+ repeat pos < len(code) {
+  define instruction := get(code, pos)
+  define op := get(instruction, "op")
+  if not contains(allowed, op) {
+   return "unsupported bytecode opcode: " + op
+  }
+  if op == "jump" or op == "jump_if_false" {
+   define target := get(instruction, "target")
+   if target < 0 or target > len(code) {
+    return "invalid jump target"
+   }
+  }
+  pos := pos + 1
+ }
+ return ""
+}
+
+fn verify_bytecode_plan(plan) {
+ if get(plan, "format") != "ZENVORA_BYTECODE_PLAN_1" {
+  return map("ok", false, "error", "unknown bytecode plan format")
+ }
+ define main_error := verify_code(get(plan, "main"))
+ if main_error != "" {
+  return map("ok", false, "error", "main: " + main_error)
+ }
+ define functions := get(plan, "functions")
+ define pos := 0
+ repeat pos < len(functions) {
+  define fn_record := get(functions, pos)
+  define fn_error := verify_code(get(fn_record, "code"))
+  if fn_error != "" {
+   return map("ok", false, "error", "function " + get(fn_record, "name") + ": " + fn_error)
+  }
+  pos := pos + 1
+ }
+ return map("ok", true, "error", "")
+}
+
 define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nfn add(a, b) { if a > 0 { return a + b } otherwise { return b } }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
@@ -1097,3 +1139,7 @@ show "ZENVORA_SEMANTICS"
 show valid_semantic_result
 show get(invalid_break_result, "error")
 show get(invalid_return_result, "error")
+
+define bytecode_verification := verify_bytecode_plan(bytecode_plan)
+show "ZENVORA_BYTECODE_VERIFY"
+show bytecode_verification
