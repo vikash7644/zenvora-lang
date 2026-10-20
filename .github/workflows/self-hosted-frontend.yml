@@ -70,6 +70,8 @@ jobs:
           grep -F 'return' parser-output.txt
           grep -F 'break' parser-output.txt
           grep -F 'continue' parser-output.txt
+          grep -F 'if' parser-output.txt
+          grep -F 'repeat' parser-output.txt
           grep -F 'error' parser-output.txt
           grep -F 'expected expression' parser-output.txt
           grep -F 'expected literal, name, or parenthesized expression' parser-output.txt
