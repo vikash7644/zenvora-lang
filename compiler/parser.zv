@@ -220,6 +220,41 @@ fn parse_expr(tokens, pos) {
  return result(left, next, "")
 }
 
+fn collect_tokens(tokens, start_pos, end_pos) {
+ define out := array()
+ define i := start_pos
+ repeat i < end_pos {
+  out := push(out, at(tokens, i))
+  i := i + 1
+ }
+ return out
+}
+
+fn find_block_end(tokens, open_pos) {
+ if open_pos >= len(tokens) or get(at(tokens, open_pos), "value") != "{" {
+  return map("pos", open_pos, "error", "expected opening brace")
+ }
+ define depth := 1
+ define pos := open_pos + 1
+ repeat pos < len(tokens) and depth > 0 {
+  define value := get(at(tokens, pos), "value")
+  if value == "{" {
+   depth := depth + 1
+  } otherwise {
+   if value == "}" {
+    depth := depth - 1
+   }
+  }
+  if depth > 0 {
+   pos := pos + 1
+  }
+ }
+ if depth != 0 {
+  return map("pos", pos, "error", "expected closing brace")
+ }
+ return map("pos", pos, "error", "")
+}
+
 fn parse_program(tokens) {
  define ast := array()
  define pos := 0
@@ -228,6 +263,54 @@ fn parse_program(tokens) {
   define start := at(tokens, pos)
   define ln := get(start, "line")
   define kw := get(start, "value")
+  if kw == "if" or kw == "repeat" {
+   define condition := parse_expr(tokens, pos + 1)
+   if get(condition, "error") != "" {
+    err := get(condition, "error")
+   } otherwise {
+    define open_pos := get(condition, "pos")
+    define block_end := find_block_end(tokens, open_pos)
+    if get(block_end, "error") != "" {
+     err := get(block_end, "error")
+    } otherwise {
+     define close_pos := get(block_end, "pos")
+     define body_tokens := collect_tokens(tokens, open_pos + 1, close_pos)
+     define body_result := parse_program(body_tokens)
+     if get(body_result, "error") != "" {
+      err := get(body_result, "error")
+     } otherwise {
+      define body_ast := get(body_result, "ast")
+      define else_ast := array()
+      define next_pos := close_pos + 1
+      if kw == "if" and next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
+       define else_open := next_pos + 1
+       define else_end := find_block_end(tokens, else_open)
+       if get(else_end, "error") != "" {
+        err := get(else_end, "error")
+       } otherwise {
+        define else_close := get(else_end, "pos")
+        define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
+        define else_result := parse_program(else_tokens)
+        if get(else_result, "error") != "" {
+         err := get(else_result, "error")
+        } otherwise {
+         else_ast := get(else_result, "ast")
+         next_pos := else_close + 1
+        }
+       }
+      }
+      if err == "" {
+       if kw == "if" {
+        ast := push(ast, node("if", "", get(condition, "ast"), map("then", body_ast, "otherwise", else_ast), ln))
+       } otherwise {
+        ast := push(ast, node("repeat", "", get(condition, "ast"), body_ast, ln))
+       }
+       pos := next_pos
+      }
+     }
+    }
+   }
+  } otherwise {
   if kw == "return" {
    define expr := parse_expr(tokens, pos + 1)
    if get(expr, "error") != "" {
@@ -299,6 +382,7 @@ fn parse_program(tokens) {
     }
    }
    }
+  }
   }
   }
   if pos < len(tokens) and get(at(tokens, pos), "line") == ln and err == "" {
@@ -481,7 +565,7 @@ fn lex(source) {
  return map("tokens", out, "error", err)
 }
 
-define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
+define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
 define parsed := parse_program(parser_tokens)
@@ -499,10 +583,12 @@ define index_statement := get(parsed_ast, 5)
 define index_expr := get(index_statement, "left")
 define logic_statement := get(parsed_ast, 6)
 define logic_expr := get(logic_statement, "left")
-define assignment_statement := get(parsed_ast, 7)
-define return_statement := get(parsed_ast, 8)
-define break_statement := get(parsed_ast, 9)
-define continue_statement := get(parsed_ast, 10)
+define if_statement := get(parsed_ast, 7)
+define repeat_statement := get(parsed_ast, 8)
+define assignment_statement := get(parsed_ast, 9)
+define return_statement := get(parsed_ast, 10)
+define break_statement := get(parsed_ast, 11)
+define continue_statement := get(parsed_ast, 12)
 define bad_lexed := lex("define broken :=\n")
 define bad_tokens := get(bad_lexed, "tokens")
 define bad_parse := parse_program(bad_tokens)
@@ -529,6 +615,8 @@ show get(call_expr, "kind")
 show get(index_expr, "kind")
 show get(logic_expr, "value")
 show get(get(logic_expr, "right"), "value")
+show get(if_statement, "kind")
+show get(repeat_statement, "kind")
 show get(assignment_statement, "kind")
 show get(return_statement, "kind")
 show get(break_statement, "kind")
