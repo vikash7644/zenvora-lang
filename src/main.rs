@@ -444,12 +444,18 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                     if false_jump.is_none() || end_jump.is_some() {
                         return Err(format!("line {}: duplicate or misplaced otherwise", line_no + 1));
                     }
-                    let jump = code.len();
-                    code.push(Op::Jump(usize::MAX));
-                    if let Some(false_jump) = false_jump.take() {
-                        code[false_jump] = Op::JumpIfFalse(code.len());
-                    }
-                    *end_jump = Some(jump);
+                    let condition_jump = false_jump.take().ok_or_else(|| format!("line {}: otherwise without matching if", line_no + 1))?;
+                    let then_start = condition_jump + 1;
+                    let then_can_fall_through = code_region_can_fall_through(&code, then_start, code.len());
+                    let else_start = if then_can_fall_through {
+                        let jump = code.len();
+                        code.push(Op::Jump(usize::MAX));
+                        *end_jump = Some(jump);
+                        code.len()
+                    } else {
+                        code.len()
+                    };
+                    code[condition_jump] = Op::JumpIfFalse(else_start);
                 }
                 BlockFrame::Repeat { .. } => {
                     return Err(format!("line {}: otherwise must follow an if block", line_no + 1));
@@ -830,38 +836,47 @@ fn lower_contracts(source: &str) -> Result<String, String> {
     Ok(output)
 }
 
-fn function_body_can_fall_through(code: &[Op]) -> bool {
-    if code.is_empty() {
+fn code_region_can_fall_through(code: &[Op], start: usize, end: usize) -> bool {
+    if start >= end {
         return true;
     }
     let mut visited = HashSet::new();
-    let mut pending = vec![0usize];
+    let mut pending = vec![start];
     while let Some(pc) = pending.pop() {
-        if pc == code.len() {
+        if pc == end {
             return true;
         }
-        if pc > code.len() || !visited.insert(pc) {
+        if pc < start || pc > end || !visited.insert(pc) {
             continue;
         }
-        match &code[pc] {
+        let Some(op) = code.get(pc) else { continue; };
+        match op {
             Op::Return | Op::ReturnValue => {}
             Op::Jump(target) => {
-                if *target >= code.len() {
+                if *target == end {
                     return true;
                 }
-                pending.push(*target);
+                if *target >= start && *target < end {
+                    pending.push(*target);
+                }
             }
             Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) => {
-                if *target >= code.len() {
+                if *target == end {
                     return true;
                 }
-                pending.push(*target);
+                if *target >= start && *target < end {
+                    pending.push(*target);
+                }
                 pending.push(pc + 1);
             }
             _ => pending.push(pc + 1),
         }
     }
     false
+}
+
+fn function_body_can_fall_through(code: &[Op]) -> bool {
+    code_region_can_fall_through(code, 0, code.len())
 }
 
 fn compile(source: &str) -> Result<Vec<Op>, String> {
