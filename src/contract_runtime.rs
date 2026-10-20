@@ -182,7 +182,7 @@ mod tests {
         let error = execute(
             COUNTER,
             "counter",
-            "call increment(3)\\ncall increment(5)",
+            "call increment(3)\ncall increment(5)",
             AccessMode::Action,
             &mut state,
             100_000,
