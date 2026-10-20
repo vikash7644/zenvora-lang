@@ -46,4 +46,7 @@ jobs:
           cat frontend-output.txt
           grep -F 'keyword' frontend-output.txt
           grep -F 'operator' frontend-output.txt
-          grep -F 'atom' frontend-output.txt
+          grep -F 'identifier' frontend-output.txt
+          grep -F 'string' frontend-output.txt
+          grep -F 'number' frontend-output.txt
+          grep -F 'error' frontend-output.txt
