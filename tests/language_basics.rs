@@ -405,6 +405,21 @@ fn string_helpers_handle_unicode_and_integer_conversion() {
 }
 
 #[test]
+fn char_at_reads_unicode_scalar_values_and_checks_bounds() {
+    let output = run_program("show char_at(\"hé🙂\", 0)\nshow char_at(\"hé🙂\", 1)\nshow char_at(\"hé🙂\", 2)\n");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "h\né\n🙂\n");
+
+    let negative = run_program("show char_at(\"abc\", -1)\n");
+    assert!(!negative.status.success());
+    assert!(String::from_utf8_lossy(&negative.stderr).contains("char_at index must be non-negative"));
+
+    let out_of_range = run_program("show char_at(\"abc\", 3)\n");
+    assert!(!out_of_range.status.success());
+    assert!(String::from_utf8_lossy(&out_of_range.stderr).contains("char_at index is out of range"));
+}
+
+#[test]
 fn checked_integer_overflow_is_reported_as_a_runtime_error() {
     let output = run_program("show 9223372036854775807 + 1\n");
     assert!(!output.status.success(), "overflowing arithmetic unexpectedly succeeded");
