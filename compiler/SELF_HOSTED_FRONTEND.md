@@ -5,7 +5,7 @@ Status: **incremental implementation; not yet a complete compiler or self-hostin
 ## Zenvora-written stages now present
 
 - `compiler/token_stream.zv`: character-level lexer for identifiers, exact keywords, booleans, decimal integers, compact operators, punctuation, comments, quoted strings/common escapes, and Unicode string content. Tokens carry kind, value, line, and column; malformed input produces an error field.
-- `compiler/parser.zv`: recursive-descent expression parser with precedence layers for unary negation (`-`), logical negation (`!`, `not`), multiplication/division, addition/subtraction, comparisons, and logical `and`/`or`. It emits AST maps for `define` and `show` statements and rejects unsupported statements/invalid expressions.
+- `compiler/parser.zv`: recursive-descent expression parser with precedence layers for unary negation (`-`), logical negation (`!`, `not`), multiplication/division, addition/subtraction, comparisons, and logical `and`/`or`, function-call expressions with comma-separated arguments, and index expressions. It emits AST maps for `define` and `show` statements and rejects unsupported statements/invalid expressions.
 
 ## Verify locally or in CI
 
@@ -19,7 +19,7 @@ The `Zenvora self-hosted frontend smoke` workflow runs both components and check
 ## Remaining work
 
 1. Expand parser statement support to assignments, branches, loops, functions/calls/returns, arrays/maps, modules, and contract declarations.
-2. Add indexing, function-call expressions, and full source-span diagnostics.
+2. Add full source-span diagnostics and broaden expression/statement edge-case coverage.
 3. Add semantic/name/type validation and deterministic diagnostics.
 4. Add an IR and a Zenvora-written bytecode backend with verifier checks.
 5. Differential-test every language fixture against the Rust reference implementation.
