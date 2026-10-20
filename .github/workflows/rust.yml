@@ -40,6 +40,9 @@ jobs:
       - name: Build optimized release CLI
         run: cargo build --locked --release --bin zv
 
+      - name: Validate distributable Rust package
+        run: cargo package --locked --no-verify
+
       - name: Smoke-test optimized release CLI version
         run: ./target/release/zv --version
 
