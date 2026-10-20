@@ -1376,6 +1376,12 @@ define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
 define runnable_plan := emit_bytecode_plan(runnable_ir)
 define runnable_result := execute_bytecode_plan(runnable_plan)
+define runnable_output := get(runnable_result, "output")
 show "ZENVORA_VM"
 show runnable_result
+if get(runnable_result, "ok") and len(runnable_output) == 4 and get(runnable_output, 0) == "14" and get(runnable_output, 1) == "42" and get(runnable_output, 2) == "7" and get(runnable_output, 3) == "7" {
+ show "ZENVORA_VM_ASSERTIONS_PASS"
+} otherwise {
+ show "ZENVORA_VM_ASSERTIONS_FAIL"
+}
 
