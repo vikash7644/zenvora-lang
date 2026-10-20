@@ -448,3 +448,45 @@ mod tests {
         assert!(ledger.receipts().is_empty());
     }
 }
+
+
+    #[test]
+    fn runtime_failure_after_partial_state_write_rolls_back_contract_state() {
+        let key = SigningKey::from_bytes(&[36; 32]);
+        let public_key = key.verifying_key().to_bytes();
+        let tx = signed_call(&key, 0, "call fail(9)", 100_000);
+        let source = "contract Counter {\nstate count := 0\naction fail(amount) {\ncount := count + amount\ncount := count / 0\n}\nview current() {\nreturn count\n}\n}\n";
+        let mut ledger = ContractFeeLedger::new();
+        ledger.set_genesis_balance(&tx.sender, 200_000).unwrap();
+        let mut state = ContractState::new();
+        let before_root = state.state_root();
+
+        let receipt = ledger.apply_signed_action(&tx, &public_key, 19, source, &mut state).unwrap();
+
+        assert!(!receipt.success);
+        assert!(receipt.error.as_deref().unwrap_or_default().contains("division by zero"));
+        assert_eq!(state.state_root(), before_root);
+        assert_eq!(state.get("counter", "count").unwrap(), None);
+        assert_eq!(ledger.nonce(&tx.sender), 1);
+        assert_eq!(ledger.balance(&tx.sender), 200_000 - receipt.fee_paid);
+    }
+
+    #[test]
+    fn out_of_gas_failure_charges_full_limit_and_keeps_state_unchanged() {
+        let key = SigningKey::from_bytes(&[37; 32]);
+        let public_key = key.verifying_key().to_bytes();
+        let tx = signed_call(&key, 0, "call increment(9)", 1);
+        let mut ledger = ContractFeeLedger::new();
+        ledger.set_genesis_balance(&tx.sender, 200_000).unwrap();
+        let mut state = ContractState::new();
+        let before_root = state.state_root();
+
+        let receipt = ledger.apply_signed_action(&tx, &public_key, 19, COUNTER, &mut state).unwrap();
+
+        assert!(!receipt.success);
+        assert!(receipt.error.as_deref().unwrap_or_default().contains("out of gas"));
+        assert_eq!(receipt.gas_used, tx.gas_limit);
+        assert_eq!(receipt.fee_paid, tx.gas_limit * tx.gas_price);
+        assert_eq!(state.state_root(), before_root);
+        assert_eq!(ledger.nonce(&tx.sender), 1);
+    }
