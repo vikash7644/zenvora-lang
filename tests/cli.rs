@@ -94,3 +94,56 @@ fn version_flag_reports_current_language_version() {
     assert!(output.status.success());
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "Zenvora Lang v0.8.0");
 }
+
+
+#[test]
+fn contract_cli_persists_action_state_and_reads_it_through_view() {
+    let id = NEXT_BYTECODE_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let base = std::env::temp_dir().join(format!("zenvora_contract_cli_{}_{}", std::process::id(), id));
+    let source_path = base.with_extension("zv");
+    let snapshot_path = base.with_extension("snapshot");
+    fs::write(
+        &source_path,
+        "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n",
+    )
+    .unwrap();
+
+    for amount in [3, 4] {
+        let output = Command::new(env!("CARGO_BIN_EXE_zv"))
+            .args(["--contract-run"])
+            .arg(&source_path)
+            .arg("counter")
+            .arg(&snapshot_path)
+            .arg("action")
+            .arg(format!("increment({amount})"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "action failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let view = Command::new(env!("CARGO_BIN_EXE_zv"))
+        .args(["--contract-run"])
+        .arg(&source_path)
+        .arg("counter")
+        .arg(&snapshot_path)
+        .arg("view")
+        .arg("current()")
+        .output()
+        .unwrap();
+    let _ = fs::remove_file(&source_path);
+    let _ = fs::remove_file(&snapshot_path);
+    assert!(
+        view.status.success(),
+        "view failed: {}",
+        String::from_utf8_lossy(&view.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&view.stdout).lines().any(|line| line == "7"),
+        "view output did not contain persisted value: {}",
+        String::from_utf8_lossy(&view.stdout)
+    );
+}
