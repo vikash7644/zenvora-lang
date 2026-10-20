@@ -188,7 +188,7 @@ fn parse_program(tokens) {
     err := "unsupported statement"
    }
   }
-  if pos < len(tokens) and line_of_token(tokens, pos) == ln and err == "" {
+  if pos < len(tokens) and get(at(tokens, pos), "line") == ln and err == "" {
    err := "unexpected token at end of statement"
   }
  }
