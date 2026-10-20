@@ -59,6 +59,8 @@ jobs:
           cargo run --locked --quiet -- compiler/parser.zv > parser-output.txt
           cat parser-output.txt
           grep -F 'binary' parser-output.txt
+          grep -F 'and' parser-output.txt
+          grep -F 'or' parser-output.txt
           grep -F 'unary' parser-output.txt
           grep -F 'call' parser-output.txt
           grep -F 'index' parser-output.txt
