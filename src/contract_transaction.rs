@@ -208,6 +208,80 @@ impl ContractFeeLedger {
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedContractCallEnvelope {
+    pub transaction: SignedContractCall,
+    pub public_key: Vec<u8>,
+}
+
+/// Replay ordered signed contract calls against cloned state and fee ledger. The candidate is
+/// published only if every envelope is admitted and both committed roots match.
+pub fn replay_signed_contract_block(
+    ledger: &mut ContractFeeLedger,
+    state: &mut ContractState,
+    transactions: &[SignedContractCallEnvelope],
+    expected_chain_id: u64,
+    source: &str,
+    expected_state_root: [u8; 32],
+    expected_receipt_root: [u8; 32],
+) -> Result<Vec<ContractCallReceipt>, String> {
+    let mut candidate_ledger = ledger.clone();
+    let mut candidate_state = state.clone();
+    let start = candidate_ledger.receipts().len();
+    for (index, envelope) in transactions.iter().enumerate() {
+        candidate_ledger.apply_signed_action(
+            &envelope.transaction,
+            &envelope.public_key,
+            expected_chain_id,
+            source,
+            &mut candidate_state,
+        ).map_err(|error| format!("signed contract transaction {} rejected during replay: {error}", index + 1))?;
+    }
+    let receipts = candidate_ledger.receipts()[start..].to_vec();
+    let state_root = candidate_state.state_root();
+    if state_root != expected_state_root {
+        return Err("replayed contract state root does not match block commitment".into());
+    }
+    if contract_receipt_root(&receipts) != expected_receipt_root {
+        return Err("replayed contract receipt root does not match block commitment".into());
+    }
+    *ledger = candidate_ledger;
+    *state = candidate_state;
+    Ok(receipts)
+}
+
+/// Deterministic receipt commitment for the experimental signed-call harness.
+pub fn contract_receipt_root(receipts: &[ContractCallReceipt]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"ZENVORA_CONTRACT_RECEIPTS_V1\0");
+    hasher.update((receipts.len() as u64).to_be_bytes());
+    for receipt in receipts {
+        hasher.update(receipt.transaction_id);
+        hasher.update((receipt.sender.len() as u32).to_be_bytes());
+        hasher.update(receipt.sender.as_bytes());
+        hasher.update(receipt.nonce.to_be_bytes());
+        hasher.update([u8::from(receipt.success)]);
+        hasher.update(receipt.gas_used.to_be_bytes());
+        hasher.update(receipt.fee_paid.to_be_bytes());
+        hasher.update(receipt.state_root);
+        match &receipt.error {
+            Some(error) => {
+                hasher.update([1]);
+                hasher.update((error.len() as u32).to_be_bytes());
+                hasher.update(error.as_bytes());
+            }
+            None => hasher.update([0]),
+        }
+        hasher.update((receipt.output.len() as u32).to_be_bytes());
+        for line in &receipt.output {
+            hasher.update((line.len() as u32).to_be_bytes());
+            hasher.update(line.as_bytes());
+        }
+    }
+    hasher.finalize().into()
+}
+
 fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
     let len = u32::try_from(bytes.len()).map_err(|_| "signed transaction field too large")?;
     out.extend_from_slice(&len.to_be_bytes());
@@ -294,6 +368,47 @@ mod tests {
         assert_eq!(receipt.fee_paid, tx.max_fee);
         assert_eq!(ledger.nonce(&tx.sender), 1);
         assert_eq!(state.state_root(), before_root);
+    }
+
+
+    #[test]
+    fn signed_block_replay_checks_roots_and_is_atomic_on_mismatch() {
+        use super::{contract_receipt_root, replay_signed_contract_block, SignedContractCallEnvelope};
+        let key = SigningKey::from_bytes(&[35; 32]);
+        let public_key = key.verifying_key().to_bytes().to_vec();
+        let tx = signed_call(&key, 0, "call increment(6)", 100_000);
+        let envelope = SignedContractCallEnvelope { transaction: tx.clone(), public_key: public_key.clone() };
+        let mut expected_ledger = ContractFeeLedger::new();
+        expected_ledger.set_genesis_balance(&tx.sender, 200_000).unwrap();
+        let mut expected_state = ContractState::new();
+        let expected_receipt = expected_ledger.apply_signed_action(
+            &tx, &public_key, 19, COUNTER, &mut expected_state
+        ).unwrap();
+        let expected_state_root = expected_state.state_root();
+        let expected_receipt_root = contract_receipt_root(&[expected_receipt]);
+
+        let mut replay_ledger = ContractFeeLedger::new();
+        replay_ledger.set_genesis_balance(&tx.sender, 200_000).unwrap();
+        let mut replay_state = ContractState::new();
+        let receipts = replay_signed_contract_block(
+            &mut replay_ledger, &mut replay_state, &[envelope.clone()], 19, COUNTER,
+            expected_state_root, expected_receipt_root,
+        ).unwrap();
+        assert_eq!(receipts.len(), 1);
+        assert_eq!(replay_state.state_root(), expected_state_root);
+        assert_eq!(replay_ledger.nonce(&tx.sender), 1);
+
+        let mut rejected_ledger = ContractFeeLedger::new();
+        rejected_ledger.set_genesis_balance(&tx.sender, 200_000).unwrap();
+        let mut rejected_state = ContractState::new();
+        assert!(replay_signed_contract_block(
+            &mut rejected_ledger, &mut rejected_state, &[envelope], 19, COUNTER,
+            expected_state_root, [0; 32],
+        ).is_err());
+        assert_eq!(rejected_state.state_root(), ContractState::new().state_root());
+        assert_eq!(rejected_ledger.nonce(&tx.sender), 0);
+        assert_eq!(rejected_ledger.balance(&tx.sender), 200_000);
+        assert!(rejected_ledger.receipts().is_empty());
     }
 
     #[test]
