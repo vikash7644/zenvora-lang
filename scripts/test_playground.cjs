@@ -10,6 +10,9 @@ assert.match(html, /data-example="collections"/, "collections example button exi
 assert.match(html, /data-example="stdlib"/, "standard library example button exists");
 assert.match(html, /id="terminal-command"/, "terminal command input exists");
 assert.match(html, /Zenvora Helper \(offline\)/, "offline helper limitation is disclosed");
+assert.match(html, /terminalNative/, "optional native Rust API integration exists");
+assert.match(html, /127\.0\.0\.1:8787/, "native API uses the documented loopback endpoint");
+assert.match(html, /cargo run -- --compiler-api/, "native API startup instructions are present");
 
 class FakeElement {
   constructor(dataset = {}) {
@@ -87,4 +90,4 @@ elements.code.value = "show 6 * 7";
 assert.match(terminal("run"), /42/, "terminal run command executes editor program");
 assert.match(terminal("version"), /browser demo/, "terminal clearly labels browser demo");
 
-console.log("Playground tests passed: interpreter features, terminal commands, offline helper, and error handling.");
+console.log("Playground tests passed: interpreter features, terminal commands, optional native API wiring, offline helper, and error handling.");
