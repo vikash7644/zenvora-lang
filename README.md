@@ -147,6 +147,10 @@ Expected example output:
 35
 ```
 
+## Deployment
+
+Use the [Zenvora project deployment guide](docs/deployment-guide.md) to install the CLI, create and validate a project, add a GitHub Actions smoke test, and run a CLI project on Linux. The guide also documents current boundaries: this is not yet a stable package ecosystem, public compiler API, or production smart-contract platform.
+
 ## Create your first project
 
 The starter command creates a new folder with `main.zv` and a project `README.md`. It refuses to overwrite an existing path and validates the project name.
