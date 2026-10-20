@@ -96,7 +96,7 @@ impl ContractState {
     /// establish that a snapshot is trusted; callers must verify it against replayed state.
     pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
         let mut out = Vec::new();
-        out.extend_from_slice(b"ZENVORA_CONTRACT_STATE_V1\\0");
+        out.extend_from_slice(b"ZENVORA_CONTRACT_STATE_V1\0");
         let count = u32::try_from(self.values.len()).map_err(|_| "too many contract storage entries")?;
         out.extend_from_slice(&count.to_be_bytes());
         for ((contract_id, key), value) in &self.values {
@@ -117,7 +117,7 @@ impl ContractState {
 
     /// Decode only canonical, strictly sorted snapshots with bounded lengths and no trailing data.
     pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
-        const DOMAIN: &[u8] = b"ZENVORA_CONTRACT_STATE_V1\\0";
+        const DOMAIN: &[u8] = b"ZENVORA_CONTRACT_STATE_V1\0";
         const MAX_SNAPSHOT_BYTES: usize = MAX_CONTRACT_STORAGE_BYTES + 1024 * 1024;
         if bytes.len() > MAX_SNAPSHOT_BYTES {
             return Err("encoded contract snapshot exceeds size limit".into());
