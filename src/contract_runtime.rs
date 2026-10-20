@@ -61,6 +61,13 @@ pub fn execute(
 
 fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
     let trimmed = invocation.trim();
+    if trimmed.contains('\\n') || trimmed.contains('\\r') {
+        return Err("contract invocation must be a single line".into());
+    }
+    let trimmed = trimmed.strip_suffix(';').unwrap_or(trimmed).trim();
+    if trimmed.ends_with(';') {
+        return Err("contract invocation accepts at most one trailing semicolon".into());
+    }
     let (kind, rest) = if let Some(rest) = trimmed.strip_prefix("call ") {
         ("action", rest)
     } else if let Some(rest) = trimmed.strip_prefix("show ") {
@@ -68,8 +75,13 @@ fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
     } else {
         return Err("invocation must be 'call action_name(args)' or 'show view_name(args)'".into());
     };
-    let name = rest.split_once('(').map(|(name, _)| name.trim())
+    let rest = rest.trim();
+    let (name, _) = rest.split_once('(')
         .ok_or_else(|| "invocation must include method parentheses".to_string())?;
+    let name = name.trim();
+    if !rest.ends_with(')') {
+        return Err("contract invocation must end with a closing parenthesis".into());
+    }
     if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err("invalid contract method name".into());
     }
@@ -162,6 +174,21 @@ mod tests {
         let before = state.state_root();
         assert!(execute(COUNTER, "counter", "call increment(4)", AccessMode::Action, &mut state, 21_001).is_err());
         assert_eq!(state.state_root(), before);
+    }
+
+    #[test]
+    fn invocation_rejects_multiline_statement_injection_without_state_changes() {
+        let mut state = ContractState::new();
+        let error = execute(
+            COUNTER,
+            "counter",
+            "call increment(3)\\ncall increment(5)",
+            AccessMode::Action,
+            &mut state,
+            100_000,
+        ).unwrap_err();
+        assert!(error.contains("single line"), "{error}");
+        assert_eq!(state.get("counter", "count").unwrap(), None);
     }
 
     #[test]
