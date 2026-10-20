@@ -49,6 +49,9 @@ jobs:
       - name: Test persistent contract CLI, gas, and rollback
         run: bash scripts/test_contract_cli.sh
 
+      - name: Test contract ABI and bytecode artifact CLI
+        run: bash scripts/test_contract_artifact.sh
+
       - name: Smoke-test optimized release CLI version
         run: ./target/release/zv --version
 
