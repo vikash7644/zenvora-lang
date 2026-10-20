@@ -73,11 +73,11 @@ async function runNativeFromEditor(){
     let data;
     try { data=await response.json(); } catch { throw Error('Compiler API returned a non-JSON response (HTTP '+response.status+').'); }
     if(!response.ok||data.ok===false) throw Error(data.error||('Compiler API HTTP '+response.status));
-    output.textContent=data.output??(Array.isArray(data.lines)?data.lines.join('\\n'):'Program completed with no output.');
+    output.textContent=data.output??(Array.isArray(data.lines)?data.lines.join('\n'):'Program completed with no output.');
     status.textContent='RUST VM PASS';
     status.style.color='var(--green)';
   } catch(error) {
-    output.textContent='Rust engine unavailable: '+String(error.message||error)+'\\n\\nStart the Rust API on this same device with: cargo run -- --compiler-api\\nThis is a local-only connection, not a hosted compiler.';
+    output.textContent='Rust engine unavailable: '+String(error.message||error)+'\n\nStart the Rust API on this same device with: cargo run -- --compiler-api\nThis is a local-only connection, not a hosted compiler.';
     output.className='output error';
     status.textContent='RUST VM UNAVAILABLE';
     status.style.color='var(--red)';
