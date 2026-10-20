@@ -3944,6 +3944,21 @@ mod tests {
     }
 
     #[test]
+    fn contract_artifact_contains_abi_source_hash_and_verified_bytecode_v2() {
+        let source = "contract Counter {\\nstate count := 0\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let artifact = super::contract_abi_and_artifact(source).unwrap();
+        assert_eq!(artifact["format"], "ZENVORA_CONTRACT_ARTIFACT_V1");
+        assert_eq!(artifact["contract"], "Counter");
+        assert_eq!(artifact["abi"]["states"][0]["name"], "count");
+        assert_eq!(artifact["abi"]["methods"][0]["name"], "increment");
+        assert_eq!(artifact["abi"]["methods"][0]["kind"], "action");
+        assert_eq!(artifact["abi"]["methods"][1]["kind"], "view");
+        let encoded = artifact["bytecode_v2"].as_str().unwrap();
+        assert!(super::deserialize_bytecode_v2(encoded).is_ok());
+        assert_eq!(artifact["source_sha256"].as_str().unwrap().len(), 64);
+    }
+
+    #[test]
     fn contract_dsl_reports_malformed_declarations() {
         assert!(compile("contract 123 {\nstate count := 0\n}\n").unwrap_err().contains("invalid contract name"));
         assert!(compile("contract Counter {\nstate count\n}\n").unwrap_err().contains("expected 'state name := expression'"));
