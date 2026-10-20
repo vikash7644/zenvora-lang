@@ -1170,13 +1170,18 @@ fn vm_binary(operator, left, right) {
  }
  return map("value", "", "error", "unsupported binary operator: " + operator)
 }
-fn execute_plan_code(code, initial_env, initial_output) {
+fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
+ if call_depth > 64 {
+  return map("environment", initial_env, "output", initial_output, "error", "function call depth exceeds safety limit", "returned", false, "return_value", "")
+ }
  define env := initial_env
  define output := initial_output
  define stack := array()
  define pc := 0
  define err := ""
- repeat pc < len(code) and err == "" {
+ define returned := false
+ define return_value := ""
+ repeat pc < len(code) and err == "" and not returned {
   define ins := get(code, pc)
   define op := get(ins, "op")
   if op == "push_const" {
@@ -1262,10 +1267,60 @@ fn execute_plan_code(code, initial_env, initial_output) {
             if not get(popped, "value") { pc := get(ins, "target") - 1 }
            }
           } otherwise {
-           if op == "return" {
-            pc := len(code)
+           if op == "call" {
+            define fn_name := get(ins, "name")
+            define argc := get(ins, "argc")
+            define args := array()
+            define arg_pos := 0
+            if len(stack) < argc {
+             err := "operand stack underflow in function call"
+            } otherwise {
+             repeat arg_pos < argc {
+              define popped_arg := pop_stack(stack)
+              stack := get(popped_arg, "stack")
+              args := push(args, get(popped_arg, "value"))
+              arg_pos := arg_pos + 1
+             }
+             define fn_index := 0
+             define found_fn := false
+             repeat fn_index < len(functions) and not found_fn and err == "" {
+              define fn_record := get(functions, fn_index)
+              if get(fn_record, "name") == fn_name {
+               found_fn := true
+               define params := get(fn_record, "parameters")
+               if len(params) != argc {
+                err := "function argument count mismatch: " + fn_name
+               } otherwise {
+                define fn_env := env
+                define param_pos := 0
+                repeat param_pos < len(params) {
+                 fn_env := put(fn_env, get(params, param_pos), get(args, argc - param_pos - 1))
+                 param_pos := param_pos + 1
+                }
+                define called := execute_plan_code(get(fn_record, "code"), fn_env, output, functions, call_depth + 1)
+                output := get(called, "output")
+                if get(called, "error") != "" {
+                 err := get(called, "error")
+                } otherwise {
+                 stack := push(stack, get(called, "return_value"))
+                }
+               }
+              }
+              fn_index := fn_index + 1
+             }
+             if not found_fn and err == "" { err := "undefined function: " + fn_name }
+            }
            } otherwise {
-            err := "unsupported VM opcode: " + op
+            if op == "return" {
+             returned := true
+             if len(stack) > 0 {
+              define popped_return := pop_stack(stack)
+              stack := get(popped_return, "stack")
+              return_value := get(popped_return, "value")
+             }
+            } otherwise {
+             err := "unsupported VM opcode: " + op
+            }
            }
           }
          }
@@ -1278,14 +1333,14 @@ fn execute_plan_code(code, initial_env, initial_output) {
   }
   pc := pc + 1
  }
- return map("environment", env, "output", output, "error", err)
+ return map("environment", env, "output", output, "error", err, "returned", returned, "return_value", return_value)
 }
 fn execute_bytecode_plan(plan) {
  define verification := verify_bytecode_plan(plan)
  if not get(verification, "ok") {
   return map("ok", false, "output", array(), "error", get(verification, "error"))
  }
- define executed := execute_plan_code(get(plan, "main"), map(), array())
+ define executed := execute_plan_code(get(plan, "main"), map(), array(), get(plan, "functions"), 0)
  return map("ok", get(executed, "error") == "", "output", get(executed, "output"), "error", get(executed, "error"), "environment", get(executed, "environment"))
 }
 
@@ -1315,7 +1370,7 @@ show get(invalid_return_result, "error")
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
 show bytecode_verification
-define runnable_source := "define answer := 2 + 3 * 4\nshow answer\n"
+define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nfn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\nfn choose(a, b) {\nif a > 0 {\nreturn add(a, b)\n} otherwise {\nreturn b\n}\n}\nshow choose(2, 5)\nshow choose(0, 7)\n"
 define runnable_lexed := lex(runnable_source)
 define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
