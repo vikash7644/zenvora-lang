@@ -77,6 +77,10 @@ jobs:
           grep -F 'ZENVORA_SEMANTICS' parser-output.txt
           grep -F 'break outside loop' parser-output.txt
           grep -F 'return outside function' parser-output.txt
+          grep -F 'ZENVORA_BYTECODE_VERIFY' parser-output.txt
+          grep -F '"ok": true' parser-output.txt
+          ! grep -F 'invalid jump target' parser-output.txt
+          ! grep -F 'unsupported bytecode opcode' parser-output.txt
           grep -F '"ok": true' parser-output.txt
           grep -F 'break' parser-output.txt
           grep -F 'continue' parser-output.txt
