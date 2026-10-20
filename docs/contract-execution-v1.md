@@ -1,6 +1,6 @@
 # Contract Execution V1 — Design and Implementation Gates
 
-**Status:** Design proposal; not implemented protocol behavior.  
+**Status:** Partial implementation: isolated contract-state overlays, canonical file snapshots, and a deterministic gas-meter primitive exist in `src/contract_state.rs` and `src/contract_gas.rs`. They are not yet wired into contract DSL execution, signed transaction admission, fee settlement, block replay, or the deployed playground.  
 **Scope:** The first deterministic contract execution milestone for Zenvora Lang and the local chain harness.  
 **Safety rule:** This document must not be interpreted as evidence that persistent contract storage, gas charging, or production authorization already exists.
 
@@ -22,7 +22,7 @@ The committed state is a versioned map of canonical keys to canonical values. V1
 
 Addresses, contract IDs, storage keys, and values must have explicit byte-length limits and canonical encodings. A contract may read or write only its own storage namespace unless a future, separately reviewed capability explicitly grants access. State-root input must use lexicographically sorted canonical keys and values, length prefixes, a version/domain tag, and deterministic hashing.
 
-The current transfer-only runtime is not yet this general state model. Existing balance/nonce roots and block-store replay remain compatibility inputs until a versioned migration is implemented.
+The current transfer-only runtime is not yet this general state model. Existing balance/nonce roots and block-store replay remain compatibility inputs until a versioned migration is implemented. The new contract storage primitive currently supports isolated overlays, bounded values, canonical versioned snapshots, and atomic file replacement, but snapshot trust/replay validation and integration with the chain runtime remain outstanding.
 
 ## Transaction and authorization rules
 
@@ -48,7 +48,7 @@ Gas is an integer unit, not elapsed time. V1 must define constants in a versione
 - direct function call: 40 gas
 - emitted event with bounded payload: 375 gas plus 8 gas per payload byte
 
-These are provisional engineering values, not activated network parameters. Before implementation is declared complete, the schedule must be tied to concrete VM opcodes and host operations, have overflow-checked arithmetic, and be covered by golden vectors. No host-language wall-clock measurement may influence gas.
+These are provisional engineering values, not activated network parameters. A standalone version-1 gas meter now implements integer charging, checked event-cost arithmetic, and deterministic out-of-gas rejection, but no VM opcode or host operation charges it yet. Before implementation is declared complete, the schedule must be tied to concrete VM opcodes and host operations, have overflow-checked arithmetic, and be covered by golden vectors. No host-language wall-clock measurement may influence gas.
 
 Each transaction declares `gas_limit` and `max_fee`. V1 fee semantics must explicitly choose and encode a gas price or fee cap; it must not silently treat `max_fee` as both a per-gas price and a total reserve. The implementation must calculate a checked maximum reserve, reject insufficient funds before execution, stop execution deterministically when the gas limit is exhausted, and define whether a reverted transaction pays consumed gas. The receipt must include gas limit, gas used, effective gas price, total fee, execution status, and a stable error code. Fee debits and any fee destination/burn must be committed in state and included in the state root.
 
