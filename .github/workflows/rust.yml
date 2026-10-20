@@ -131,7 +131,7 @@ jobs:
         run: cargo run --locked -- --engine-run examples/hello.zv | grep -Fxq 35
 
       - name: Execute relative modules through native Zenvora Engine
-        run: cargo run --locked -- --engine-run examples/modules.zv | grep -Fxq 5
+        run: cargo run --locked -- --engine-run examples/modules.zv | grep -Fxq 42
 
       - name: Smoke-test Rust compiler HTTP API
         shell: bash
