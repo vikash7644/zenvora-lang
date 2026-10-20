@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "src/bytecode_v2.rs"
+      - "src/main.rs"
       - "fuzz/**"
       - ".github/workflows/bytecode-v2-fuzz.yml"
   push:
@@ -11,6 +12,7 @@ on:
       - "main"
     paths:
       - "src/bytecode_v2.rs"
+      - "src/main.rs"
       - "fuzz/**"
       - ".github/workflows/bytecode-v2-fuzz.yml"
   workflow_dispatch:
