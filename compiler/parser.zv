@@ -183,7 +183,178 @@ fn parse_program(tokens) {
  return map("ast", ast, "error", err)
 }
 
-use "token_stream.zv"
+# Character-level lexer written in Zenvora. Tokens include kind/value/line/column.
+fn space(c) {
+ return c == " " or c == "\t" or c == "\n" or c == "\r"
+}
+fn letter(c) {
+ return index_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c) >= 0
+}
+fn digit(c) {
+ return index_of("0123456789", c) >= 0
+}
+fn word(c) {
+ return letter(c) or digit(c)
+}
+fn token(k, v, l, c) {
+ return map("kind", k, "value", v, "line", l, "column", c)
+}
+
+fn lex(source) {
+ define out := array()
+ define n := char_count(source)
+ define i := 0
+ define line := 1
+ define col := 1
+ define start_line := 1
+ define start_col := 1
+ define c := ""
+ define d := ""
+ define v := ""
+ define k := ""
+ define err := ""
+ define closed := false
+ repeat i < n and err == "" {
+  c := char_at(source, i)
+  if space(c) {
+   if c == "\n" {
+    line := line + 1
+    col := 1
+   } otherwise {
+    col := col + 1
+   }
+   i := i + 1
+  } otherwise {
+   if c == "#" {
+    repeat i < n and char_at(source, i) != "\n" {
+     i := i + 1
+     col := col + 1
+    }
+   } otherwise {
+    start_line := line
+    start_col := col
+    v := ""
+    if c == "\"" {
+     k := "string"
+     closed := false
+     i := i + 1
+     col := col + 1
+     repeat i < n and not closed and err == "" {
+      c := char_at(source, i)
+      if c == "\"" {
+       closed := true
+       i := i + 1
+       col := col + 1
+      } otherwise {
+       if c == "\\" {
+        i := i + 1
+        col := col + 1
+        if i >= n {
+         err := "unterminated escape"
+        } otherwise {
+         d := char_at(source, i)
+         if d == "n" {
+          v := v + "\n"
+         } otherwise {
+          if d == "t" {
+           v := v + "\t"
+          } otherwise {
+           if d == "r" {
+            v := v + "\r"
+           } otherwise {
+            if d == "\"" or d == "\\" {
+             v := v + d
+            } otherwise {
+             err := "unsupported escape"
+            }
+           }
+          }
+         }
+         i := i + 1
+         col := col + 1
+        }
+       } otherwise {
+        if c == "\n" {
+         err := "newline in string literal"
+        } otherwise {
+         v := v + c
+         i := i + 1
+         col := col + 1
+        }
+       }
+      }
+     }
+     if err == "" and not closed {
+      err := "unterminated string literal"
+     }
+     if err == "" {
+      out := push(out, token(k, v, start_line, start_col))
+     }
+    } otherwise {
+     if letter(c) {
+      k := "identifier"
+      repeat i < n and word(char_at(source, i)) {
+       v := v + char_at(source, i)
+       i := i + 1
+       col := col + 1
+      }
+      if v == "define" or v == "show" or v == "fn" or v == "call" or v == "return" or v == "if" or v == "otherwise" or v == "repeat" or v == "break" or v == "continue" or v == "use" or v == "contract" or v == "state" or v == "action" or v == "view" {
+       k := "keyword"
+      } otherwise {
+       if v == "true" or v == "false" {
+        k := "boolean"
+       } otherwise {
+        if v == "and" or v == "or" or v == "not" {
+         k := "operator"
+        }
+       }
+      }
+      out := push(out, token(k, v, start_line, start_col))
+     } otherwise {
+      if digit(c) {
+       k := "number"
+       repeat i < n and digit(char_at(source, i)) {
+        v := v + char_at(source, i)
+        i := i + 1
+        col := col + 1
+       }
+       out := push(out, token(k, v, start_line, start_col))
+      } otherwise {
+       d := ""
+       if i + 1 < n {
+        d := char_at(source, i + 1)
+       }
+       if (c == ":" and d == "=") or (c == "=" and d == "=") or (c == "!" and d == "=") or (c == "<" and d == "=") or (c == ">" and d == "=") {
+        v := c + d
+        k := "operator"
+        i := i + 2
+        col := col + 2
+        out := push(out, token(k, v, start_line, start_col))
+       } otherwise {
+        v := c
+        if c == "+" or c == "-" or c == "*" or c == "/" or c == "=" or c == "<" or c == ">" or c == "!" {
+         k := "operator"
+        } otherwise {
+         if c == "(" or c == ")" or c == "[" or c == "]" or c == "{" or c == "}" or c == "," {
+          k := "punctuation"
+         } otherwise {
+          err := "unexpected character"
+         }
+        }
+        if err == "" {
+         out := push(out, token(k, v, start_line, start_col))
+         i := i + 1
+         col := col + 1
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+ return map("tokens", out, "error", err)
+}
 
 define parser_source := "define answer := 2 + 3 * 4\nshow answer\n"
 define lexed := lex(parser_source)
