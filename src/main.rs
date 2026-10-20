@@ -4253,6 +4253,27 @@ repeat count < 5 {
     }
 
     #[test]
+    fn bytecode_v2_matches_source_for_integer_arithmetic_failures() {
+        let cases = [
+            "show 9223372036854775807 + 1\\n",
+            "show 9223372036854775807 * 2\\n",
+            "show (-9223372036854775807 - 1) / -1\\n",
+            "show 1 / 0\\n",
+        ];
+        for source in cases {
+            let source_error = execute(source).unwrap_err();
+            let (code, layout) = super::compile_with_layout(source).unwrap();
+            let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+            let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+            let mut output = Vec::new();
+            let bytecode_error =
+                super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap_err();
+            assert_eq!(bytecode_error, source_error, "error mismatch for {source:?}");
+            assert!(output.is_empty(), "failed arithmetic unexpectedly printed output");
+        }
+    }
+
+    #[test]
     fn bytecode_v2_matches_source_for_recursive_returns() {
         let source = r#"show factorial(6)
 fn factorial(n) {
