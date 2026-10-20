@@ -945,13 +945,15 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
         let entry = code.len();
         entries.insert(name.clone(), (entry, params.clone()));
         let mut body_code = compile_core(body)?;
+        // Analyze local control-flow targets before relocating jumps into the
+        // whole-program instruction stream.
+        let can_fall_through = function_body_can_fall_through(&body_code);
         for op in &mut body_code {
             match op {
                 Op::Jump(target) | Op::JumpIfFalse(target) | Op::JumpIfFalseKeep(target) | Op::JumpIfTrueKeep(target) if *target != usize::MAX => *target += entry,
                 _ => {}
             }
         }
-        let can_fall_through = function_body_can_fall_through(&body_code);
         code.extend(body_code);
         if can_fall_through {
             code.push(Op::Return);
