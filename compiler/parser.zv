@@ -181,7 +181,7 @@ fn parse_compare(tokens, pos) {
  return result(left, next, "")
 }
 
-fn parse_expr(tokens, pos) {
+fn parse_and(tokens, pos) {
  define left_result := parse_compare(tokens, pos)
  if get(left_result, "error") != "" {
   return left_result
@@ -189,14 +189,32 @@ fn parse_expr(tokens, pos) {
  define left := get(left_result, "ast")
  define next := get(left_result, "pos")
  define ln := get(left, "line")
- repeat next < len(tokens) and get(at(tokens, next), "line") == ln and (get(at(tokens, next), "value") == "and" or get(at(tokens, next), "value") == "or") {
+ repeat next < len(tokens) and get(at(tokens, next), "line") == ln and get(at(tokens, next), "value") == "and" {
   define op := get(at(tokens, next), "value")
   define right_result := parse_compare(tokens, next + 1)
   if get(right_result, "error") != "" {
    return right_result
   }
-  define right_ast := get(right_result, "ast")
-  left := node("binary", op, left, right_ast, ln)
+  left := node("binary", op, left, get(right_result, "ast"), ln)
+  next := get(right_result, "pos")
+ }
+ return result(left, next, "")
+}
+
+fn parse_expr(tokens, pos) {
+ define left_result := parse_and(tokens, pos)
+ if get(left_result, "error") != "" {
+  return left_result
+ }
+ define left := get(left_result, "ast")
+ define next := get(left_result, "pos")
+ define ln := get(left, "line")
+ repeat next < len(tokens) and get(at(tokens, next), "line") == ln and get(at(tokens, next), "value") == "or" {
+  define right_result := parse_and(tokens, next + 1)
+  if get(right_result, "error") != "" {
+   return right_result
+  }
+  left := node("binary", "or", left, get(right_result, "ast"), ln)
   next := get(right_result, "pos")
  }
  return result(left, next, "")
@@ -463,7 +481,7 @@ fn lex(source) {
  return map("tokens", out, "error", err)
 }
 
-define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
+define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
 define parsed := parse_program(parser_tokens)
@@ -479,10 +497,12 @@ define call_statement := get(parsed_ast, 4)
 define call_expr := get(call_statement, "left")
 define index_statement := get(parsed_ast, 5)
 define index_expr := get(index_statement, "left")
-define assignment_statement := get(parsed_ast, 6)
-define return_statement := get(parsed_ast, 7)
-define break_statement := get(parsed_ast, 8)
-define continue_statement := get(parsed_ast, 9)
+define logic_statement := get(parsed_ast, 6)
+define logic_expr := get(logic_statement, "left")
+define assignment_statement := get(parsed_ast, 7)
+define return_statement := get(parsed_ast, 8)
+define break_statement := get(parsed_ast, 9)
+define continue_statement := get(parsed_ast, 10)
 define bad_lexed := lex("define broken :=\n")
 define bad_tokens := get(bad_lexed, "tokens")
 define bad_parse := parse_program(bad_tokens)
@@ -507,6 +527,8 @@ show get(inverted_expr, "kind")
 show get(inverted_expr, "value")
 show get(call_expr, "kind")
 show get(index_expr, "kind")
+show get(logic_expr, "value")
+show get(get(logic_expr, "right"), "value")
 show get(assignment_statement, "kind")
 show get(return_statement, "kind")
 show get(break_statement, "kind")
