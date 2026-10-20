@@ -147,13 +147,13 @@ mod tests {
     fn compile_run_returns_package_version_and_output() {
         let body = r#"{"source":"show 1 + 1"}"#;
         let request = format!(
-            "POST /compile-run HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\n\\r\\n{}",
+            "POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
             body.len(),
             body
         );
         let response = response_for(request.as_bytes());
         assert!(response.starts_with("HTTP/1.1 200 OK"));
-        let response_body = response.split("\\r\\n\\r\\n").nth(1).unwrap();
+        let response_body = response.split("\r\n\r\n").nth(1).unwrap();
         let value: Value = serde_json::from_str(response_body).unwrap();
         assert_eq!(
             value["compiler"],
