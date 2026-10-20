@@ -340,7 +340,8 @@ mod tests {
             "call increment(1) trailing",
             "call increment((1)",
             "show current()",
-            "call increment(1)\\nshow current()",
+            "call increment(1)\nshow current()",
+            "call increment(1)\rshow current()",
         ] {
             tx.invocation = invalid.into();
             assert!(tx.signing_bytes().is_err(), "unexpectedly accepted invocation: {invalid:?}");
