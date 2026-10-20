@@ -31,8 +31,10 @@ Main CI passed on current compiler-source commit `def75b956aa4f52188119fc09d5c9e
 
 - Added `src/contract_state.rs` and wired it into the Rust test target.
 - Implemented deterministic sorted-key state-root hashing, bounded contract IDs/keys/values/storage size, per-contract storage namespaces, isolated write/delete overlays, atomic commit via candidate-state replacement, and read-only `view` overlays that reject writes/commits.
-- Added unit tests for overlay invisibility before commit, discarded-overlay rollback, view write rejection, contract namespace isolation, overlay-local deletes, insertion-order-independent roots, and oversized-value rejection.
-- This is a tested **storage primitive**, not yet the full contract runtime: it is not persisted to disk, is not connected to `chain_runtime` transaction execution or the contract DSL, and has no authorization/signature binding or gas charging. Do not mark the release blockers complete until those integrations and restart/replay tests land.
+- Added canonical versioned snapshots, strict decoding (version, bounds, sorted keys, no trailing bytes), and atomic file replacement plus a file round-trip test. Snapshot validity is not equivalent to trusted chain replay.
+- Added `src/contract_gas.rs` with an explicit version-1 integer schedule, checked event cost, deterministic gas-limit rejection, and tests. These costs are not activated protocol parameters, and the meter is not yet called by VM instructions or host operations.
+- Tests cover overlay invisibility before commit, discarded-overlay rollback, view write rejection, contract namespace isolation, overlay-local deletes, insertion-order-independent roots, oversized values, snapshot round-trip/rejection, and gas charging/out-of-gas.
+- This is a **partial runtime foundation**, not a complete contract runtime: state/gas primitives are not connected to the contract DSL or `chain_runtime` signed-transaction execution; signer authorization, fee settlement, replay validation, persistent deployment artifacts, and real-compiler playground integration remain pending. Current-source CI/fuzz must pass before these new tests are marked verified.
 
 ## Language feature and release checklist
 
