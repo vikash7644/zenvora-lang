@@ -67,5 +67,7 @@ examples.find(button => button.dataset.example === "collections").click();
 assert.ok(elements.code.value.includes("map("), "collections example loads");
 examples.find(button => button.dataset.example === "stdlib").click();
 assert.ok(elements.code.value.includes("range("), "standard-library example loads");
+examples.find(button => button.dataset.example === "combined").click();
+run(elements.code.value, "Building with Zenvora\\n3\\n1\\nBuild step\\n3\\n42", "combined demo with nested otherwise blocks");
 
-console.log("Playground tests passed: expressions, branching, loops, functions, collections, standard library, and error handling.");
+console.log("Playground tests passed: expressions, branching, nested otherwise blocks, loops, functions, collections, standard library, and error handling.");
