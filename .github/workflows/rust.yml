@@ -46,6 +46,9 @@ jobs:
       - name: Execute every Zenvora Lang example
         run: bash scripts/check_examples.sh
 
+      - name: Test persistent contract CLI, gas, and rollback
+        run: bash scripts/test_contract_cli.sh
+
       - name: Smoke-test optimized release CLI version
         run: ./target/release/zv --version
 
