@@ -78,3 +78,5 @@ jobs:
           grep -F 'expected literal, name, or parenthesized expression' parser-output.txt
           grep -F 'expected closing bracket after index' parser-output.txt
           grep -F 'expected closing parenthesis' parser-output.txt
+          grep -F 'expected function parameter name' parser-output.txt
+          grep -F 'expected closing brace' parser-output.txt
