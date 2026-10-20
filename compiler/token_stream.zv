@@ -1,0 +1,29 @@
+# First Zenvora-written compiler component.
+# Stage B0: whitespace-delimited token stream for the bootstrap frontend.
+# Contract: caller supplies source with operators/punctuation separated by spaces.
+# This is deliberately not advertised as the full source lexer.
+
+fn tokenize_normalized(source) {
+    define raw := split(trim(source), " ")
+    define tokens := array()
+    define index := 0
+
+    repeat index < len(raw) {
+        define token := get(raw, index)
+        if token != "" {
+            tokens := push(tokens, token)
+        }
+        index := index + 1
+    }
+    return tokens
+}
+
+fn token_count(source) {
+    return len(tokenize_normalized(source))
+}
+
+# Smoke fixture: expected tokens are ["define", "answer", ":=", "40", "+", "2"].
+define sample := "define answer := 40 + 2"
+define sample_tokens := tokenize_normalized(sample)
+show sample_tokens
+show token_count(sample)
