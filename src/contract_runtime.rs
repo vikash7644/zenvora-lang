@@ -125,6 +125,16 @@ fn execute_inner(
     Ok(ExecutionReceipt { output, gas_used: meter.used(), state_root: state.state_root() })
 }
 
+/// Validate a signed transaction's invocation before it is accepted for signing/admission.
+/// Keep this check shared with execution so the signed payload grammar cannot drift.
+pub(super) fn validate_signed_action_invocation(invocation: &str) -> Result<(), String> {
+    let (kind, _) = parse_invocation(invocation)?;
+    if kind != "action" {
+        return Err("signed contract transactions must invoke an action".into());
+    }
+    Ok(())
+}
+
 fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
     let trimmed = invocation.trim();
     if trimmed.contains('\n') || trimmed.contains('\r') {
