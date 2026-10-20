@@ -618,6 +618,121 @@ fn lex(source) {
  return map("tokens", out, "error", err)
 }
 
+# Zenvora-written structured IR lowering. This is deliberately separate from the Rust reference VM.
+# Expression IR is a flat stack sequence; control-flow IR remains structured for later bytecode emission.
+fn append_instructions(target, source) {
+ define i := 0
+ repeat i < len(source) {
+  target := push(target, get(source, i))
+  i := i + 1
+ }
+ return target
+}
+
+fn lower_expression(ast) {
+ define out := array()
+ define kind := get(ast, "kind")
+ define value := get(ast, "value")
+ if kind == "number" or kind == "string" or kind == "boolean" {
+  out := push(out, map("op", "const", "value", value, "line", get(ast, "line")))
+ } otherwise {
+  if kind == "name" {
+   out := push(out, map("op", "load", "name", value, "line", get(ast, "line")))
+  } otherwise {
+   if kind == "unary" {
+    out := append_instructions(out, lower_expression(get(ast, "left")))
+    out := push(out, map("op", "unary", "operator", value, "line", get(ast, "line")))
+   } otherwise {
+    if kind == "binary" {
+     out := append_instructions(out, lower_expression(get(ast, "left")))
+     out := append_instructions(out, lower_expression(get(ast, "right")))
+     out := push(out, map("op", "binary", "operator", value, "line", get(ast, "line")))
+    } otherwise {
+     if kind == "index" {
+      out := append_instructions(out, lower_expression(get(ast, "left")))
+      out := append_instructions(out, lower_expression(get(ast, "right")))
+      out := push(out, map("op", "index", "line", get(ast, "line")))
+     } otherwise {
+      if kind == "call" {
+       define callee := get(ast, "left")
+       define args := get(ast, "right")
+       define argc := 0
+       if get(callee, "kind") == "name" {
+        define arg_pos := 0
+        repeat arg_pos < len(args) {
+         out := append_instructions(out, lower_expression(get(args, arg_pos)))
+         argc := argc + 1
+         arg_pos := arg_pos + 1
+        }
+        out := push(out, map("op", "call", "name", get(callee, "value"), "argc", argc, "line", get(ast, "line")))
+       } otherwise {
+        out := append_instructions(out, lower_expression(callee))
+        define arg_pos := 0
+        repeat arg_pos < len(args) {
+         out := append_instructions(out, lower_expression(get(args, arg_pos)))
+         argc := argc + 1
+         arg_pos := arg_pos + 1
+        }
+        out := push(out, map("op", "call_indirect", "argc", argc, "line", get(ast, "line")))
+       }
+      } otherwise {
+       out := push(out, map("op", "error", "message", "unsupported expression node", "kind", kind, "line", get(ast, "line")))
+      }
+     }
+    }
+   }
+  }
+ }
+ return out
+}
+
+fn lower_program(ast) {
+ define out := array()
+ define pos := 0
+ repeat pos < len(ast) {
+  define statement := get(ast, pos)
+  define kind := get(statement, "kind")
+  define value := get(statement, "value")
+  define line := get(statement, "line")
+  if kind == "define" {
+   out := push(out, map("op", "declare", "name", value, "code", lower_expression(get(statement, "left")), "line", line))
+  } otherwise {
+   if kind == "assign" {
+    out := push(out, map("op", "store", "name", value, "code", lower_expression(get(statement, "left")), "line", line))
+   } otherwise {
+    if kind == "show" {
+     out := push(out, map("op", "print", "code", lower_expression(get(statement, "left")), "line", line))
+    } otherwise {
+     if kind == "return" {
+      out := push(out, map("op", "return", "code", lower_expression(get(statement, "left")), "line", line))
+     } otherwise {
+      if kind == "if" {
+       define branches := get(statement, "right")
+       out := push(out, map("op", "branch", "condition", lower_expression(get(statement, "left")), "then", lower_program(get(branches, "then")), "otherwise", lower_program(get(branches, "otherwise")), "line", line))
+      } otherwise {
+       if kind == "repeat" {
+        out := push(out, map("op", "loop", "condition", lower_expression(get(statement, "left")), "body", lower_program(get(statement, "right")), "line", line))
+       } otherwise {
+        if kind == "function" {
+         out := push(out, map("op", "function", "name", value, "parameters", get(statement, "left"), "body", lower_program(get(statement, "right")), "line", line))
+        } otherwise {
+         if kind == "break" or kind == "continue" {
+          out := push(out, map("op", kind, "line", line))
+         } otherwise {
+          out := push(out, map("op", "error", "message", "unsupported statement node", "kind", kind, "line", line))
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+  pos := pos + 1
+ }
+ return out
+}
+
 define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nfn add(a, b) { if a > 0 { return a + b } otherwise { return b } }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
@@ -692,3 +807,8 @@ show get(bad_assign_parse, "error")
 show get(bad_fn_param_parse, "error")
 show get(bad_fn_block_parse, "error")
 show parsed
+
+# Exercise the Zenvora-written AST-to-IR lowering on the parsed source above.
+define lowered_ir := lower_program(parsed_ast)
+show "ZENVORA_IR"
+show lowered_ir
