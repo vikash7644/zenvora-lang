@@ -155,7 +155,7 @@
         },
         {
           "name": "punctuation.separator.zenvora",
-          "match": "[(),;[\\]]"
+          "match": "\\(|\\)|,|;|\\[|\\]"
         }
       ]
     }
