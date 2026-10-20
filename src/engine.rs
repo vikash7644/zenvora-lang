@@ -83,6 +83,67 @@ show twice(start + 3)
         assert!(error.contains("division by zero"), "unexpected error: {error}");
     }
 
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock must be after UNIX epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "zenvora-engine-{}-{nonce}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).expect("create temporary engine test directory");
+            Self(path)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn engine_runs_files_with_relative_module_imports() {
+        let temp = TempDir::new();
+        std::fs::create_dir_all(temp.0.join("lib")).unwrap();
+        std::fs::write(
+            temp.0.join("main.zv"),
+            "use \"lib/math.zv\"\nshow twice(21)\n",
+        )
+        .unwrap();
+        std::fs::write(
+            temp.0.join("lib/math.zv"),
+            "fn twice(value) {\n    return value * 2\n}\n",
+        )
+        .unwrap();
+
+        let result = Engine::run_file(temp.0.join("main.zv"))
+            .expect("engine should load and execute relative modules");
+        assert_eq!(result.output, vec!["42"]);
+    }
+
+    #[test]
+    fn engine_checks_files_without_executing_runtime_operations() {
+        let temp = TempDir::new();
+        let path = temp.0.join("check_only.zv");
+        std::fs::write(&path, "show 1 / 0\n").unwrap();
+
+        let instruction_count =
+            Engine::check_file(&path).expect("valid source should compile and verify");
+        assert!(instruction_count > 0);
+        assert!(
+            Engine::run_file(&path)
+                .unwrap_err()
+                .contains("division by zero"),
+            "the runtime error should occur only when execution is requested"
+        );
+    }
+
     #[test]
     fn engine_version_matches_package_metadata() {
         assert_eq!(Engine::version(), env!("CARGO_PKG_VERSION"));
