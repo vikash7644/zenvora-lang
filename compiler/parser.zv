@@ -24,23 +24,23 @@ fn kind_at(tokens, pos) {
 
 fn parse_primary(tokens, pos) {
  if pos >= len(tokens) {
-  return result(null, pos, "expected expression")
+  return result("", pos, "expected expression")
  }
  define t := at(tokens, pos)
  define k := get(t, "kind")
  define v := get(t, "value")
  define ln := get(t, "line")
  if k == "number" {
-  return result(node("integer", v, null, null, ln), pos + 1, "")
+  return result(node("integer", v, "", "", ln), pos + 1, "")
  }
  if k == "string" {
-  return result(node("string", v, null, null, ln), pos + 1, "")
+  return result(node("string", v, "", "", ln), pos + 1, "")
  }
  if k == "boolean" {
-  return result(node("boolean", v, null, null, ln), pos + 1, "")
+  return result(node("boolean", v, "", "", ln), pos + 1, "")
  }
  if k == "identifier" {
-  return result(node("name", v, null, null, ln), pos + 1, "")
+  return result(node("name", v, "", "", ln), pos + 1, "")
  }
  if v == "(" {
   define inner := parse_expr(tokens, pos + 1)
@@ -49,11 +49,11 @@ fn parse_primary(tokens, pos) {
   }
   define after := get(inner, "pos")
   if after >= len(tokens) or val(tokens, after) != ")" {
-   return result(null, after, "expected closing parenthesis")
+   return result("", after, "expected closing parenthesis")
   }
   return result(get(inner, "ast"), after + 1, "")
  }
- return result(null, pos, "expected expression")
+ return result("", pos, "expected expression")
 }
 
 fn parse_mul(tokens, pos) {
@@ -159,7 +159,7 @@ fn parse_program(tokens) {
       if get(expr, "pos") == pos + 3 {
        err := "expected expression after :="
       } otherwise {
-       ast := push(ast, node("define", get(name_token, "value"), get(expr, "ast"), null, ln))
+       ast := push(ast, node("define", get(name_token, "value"), get(expr, "ast"), "", ln))
        pos := get(expr, "pos")
       }
      }
@@ -174,7 +174,7 @@ fn parse_program(tokens) {
      if get(expr, "pos") == pos + 1 {
       err := "expected expression after show"
      } otherwise {
-      ast := push(ast, node("show", "", get(expr, "ast"), null, ln))
+      ast := push(ast, node("show", "", get(expr, "ast"), "", ln))
       pos := get(expr, "pos")
      }
     }
