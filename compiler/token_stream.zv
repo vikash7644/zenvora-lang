@@ -73,7 +73,7 @@ fn lex(source) {
        i := i + 1
        col := col + 1
       }
-      if index_of("define show fn call return if otherwise repeat break continue use contract state action view", v) >= 0 {
+      if v == "define" or v == "show" or v == "fn" or v == "call" or v == "return" or v == "if" or v == "otherwise" or v == "repeat" or v == "break" or v == "continue" or v == "use" or v == "contract" or v == "state" or v == "action" or v == "view" {
        k := "keyword"
       } otherwise {
        if v == "true" or v == "false" { k := "boolean" } otherwise {
