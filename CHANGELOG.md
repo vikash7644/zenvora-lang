@@ -4,6 +4,8 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## Unreleased
 
+- Fixed the browser playground's same-line `} otherwise {` parsing and function-call executor scope; added regression coverage for nested branches and recursive functions.
+- Main CI now packages the VS Code syntax-highlighting extension as a `.vsix` artifact and uploads it for manual installation; Marketplace publishing remains separate.
 - Fixed `examples/science.zv` to construct integer arrays with the supported `array(...)` builtin rather than unsupported bracket-array syntax. Added a CI sweep that executes every checked-in `.zv` example with the optimized release CLI.
 - Added Cargo package homepage, repository, README, keywords, and category metadata for cleaner distribution metadata.
 
