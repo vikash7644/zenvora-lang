@@ -144,6 +144,25 @@ mod tests {
     }
 
     #[test]
+    fn compile_run_returns_package_version_and_output() {
+        let body = r#"{"source":"show 1 + 1"}"#;
+        let request = format!(
+            "POST /compile-run HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\n\\r\\n{}",
+            body.len(),
+            body
+        );
+        let response = response_for(request.as_bytes());
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        let response_body = response.split("\\r\\n\\r\\n").nth(1).unwrap();
+        let value: Value = serde_json::from_str(response_body).unwrap();
+        assert_eq!(
+            value["compiler"],
+            format!("zenvora-rust-v{}", env!("CARGO_PKG_VERSION"))
+        );
+        assert_eq!(value["output"], "2");
+    }
+
+    #[test]
     fn duplicate_content_length_receives_http_400_response() {
         let response = response_for(
             b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\ncontent-length: 2\r\n\r\n{}",
