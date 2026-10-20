@@ -60,6 +60,8 @@ jobs:
           cat parser-output.txt
           grep -F 'binary' parser-output.txt
           grep -F 'unary' parser-output.txt
+          grep -F 'call' parser-output.txt
+          grep -F 'index' parser-output.txt
           grep -F 'define' parser-output.txt
           grep -F 'show' parser-output.txt
           grep -F 'error' parser-output.txt
