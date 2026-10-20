@@ -49,6 +49,58 @@ fn parse_primary(tokens, pos) {
  }
 }
 
+fn parse_postfix(tokens, pos) {
+ define base_result := parse_primary(tokens, pos)
+ if get(base_result, "error") != "" {
+  return base_result
+ }
+ define base := get(base_result, "ast")
+ define next := get(base_result, "pos")
+ repeat next < len(tokens) and (get(at(tokens, next), "value") == "(" or get(at(tokens, next), "value") == "[") {
+  define opener := get(at(tokens, next), "value")
+  define ln := get(base, "line")
+  if opener == "(" {
+   define args := array()
+   next := next + 1
+   if next < len(tokens) and get(at(tokens, next), "value") != ")" {
+    define arg_result := parse_expr(tokens, next)
+    if get(arg_result, "error") != "" {
+     return arg_result
+    }
+    args := push(args, get(arg_result, "ast"))
+    next := get(arg_result, "pos")
+    repeat next < len(tokens) and get(at(tokens, next), "value") == "," {
+     next := next + 1
+     define more_arg := parse_expr(tokens, next)
+     if get(more_arg, "error") != "" {
+      return more_arg
+     }
+     args := push(args, get(more_arg, "ast"))
+     next := get(more_arg, "pos")
+    }
+   }
+   if next >= len(tokens) or get(at(tokens, next), "value") != ")" {
+    return result("", next, "expected closing parenthesis in call")
+   }
+   base := node("call", "", base, args, ln)
+   next := next + 1
+  } otherwise {
+   next := next + 1
+   define index_result := parse_expr(tokens, next)
+   if get(index_result, "error") != "" {
+    return index_result
+   }
+   next := get(index_result, "pos")
+   if next >= len(tokens) or get(at(tokens, next), "value") != "]" {
+    return result("", next, "expected closing bracket after index")
+   }
+   base := node("index", "", base, get(index_result, "ast"), ln)
+   next := next + 1
+  }
+ }
+ return result(base, next, "")
+}
+
 fn parse_unary(tokens, pos) {
  if pos >= len(tokens) {
   return result("", pos, "expected expression")
@@ -62,7 +114,7 @@ fn parse_unary(tokens, pos) {
   }
   return result(node("unary", op, get(operand, "ast"), "", get(t, "line")), get(operand, "pos"), "")
  } otherwise {
-  return parse_primary(tokens, pos)
+  return parse_postfix(tokens, pos)
  }
 }
 
@@ -381,7 +433,7 @@ fn lex(source) {
  return map("tokens", out, "error", err)
 }
 
-define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\n"
+define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\n"
 define lexed := lex(parser_source)
 define parser_tokens := get(lexed, "tokens")
 define parsed := parse_program(parser_tokens)
@@ -393,6 +445,10 @@ define negative_statement := get(parsed_ast, 2)
 define negative_expr := get(negative_statement, "left")
 define inverted_statement := get(parsed_ast, 3)
 define inverted_expr := get(inverted_statement, "left")
+define call_statement := get(parsed_ast, 4)
+define call_expr := get(call_statement, "left")
+define index_statement := get(parsed_ast, 5)
+define index_expr := get(index_statement, "left")
 define bad_lexed := lex("define broken :=\n")
 define bad_tokens := get(bad_lexed, "tokens")
 define bad_parse := parse_program(bad_tokens)
@@ -405,5 +461,7 @@ show get(negative_expr, "kind")
 show get(negative_expr, "value")
 show get(inverted_expr, "kind")
 show get(inverted_expr, "value")
+show get(call_expr, "kind")
+show get(index_expr, "kind")
 show get(bad_parse, "error")
 show parsed
