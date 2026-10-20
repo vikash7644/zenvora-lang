@@ -9,7 +9,8 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 use super::chain_protocol::address_from_public_key;
-use super::contract_runtime::{execute, ExecutionReceipt};
+use super::contract_gas::BASE_EXECUTION_GAS;
+use super::contract_runtime::{execute_with_gas_usage, ExecutionReceipt};
 use super::contract_state::{AccessMode, ContractState};
 
 const SIGNING_DOMAIN: &[u8] = b"ZENVORA_SIGNED_CONTRACT_CALL_V1\0";
@@ -165,7 +166,7 @@ impl ContractFeeLedger {
             .ok_or_else(|| "account nonce overflow".to_string())?;
         let transaction_id = transaction.transaction_id()?;
         let mut candidate_state = state.clone();
-        let execution = execute(
+        let execution = execute_with_gas_usage(
             source,
             &transaction.contract_id,
             &transaction.invocation,
@@ -184,7 +185,21 @@ impl ContractFeeLedger {
                 *state = candidate_state;
                 (true, gas_used, actual_fee, output, None)
             }
-            Err(error) => (false, transaction.gas_limit, transaction.max_fee, Vec::new(), Some(error)),
+            Err((error, measured_gas)) => {
+                // Out-of-gas consumes the full limit. Other admitted failures pay measured gas,
+                // with a minimum base charge so malformed/missing methods are not free.
+                let charged_gas = if error.contains("out of gas") {
+                    transaction.gas_limit
+                } else {
+                    measured_gas.max(BASE_EXECUTION_GAS).min(transaction.gas_limit)
+                };
+                let failure_fee = charged_gas.checked_mul(transaction.gas_price)
+                    .ok_or_else(|| "failed execution fee calculation overflow".to_string())?;
+                if failure_fee > transaction.max_fee {
+                    return Err("failed execution fee exceeds signed fee cap".into());
+                }
+                (false, charged_gas, failure_fee, Vec::new(), Some(error))
+            }
         };
 
         let remaining = self.balance(&transaction.sender)
@@ -354,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_call_charges_fee_cap_and_rolls_back_state() {
+    fn failed_call_charges_measured_or_base_gas_and_rolls_back_state() {
         let key = SigningKey::from_bytes(&[33; 32]);
         let public_key = key.verifying_key().to_bytes();
         let tx = signed_call(&key, 0, "call missing_method(4)", 100_000);
@@ -365,7 +380,10 @@ mod tests {
         let receipt = ledger.apply_signed_action(&tx, &public_key, 19, COUNTER, &mut state).unwrap();
         assert!(!receipt.success);
         assert!(receipt.error.is_some());
-        assert_eq!(receipt.fee_paid, tx.max_fee);
+        assert!(receipt.fee_paid > 0);
+        assert!(receipt.fee_paid <= tx.max_fee);
+        assert_eq!(receipt.fee_paid, receipt.gas_used * tx.gas_price);
+        assert!(receipt.gas_used < tx.gas_limit, "non-OOG failure should not burn the full gas limit");
         assert_eq!(ledger.nonce(&tx.sender), 1);
         assert_eq!(state.state_root(), before_root);
     }
