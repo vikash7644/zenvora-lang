@@ -142,14 +142,51 @@ fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
         return Err("invocation must be 'call action_name(args)' or 'show view_name(args)'".into());
     };
     let rest = rest.trim();
-    let (name, _) = rest.split_once('(')
+    let (name, args) = rest.split_once('(')
         .ok_or_else(|| "invocation must include method parentheses".to_string())?;
     let name = name.trim();
-    if !rest.ends_with(')') {
-        return Err("contract invocation must end with a closing parenthesis".into());
-    }
     if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err("invalid contract method name".into());
+    }
+
+    // The invocation is embedded into a compiled source program. Validate that its first
+    // top-level closing parenthesis ends the whole invocation, so a signed call cannot smuggle
+    // a second statement after a syntactically valid first call.
+    let mut depth = 1_i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut closing = None;
+    for (offset, ch) in args.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return Err("unbalanced parentheses in contract invocation".into());
+                }
+                if depth == 0 {
+                    closing = Some(offset + 1);
+                    break;
+                }
+            }
+            ';' => return Err("contract invocation must contain exactly one statement".into()),
+            _ => {}
+        }
+    }
+    let closing = closing.ok_or_else(|| "contract invocation is missing its closing parenthesis".to_string())?;
+    if !args[closing..].trim().is_empty() || in_string || depth != 0 {
+        return Err("contract invocation must contain exactly one complete call".into());
     }
     Ok((kind, name))
 }
@@ -306,6 +343,16 @@ mod tests {
         let mut rejected = ContractState::new();
         assert!(replay_block(COUNTER, "counter", &calls, &mut rejected, [0; 32]).is_err());
         assert_eq!(rejected.state_root(), ContractState::new().state_root());
+    }
+
+    #[test]
+    fn invocation_rejects_trailing_statements_and_unbalanced_arguments() {
+        use super::parse_invocation;
+        assert!(parse_invocation("call increment(3); call increment(9)").is_err());
+        assert!(parse_invocation("call increment(3) trailing").is_err());
+        assert!(parse_invocation("call increment((3)").is_err());
+        assert_eq!(parse_invocation("call increment((3 + 1))").unwrap(), ("action", "increment"));
+        assert_eq!(parse_invocation("show current()").unwrap(), ("view", "current"));
     }
 
     #[test]
