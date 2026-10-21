@@ -3367,7 +3367,7 @@ mod tests {
         let bytecode = super::serialize_bytecode_plan_v2(plan).unwrap();
         assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\n"));
         let parsed = crate::bytecode_v2::parse_v2_file(&bytecode).unwrap();
-        assert_eq!(parsed.instructions, vec!["PUSH 40", "PUSH 2", "ADD", "PRINT"]);
+        assert_eq!(parsed.instructions, vec!["PUSH 40", "PUSH 2", "ADD", "PRINT", "JUMP 5"]);
         let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
