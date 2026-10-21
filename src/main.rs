@@ -4950,4 +4950,25 @@ fn factorial(n) {
     }
 
 
+    #[test]
+    fn headless_2d_simulation_is_deterministic_in_source_and_bytecode() {
+        let source = include_str!("../examples/game-2d-headless-sim.zv");
+        let expected = execute(source).expect("headless simulation must execute");
+        assert!(expected.iter().any(|line| line == "ZENVORA HEADLESS 2D SIMULATION"));
+        assert!(expected.iter().any(|line| line == "COLLISION AVOIDED"));
+        assert!(expected.iter().any(|line| line == "HEADLESS SIM COMPLETE"));
+        assert!(!expected.iter().any(|line| line == "HEADLESS SIM FAILED"));
+
+        let (code, layout) = super::compile_with_layout(source)
+            .expect("headless simulation must compile");
+        let encoded = super::serialize_bytecode_v2(&code, &layout)
+            .expect("headless simulation bytecode must serialize");
+        let decoded = super::deserialize_bytecode_v2(&encoded)
+            .expect("headless simulation bytecode must deserialize");
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line))
+            .expect("headless simulation bytecode must execute");
+        assert_eq!(actual, expected);
+    }
+
 }
