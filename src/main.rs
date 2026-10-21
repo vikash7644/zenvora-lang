@@ -4344,12 +4344,18 @@ show range(0, 3)
 show sum(array(3, 4))
 "#;
         let expected = execute(source).unwrap();
-        let (code, layout) = super::compile_with_layout(source).unwrap();
-        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let stem = format!("zenvora-bytecode-v2-builtins-{}", std::process::id());
+        let source_path = std::env::temp_dir().join(format!("{stem}.zv"));
+        let bytecode_path = std::env::temp_dir().join(format!("{stem}.zv2b"));
+        std::fs::write(&source_path, source).unwrap();
+        super::write_bytecode_v2(source_path.to_str().unwrap(), bytecode_path.to_str().unwrap()).unwrap();
+        let encoded = std::fs::read_to_string(&bytecode_path).unwrap();
         assert!(encoded.starts_with("ZENVORA_BYTECODE 2\\n"));
         let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
         let mut actual = Vec::new();
         super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        std::fs::remove_file(source_path).unwrap();
+        std::fs::remove_file(bytecode_path).unwrap();
 
         assert_eq!(actual, expected);
         assert_eq!(actual, vec![
