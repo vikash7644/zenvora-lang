@@ -1392,6 +1392,122 @@ fn execute_plan_builtin(name, reversed_args) {
   if name == "range" and len(args) == 2 {
     return map("ok", true, "value", range(get(args, 0), get(args, 1)), "error", "")
   }
+  if name == "assert" and len(args) == 1 {
+    if not get(args, 0) {
+      return map("ok", false, "value", "", "error", "assertion failed")
+    }
+    return map("ok", true, "value", true, "error", "")
+  }
+  if name == "assert_eq" and len(args) == 2 {
+    if get(args, 0) != get(args, 1) {
+      return map("ok", false, "value", "", "error", "assertion failed: values are not equal")
+    }
+    return map("ok", true, "value", true, "error", "")
+  }
+  if name == "is_prime" and len(args) == 1 {
+    define prime_n := get(args, 0)
+    if type_of(prime_n) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: is_prime expects an integer")
+    }
+    if prime_n < 2 {
+      return map("ok", true, "value", false, "error", "")
+    }
+    if prime_n == 2 {
+      return map("ok", true, "value", true, "error", "")
+    }
+    if prime_n == (prime_n / 2) * 2 {
+      return map("ok", true, "value", false, "error", "")
+    }
+    define prime_divisor := 3
+    define prime_result := true
+    repeat prime_divisor <= prime_n / prime_divisor and prime_result {
+      if prime_n == (prime_n / prime_divisor) * prime_divisor {
+        prime_result := false
+      }
+      prime_divisor := prime_divisor + 2
+    }
+    return map("ok", true, "value", prime_result, "error", "")
+  }
+  if name == "gcd" and len(args) == 2 {
+    define gcd_a := get(args, 0)
+    define gcd_b := get(args, 1)
+    if type_of(gcd_a) != "integer" or type_of(gcd_b) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: gcd expects two integers")
+    }
+    if gcd_a < 0 { gcd_a := 0 - gcd_a }
+    if gcd_b < 0 { gcd_b := 0 - gcd_b }
+    repeat gcd_b != 0 {
+      define gcd_remainder := gcd_a - (gcd_a / gcd_b) * gcd_b
+      gcd_a := gcd_b
+      gcd_b := gcd_remainder
+    }
+    return map("ok", true, "value", gcd_a, "error", "")
+  }
+  if name == "lcm" and len(args) == 2 {
+    define lcm_a := get(args, 0)
+    define lcm_b := get(args, 1)
+    if type_of(lcm_a) != "integer" or type_of(lcm_b) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: lcm expects two integers")
+    }
+    if lcm_a == 0 or lcm_b == 0 {
+      return map("ok", true, "value", 0, "error", "")
+    }
+    if lcm_a < 0 { lcm_a := 0 - lcm_a }
+    if lcm_b < 0 { lcm_b := 0 - lcm_b }
+    define lcm_x := lcm_a
+    define lcm_y := lcm_b
+    repeat lcm_y != 0 {
+      define lcm_remainder := lcm_x - (lcm_x / lcm_y) * lcm_y
+      lcm_x := lcm_y
+      lcm_y := lcm_remainder
+    }
+    return map("ok", true, "value", (lcm_a / lcm_x) * lcm_b, "error", "")
+  }
+  if name == "dna_complement" and len(args) == 1 {
+    define dna_sequence := upper(get(args, 0))
+    if type_of(dna_sequence) != "string" {
+      return map("ok", false, "value", "", "error", "type error: dna_complement expects a DNA string")
+    }
+    define dna_result := ""
+    define dna_pos := 0
+    repeat dna_pos < char_count(dna_sequence) {
+      define dna_base := char_at(dna_sequence, dna_pos)
+      if dna_base == "A" { dna_result := dna_result + "T" } otherwise {
+        if dna_base == "T" { dna_result := dna_result + "A" } otherwise {
+          if dna_base == "C" { dna_result := dna_result + "G" } otherwise {
+            if dna_base == "G" { dna_result := dna_result + "C" } otherwise {
+              return map("ok", false, "value", "", "error", "dna_complement found an invalid DNA base")
+            }
+          }
+        }
+      }
+      dna_pos := dna_pos + 1
+    }
+    return map("ok", true, "value", dna_result, "error", "")
+  }
+  if name == "gc_content_percent" and len(args) == 1 {
+    define gc_sequence := upper(get(args, 0))
+    if type_of(gc_sequence) != "string" {
+      return map("ok", false, "value", "", "error", "type error: gc_content_percent expects a DNA string")
+    }
+    if char_count(gc_sequence) == 0 {
+      return map("ok", false, "value", "", "error", "gc_content_percent cannot use an empty DNA string")
+    }
+    define gc_total := 0
+    define gc_pos := 0
+    repeat gc_pos < char_count(gc_sequence) {
+      define gc_base := char_at(gc_sequence, gc_pos)
+      if gc_base == "G" or gc_base == "C" {
+        gc_total := gc_total + 1
+      } otherwise {
+        if gc_base != "A" and gc_base != "T" {
+          return map("ok", false, "value", "", "error", "gc_content_percent found an invalid DNA base")
+        }
+      }
+      gc_pos := gc_pos + 1
+    }
+    return map("ok", true, "value", (gc_total * 100) / char_count(gc_sequence), "error", "")
+  }
   if name == "factorial" and len(args) == 1 {
     define n := get(args, 0)
     if type_of(n) != "integer" or n < 0 or n > 20 {
