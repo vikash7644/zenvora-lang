@@ -1701,7 +1701,7 @@ show unsupported_nested_fn_opcode
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
 show bytecode_verification
-define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nfn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\nfn choose(a, b) {\nif a > 0 {\nreturn add(a, b)\n} otherwise {\nreturn b\n}\n}\nshow choose(2, 5)\nshow choose(0, 7)\nfn factorial(n) {\nif n <= 1 {\nreturn 1\n} otherwise {\nreturn n * factorial(n - 1)\n}\n}\nshow factorial(5)\nshow sum(array(3, 4))\nshow len(array(1, 2, 3))\nshow char_at(\"zv\", 1)\n"
+define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nfn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\nfn choose(a, b) {\nif a > 0 {\nreturn add(a, b)\n} otherwise {\nreturn b\n}\n}\nshow choose(2, 5)\nshow choose(0, 7)\nfn factorial(n) {\nif n <= 1 {\nreturn 1\n} otherwise {\nreturn n * factorial(n - 1)\n}\n}\nshow factorial(5)\nshow sum(array(3, 4))\nshow len(array(1, 2, 3))\nshow char_at(\"zv\", 1)\nshow starts_with(\"zenvora\", \"zen\")\nshow upper(\"zv\")\nshow char_count(\"zv\")\nshow index_of(\"zenvora\", \"v\")\nshow contains(array(1, 2, 3), 2)\nshow get(map(\"answer\", 42), \"answer\")\nshow len(push(array(1), 2))\n"
 define runnable_lexed := lex(runnable_source)
 define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
