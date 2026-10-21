@@ -1,36 +1,47 @@
 # Zenvora Game Runtime Roadmap
 
-Status: experimental prototype. The repository has a browser Canvas renderer and a limited Zenvora-authored level-definition bridge. Arbitrary Zenvora game logic is not yet executed by the graphical runtime.
+Status: experimental source-to-scene prototype. A Zenvora program can execute in the real CLI/VM, emit a versioned scene descriptor, and have that descriptor loaded by the Canvas game. Arbitrary Zenvora game functions are not yet executed by the graphical runtime.
 
 ## Verified baseline
 
-The compiler/VM executes the console-grid example, ASCII wireframe example, and headless simulation; CI checks source/experimental Bytecode v2 parity. `src/game_math.rs` supplies tested deterministic integer primitives and a headless `GridWorld`. `website/game-2d.html` renders a playable Canvas grid game with keyboard/touch input. `examples/game-2d-level.zv` supplies literal level declarations (dimensions, spawn, goal, and walls) consumed by the browser level bridge. The browser bridge is deliberately limited to literal `define` declarations; it does not run arbitrary Zenvora statements/functions inside the browser game. These are prototypes, not a production engine.
+- `src/game_math.rs` provides deterministic integer vectors, rectangles, input snapshots, and a headless `GridWorld` with unit tests.
+- The console-grid and ASCII wireframe examples run through the Zenvora VM; the tests compare their source and experimental Bytecode v2 output.
+- `examples/game-2d-level.zv` defines a level and emits a `ZENVORA_GAME_LEVEL_V1` protocol using normal Zenvora `define` and `show` statements.
+- `scripts/export_game_level.py` executes that source with the real `zv` CLI, validates the VM output, and writes a `ZENVORA_GAME_SCENE_V1` JSON descriptor.
+- `website/game-2d.html` renders a playable Canvas grid game with keyboard/touch controls. It supports both editing literal level declarations and importing the VM-exported JSON descriptor.
+- CI checks the game page JavaScript syntax and exercises the VM-to-scene JSON export.
 
-## Phase 1 — deterministic 2D simulation core
+This is a working prototype bridge, not a production engine. The renderer still handles input, collision, and drawing in browser JavaScript; arbitrary Zenvora functions and per-frame game logic are not yet executed by a graphical VM.
 
-1. Define a stable game-facing API for vectors, rectangles, input snapshots, frame timing, and scene state.
-2. Implement deterministic math/collision primitives in the runtime with unit tests (overlap edge cases, negative coordinates, zero-size rectangles, and fixed-point or explicitly bounded numeric semantics).
-3. Expose only tested primitives as Zenvora built-ins; keep compiler parsing, source VM execution, and Bytecode v2 verification/execution in parity.
-4. Add a headless simulation example with reproducible input frames and expected state/output.
-5. Only after headless tests pass, add a real window/input/render backend behind a feature flag so default CLI builds remain portable.
+## Reproduce the compiler-backed level path
 
-## Phase 2 — graphical 2D
+Build the CLI, export a scene through the Zenvora VM, then load the JSON file in the browser game:
 
-- Choose and document a cross-platform backend and its licensing/build requirements before adding dependencies.
-- Add window creation, event/input handling, frame lifecycle, sprite/texture drawing, and asset loading.
-- Test graceful behavior in headless CI; keep graphical smoke tests optional where display/GPU access is unavailable.
-- Provide a minimal playable example and a documented install/build path.
+```sh
+cargo build --release --bin zv
+python scripts/export_game_level.py examples/game-2d-level.zv game-scene.json --zv ./target/release/zv
+```
+
+Open `website/game-2d.html` and choose the generated `game-scene.json` in “Load VM-exported scene JSON”.
+
+## Next implementation gates
+
+1. Replace the custom `show`-output protocol with a stable compiler-owned scene artifact schema and validation/versioning.
+2. Expose deterministic game input/state/collision primitives through the Zenvora VM and maintain source/Bytecode v2 execution parity.
+3. Execute a Zenvora-defined per-frame update function in the runtime, then pass the resulting state to the renderer; test deterministic replays.
+4. Add sprites/assets, a proper frame loop, audio, and documented browser/native runtime paths.
+5. Add end-to-end tests proving `.zv` source → actual VM execution → scene/state artifact → rendered game behavior.
 
 ## Phase 3 — 3D
 
 - Add camera and transform math, mesh/material representation, depth-tested rendering, asset loading, and input.
-- Keep the current ASCII wireframe example as a language regression fixture only.
+- Keep the ASCII wireframe example as a language regression fixture only.
 - Require an actual rendered scene and documented hardware/software requirements before claiming 3D support.
 
 ## Separate Web3 / Layer 3 work
 
-Game rendering does not itself provide Web3 capability. A Web3 toolchain needs a defined target chain, RPC/client integration, wallet/signing flow, ABI/artifact compatibility, deployment tooling, and testnet integration. Layer 3 additionally needs a specific rollup/app-chain design, settlement/data availability assumptions, bridge/messaging design, and security review. The current contract CLI/artifact is experimental and is not a production deployment pipeline.
+Game rendering does not itself provide Web3 capability. A Web3 toolchain needs a defined target chain, RPC/client integration, wallet/signing flow, ABI/artifact compatibility, deployment tooling, and testnet integration. Layer 3 additionally needs a specific rollup/app-chain design, settlement/data-availability assumptions, bridge/messaging design, and security review. The current contract CLI/artifact is experimental and is not a production deployment pipeline.
 
 ## Release gate
 
-Do not describe Zenvora as a graphical game engine, production smart-contract compiler, or Layer 3 deployment platform until end-to-end tests prove those capabilities on a clean environment.
+Do not describe Zenvora as a production graphical game engine, production smart-contract compiler, or Layer 3 deployment platform until end-to-end tests prove those capabilities on a clean environment.
