@@ -234,6 +234,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Validate graphical browser game and JavaScript syntax
+        run: python scripts/check_game_page.py
+
       - name: Package installable VS Code extension
         working-directory: editors/vscode
         run: npx --yes @vscode/vsce package --no-dependencies --out zenvora-lang.vsix
