@@ -1,10 +1,10 @@
 # Zenvora Game Runtime Roadmap
 
-Status: planning/specification; no graphical renderer is implemented yet.
+Status: experimental prototype. The repository has a browser Canvas renderer and a limited Zenvora-authored level-definition bridge. Arbitrary Zenvora game logic is not yet executed by the graphical runtime.
 
 ## Verified baseline
 
-The compiler/VM can execute the console-grid example and ASCII wireframe example. CI currently checks that both reach their completion marker and that source execution output exactly matches execution from experimental Bytecode v2. These are language/runtime regression tests, **not** proof of a graphical 2D/3D engine.
+The compiler/VM executes the console-grid example, ASCII wireframe example, and headless simulation; CI checks source/experimental Bytecode v2 parity. `src/game_math.rs` supplies tested deterministic integer primitives and a headless `GridWorld`. `website/game-2d.html` renders a playable Canvas grid game with keyboard/touch input. `examples/game-2d-level.zv` supplies literal level declarations (dimensions, spawn, goal, and walls) consumed by the browser level bridge. The browser bridge is deliberately limited to literal `define` declarations; it does not run arbitrary Zenvora statements/functions inside the browser game. These are prototypes, not a production engine.
 
 ## Phase 1 — deterministic 2D simulation core
 
