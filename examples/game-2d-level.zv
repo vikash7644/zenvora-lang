@@ -1,5 +1,6 @@
-# Zenvora 2D Grid Quest level definition.
-# The graphical game runtime reads these literal declarations.
+# Zenvora-authored 2D grid level.
+# Run through the Zenvora VM to emit a machine-readable scene descriptor:
+# zv examples/game-2d-level.zv
 define game_width := 10
 define game_height := 8
 define player_start_x := 1
@@ -16,7 +17,31 @@ define wall_7 := "5,5"
 define wall_8 := "2,5"
 define wall_9 := "2,6"
 
-show "ZENVORA GAME LEVEL"
+show "ZENVORA_GAME_LEVEL_V1"
+show "size"
 show game_width
 show game_height
-show "Move the player to the goal."
+show "spawn"
+show player_start_x
+show player_start_y
+show "goal"
+show goal_x
+show goal_y
+show "wall"
+show wall_1
+show "wall"
+show wall_2
+show "wall"
+show wall_3
+show "wall"
+show wall_4
+show "wall"
+show wall_5
+show "wall"
+show wall_6
+show "wall"
+show wall_7
+show "wall"
+show wall_8
+show "wall"
+show wall_9
