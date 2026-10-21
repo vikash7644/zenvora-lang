@@ -176,8 +176,8 @@ define wall_9 := "2,6"</textarea>
   });
   playScriptButton.addEventListener("click",async()=>{
     if(!vmScript.length||playScriptButton.disabled) return;
-    const runId=++scriptRunId;
     reset();
+    const runId=scriptRunId;
     playScriptButton.disabled=true;
     sourceStatus.textContent="RUNNING ZENVORA VM SCRIPT"; sourceStatus.style.color="#ff9e57";
     for(const direction of vmScript){
