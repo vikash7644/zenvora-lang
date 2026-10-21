@@ -1378,6 +1378,9 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
     }
     pc := pc + 1
   }
+  if pc < len(code) and err == "" and not returned {
+    err := "instruction limit exceeded"
+  }
   return map("environment", env, "output", output, "error", err, "returned", returned, "return_value", return_value)
 }
 fn execute_bytecode_plan(plan) {
