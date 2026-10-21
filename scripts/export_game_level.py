@@ -51,6 +51,7 @@ def main():
         cursor += 2
         walls = []
         script = []
+        trace = []
         while cursor < len(lines):
             if lines[cursor] == "script":
                 cursor += 1
@@ -62,6 +63,11 @@ def main():
                     cursor += 1
                     if direction not in {"up", "down", "left", "right"}:
                         raise ValueError(f"unsupported move direction: {direction!r}")
+                    take("state")
+                    if cursor + 1 >= len(lines):
+                        raise ValueError("missing x/y state after movement")
+                    trace.append({"x": int(lines[cursor]), "y": int(lines[cursor + 1])})
+                    cursor += 2
                     script.append(direction)
                 break
             take("wall")
@@ -84,15 +90,19 @@ def main():
             raise ValueError("duplicate wall coordinate")
         if len(script) > 10000:
             raise ValueError("script exceeds 10000 moves")
+        if len(trace) != len(script):
+            raise ValueError("script and VM state trace lengths differ")
         occupied = {(wall["x"], wall["y"]) for wall in walls}
         position = dict(spawn)
         deltas = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
-        for index, direction in enumerate(script, start=1):
+        for index, (direction, vm_state) in enumerate(zip(script, trace), start=1):
             dx, dy = deltas[direction]
             candidate = {"x": position["x"] + dx, "y": position["y"] + dy}
             if not inside(candidate) or (candidate["x"], candidate["y"]) in occupied:
                 raise ValueError(f"script move {index} collides with a wall or world boundary")
-            position = candidate
+            if vm_state != candidate:
+                raise ValueError(f"VM grid_step state mismatch at move {index}: expected {candidate}, got {vm_state}")
+            position = vm_state
         if script and position != goal:
             raise ValueError("script must finish at the goal")
         if cursor != len(lines):
@@ -108,6 +118,7 @@ def main():
         "goal": goal,
         "walls": walls,
         "script": script,
+        "trace": trace,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
