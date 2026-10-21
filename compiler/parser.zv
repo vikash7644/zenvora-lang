@@ -940,9 +940,12 @@ fn validate_statements(ast, function_depth, loop_depth) {
           }
         } otherwise {
           if kind == "function" {
+            if function_depth > 0 {
+              expression_error := "nested function declarations are not supported"
+            }
             define params := get(statement, "left")
             define param_pos := 0
-            repeat param_pos < len(params) {
+            repeat param_pos < len(params) and expression_error == "" {
               define param := get(params, param_pos)
               define prior := 0
               repeat prior < param_pos and expression_error == "" {
@@ -1527,6 +1530,9 @@ define bad_arity_result := validate_program(get(bad_arity_ast, "ast"))
 define invalid_break_lexed := lex("break\n")
 define invalid_break_ast := parse_program(get(invalid_break_lexed, "tokens"))
 define invalid_break_result := validate_program(get(invalid_break_ast, "ast"))
+define nested_function_lexed := lex("fn outer() {\nfn inner() {\nreturn 1\n}\nreturn 2\n}\n")
+define nested_function_ast := parse_program(get(nested_function_lexed, "tokens"))
+define nested_function_result := validate_program(get(nested_function_ast, "ast"))
 define invalid_return_lexed := lex("return 1\n")
 define invalid_return_ast := parse_program(get(invalid_return_lexed, "tokens"))
 define invalid_return_result := validate_program(get(invalid_return_ast, "ast"))
@@ -1541,6 +1547,7 @@ show get(bad_call_result, "error")
 show get(bad_arity_result, "error")
 show get(invalid_break_result, "error")
 show get(invalid_return_result, "error")
+show get(nested_function_result, "error")
 
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
