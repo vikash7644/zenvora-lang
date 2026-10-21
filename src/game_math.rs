@@ -171,8 +171,10 @@ impl GridWorld {
     /// is intentionally disabled so every tick advances at most one grid cell.
     /// A blocked move leaves the player in place but still advances the frame.
     pub fn step(&mut self, input: InputSnapshot) -> Result<(), &'static str> {
-        let dx = i64::from(input.right && !input.left) - i64::from(input.left && !input.right);
-        let dy = i64::from(input.down && !input.up) - i64::from(input.up && !input.down);
+        let dx = (if input.right && !input.left { 1 } else { 0 })
+            - (if input.left && !input.right { 1 } else { 0 });
+        let dy = (if input.down && !input.up { 1 } else { 0 })
+            - (if input.up && !input.down { 1 } else { 0 });
         let (dx, dy) = if dx != 0 { (dx, 0) } else { (0, dy) };
         let next = self.player.checked_add(Vec2i::new(dx, dy));
         if let Some(position) = next {
