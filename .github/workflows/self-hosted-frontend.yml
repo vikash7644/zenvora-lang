@@ -70,6 +70,8 @@ jobs:
           grep -F 'return' parser-output.txt
           grep -F 'ZENVORA_VM' parser-output.txt
           grep -F 'ZENVORA_VM_ASSERTIONS_PASS' parser-output.txt
+          grep -F 'function call depth limit exceeded' parser-output.txt
+          grep -F 'instruction limit exceeded' parser-output.txt
           ! grep -F 'ZENVORA_VM_ASSERTIONS_FAIL' parser-output.txt
           grep -F '14' parser-output.txt
           grep -F 'ZENVORA_BYTECODE_PLAN' parser-output.txt
