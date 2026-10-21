@@ -1,0 +1,22 @@
+# Zenvora 2D Grid Quest level definition.
+# The graphical game runtime reads these literal declarations.
+define game_width := 10
+define game_height := 8
+define player_start_x := 1
+define player_start_y := 1
+define goal_x := 8
+define goal_y := 6
+define wall_1 := "3,1"
+define wall_2 := "3,2"
+define wall_3 := "3,3"
+define wall_4 := "5,3"
+define wall_5 := "6,3"
+define wall_6 := "7,3"
+define wall_7 := "5,5"
+define wall_8 := "2,5"
+define wall_9 := "2,6"
+
+show "ZENVORA GAME LEVEL"
+show game_width
+show game_height
+show "Move the player to the goal."
