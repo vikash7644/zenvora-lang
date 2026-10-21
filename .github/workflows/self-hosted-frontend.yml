@@ -134,6 +134,27 @@ jobs:
           grep -F 'ZENVORA_BYTECODE 2' self-hosted-plan.zv2b
           cargo run --locked --quiet -- --run-bytecode self-hosted-plan.zv2b > self-hosted-bytecode-output.txt
           grep -Fx 'ZENVORA_VM_ASSERTIONS_PASS' parser-output.txt
-          grep -Fx '14' self-hosted-bytecode-output.txt
-          grep -Fx '120' self-hosted-bytecode-output.txt
-          grep -Fx 'ZV' self-hosted-bytecode-output.txt
+          cat > expected-bytecode-output.txt <<'EXPECTED'
+          14
+          42
+          7
+          7
+          120
+          7
+          3
+          v
+          true
+          ZV
+          2
+          3
+          true
+          42
+          2
+          xv
+          2
+          5
+          2
+          42
+          3
+          EXPECTED
+          diff -u expected-bytecode-output.txt self-hosted-bytecode-output.txt
