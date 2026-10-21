@@ -87,6 +87,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ./target/release/zv examples/game-2d-scripted.zv > /tmp/zenvora-game-source-output.txt
+          ./target/release/zv --emit-bytecode-v2 examples/game-2d-scripted.zv /tmp/zenvora-game-script.zv2b
+          ./target/release/zv --run-bytecode /tmp/zenvora-game-script.zv2b > /tmp/zenvora-game-bytecode-output.txt
+          diff -u /tmp/zenvora-game-source-output.txt /tmp/zenvora-game-bytecode-output.txt
           python scripts/export_game_level.py examples/game-2d-scripted.zv /tmp/zenvora-scripted-scene.json --zv ./target/release/zv
           python - <<'PY'
           import json
