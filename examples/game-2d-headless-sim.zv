@@ -1,0 +1,27 @@
+# Deterministic headless 2D simulation regression.
+# A player moves right while avoiding a single obstacle at (3, 1).
+define player_x := 1
+define player_y := 1
+define obstacle_x := 3
+define obstacle_y := 1
+define step := 0
+
+show "ZENVORA HEADLESS 2D SIMULATION"
+repeat step < 4 {
+    define next_x := player_x + 1
+    if next_x == obstacle_x and player_y == obstacle_y {
+        player_y := player_y + 1
+        show "COLLISION AVOIDED"
+    } otherwise {
+        player_x := next_x
+    }
+    step := step + 1
+    show player_x
+    show player_y
+}
+
+if player_x == 4 and player_y == 2 {
+    show "HEADLESS SIM COMPLETE"
+} otherwise {
+    show "HEADLESS SIM FAILED"
+}
