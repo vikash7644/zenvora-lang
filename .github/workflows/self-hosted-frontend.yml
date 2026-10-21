@@ -92,6 +92,7 @@ jobs:
           grep -F 'undefined function: missing' parser-output.txt
           grep -F 'function argument count mismatch: one' parser-output.txt
           grep -F 'built-in argument count mismatch: len' parser-output.txt
+          grep -F 'built-in argument count mismatch: sum' parser-output.txt
           grep -F 'break outside loop' parser-output.txt
           grep -F 'return outside function' parser-output.txt
           grep -F 'ZENVORA_BYTECODE_VERIFY' parser-output.txt
