@@ -97,7 +97,7 @@ define wall_9 := "2,6"</textarea>
     start=nextStart; goal=nextGoal; walls=nextWalls; reset();
   }
   let player = {...start}, frame = 0, moves = 0, won = false;
-  let vmScript = [], scriptRunId = 0;
+  let vmScript = [], vmTrace = [], scriptRunId = 0;
   const playScriptButton = document.getElementById("play-vm-script");
   function draw() {
     ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -151,7 +151,9 @@ define wall_9 := "2,6"</textarea>
       const scene=JSON.parse(await file.text());
       if(scene.format!=="ZENVORA_GAME_SCENE_V1"||!scene.world||!scene.spawn||!scene.goal||!Array.isArray(scene.walls)) throw new Error("Unsupported scene JSON format");
       const incomingScript=scene.script===undefined?[]:scene.script;
+      const incomingTrace=scene.trace===undefined?[]:scene.trace;
       if(!Array.isArray(incomingScript)||incomingScript.length>10000||incomingScript.some(direction=>!["up","down","left","right"].includes(direction))) throw new Error("Invalid VM script: expected up/down/left/right commands");
+      if(!Array.isArray(incomingTrace)||incomingTrace.length!==incomingScript.length||incomingTrace.some(point=>!point||!Number.isSafeInteger(point.x)||!Number.isSafeInteger(point.y))) throw new Error("Invalid VM state trace: expected one integer coordinate per move");
       const declarations=[
         "# Imported scene exported by the Zenvora VM",
         "define game_width := "+scene.world.width,
@@ -164,14 +166,14 @@ define wall_9 := "2,6"</textarea>
       ];
       document.getElementById("zv-source").value=declarations.join("\\n");
       parseLevel(document.getElementById("zv-source").value);
-      vmScript=incomingScript.slice();
+      vmScript=incomingScript.slice(); vmTrace=incomingTrace.map(point=>({x:point.x,y:point.y}));
       playScriptButton.disabled=vmScript.length===0;
-      sourceStatus.textContent=vmScript.length?"VM SCENE + SCRIPT LOADED":"VM SCENE LOADED (NO SCRIPT)"; sourceStatus.style.color="#8de3b0";
+      sourceStatus.textContent=vmScript.length?"VM SCENE + SCRIPT + STATE TRACE LOADED":"VM SCENE LOADED (NO SCRIPT)"; sourceStatus.style.color="#8de3b0";
     } catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
     event.target.value="";
   });
   document.getElementById("build-level").addEventListener("click",()=>{
-    try { parseLevel(document.getElementById("zv-source").value); vmScript=[]; playScriptButton.disabled=true; sourceStatus.textContent="LEVEL BUILT"; sourceStatus.style.color="#8de3b0"; }
+    try { parseLevel(document.getElementById("zv-source").value); vmScript=[]; vmTrace=[]; playScriptButton.disabled=true; sourceStatus.textContent="LEVEL BUILT"; sourceStatus.style.color="#8de3b0"; }
     catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
   });
   playScriptButton.addEventListener("click",async()=>{
@@ -180,9 +182,16 @@ define wall_9 := "2,6"</textarea>
     const runId=scriptRunId;
     playScriptButton.disabled=true;
     sourceStatus.textContent="RUNNING ZENVORA VM SCRIPT"; sourceStatus.style.color="#ff9e57";
-    for(const direction of vmScript){
+    for(let index=0;index<vmScript.length;index++){
       if(runId!==scriptRunId) return;
-      step(direction);
+      step(vmScript[index]);
+      const expected=vmTrace[index];
+      if(!expected||player.x!==expected.x||player.y!==expected.y){
+        status.textContent="VM/runtime state mismatch at move "+(index+1);
+        sourceStatus.textContent="VM STATE TRACE MISMATCH"; sourceStatus.style.color="#ff858b";
+        playScriptButton.disabled=false;
+        return;
+      }
       if(won) break;
       await new Promise(resolve=>setTimeout(resolve,180));
     }
