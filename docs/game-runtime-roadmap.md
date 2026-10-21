@@ -7,11 +7,13 @@ Status: experimental source-to-scene prototype. A Zenvora program can execute in
 - `src/game_math.rs` provides deterministic integer vectors, rectangles, input snapshots, and a headless `GridWorld` with unit tests.
 - The console-grid and ASCII wireframe examples run through the Zenvora VM; the tests compare their source and experimental Bytecode v2 output.
 - `examples/game-2d-level.zv` defines a level and emits a `ZENVORA_GAME_LEVEL_V1` protocol using normal Zenvora `define` and `show` statements.
-- `scripts/export_game_level.py` executes that source with the real `zv` CLI, validates the VM output, and writes a `ZENVORA_GAME_SCENE_V1` JSON descriptor.
-- `website/game-2d.html` renders a playable Canvas grid game with keyboard/touch controls. It supports both editing literal level declarations and importing the VM-exported JSON descriptor.
-- CI checks the game page JavaScript syntax and exercises the VM-to-scene JSON export.
+- `scripts/export_game_level.py` executes source with the real `zv` CLI, validates the VM output, and writes a `ZENVORA_GAME_SCENE_V1` JSON descriptor.
+- `examples/game-2d-scripted.zv` emits a 12-step movement script using Zenvora `repeat` loops, in addition to the level and obstacles.
+- The exporter validates every emitted move against bounds and walls and requires a non-empty script to finish at the goal.
+- `website/game-2d.html` imports the VM-exported scene JSON and can replay the VM-emitted commands in its Canvas viewport; keyboard and touch play remain available.
+- CI runs the source through the release CLI, checks the exported script and its final goal position, and validates browser JavaScript syntax and bridge controls.
 
-This is a working prototype bridge, not a production engine. The renderer still handles input, collision, and drawing in browser JavaScript; arbitrary Zenvora functions and per-frame game logic are not yet executed by a graphical VM.
+This is a working source → real VM → validated scene/script JSON → graphical replay prototype, not a production engine. The browser still owns input, collision enforcement, timing, and drawing; the sample Zenvora program emits a deterministic command sequence rather than an arbitrary per-frame game function executed inside the graphical VM.
 
 ## Reproduce the compiler-backed level path
 
@@ -20,9 +22,10 @@ Build the CLI, export a scene through the Zenvora VM, then load the JSON file in
 ```sh
 cargo build --release --bin zv
 python scripts/export_game_level.py examples/game-2d-level.zv game-scene.json --zv ./target/release/zv
+python scripts/export_game_level.py examples/game-2d-scripted.zv game-script.json --zv ./target/release/zv
 ```
 
-Open `website/game-2d.html` and choose the generated `game-scene.json` in “Load VM-exported scene JSON”.
+Open `website/game-2d.html` and choose `game-script.json` in “Load VM-exported scene JSON”. Then press **Play Zenvora VM script** to replay the moves emitted by the Zenvora program. The non-scripted `game-2d-level.zv` example remains supported.
 
 ## Next implementation gates
 
