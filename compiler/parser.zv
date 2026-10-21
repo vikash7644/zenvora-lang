@@ -1325,6 +1325,78 @@ fn vm_binary(operator, left, right) {
   }
   return map("value", "", "error", "unsupported binary operator: " + operator)
 }
+# Execute the initial builtin subset directly in the Zenvora-authored plan VM.
+# Arguments arrive in reverse stack-pop order and are normalized here.
+fn execute_plan_builtin(name, reversed_args) {
+  define args := array()
+  define pos := len(reversed_args) - 1
+  repeat pos >= 0 {
+    args := push(args, get(reversed_args, pos))
+    pos := pos - 1
+  }
+  if name == "array" {
+    return map("ok", true, "value", args, "error", "")
+  } otherwise {
+    if name == "len" and len(args) == 1 {
+      return map("ok", true, "value", len(get(args, 0)), "error", "")
+    } otherwise {
+      if name == "sum" and len(args) == 1 and type_of(get(args, 0)) == "array" {
+        return map("ok", true, "value", sum(get(args, 0)), "error", "")
+      } otherwise {
+        if name == "char_at" and len(args) == 2 and type_of(get(args, 0)) == "string" and type_of(get(args, 1)) == "integer" and get(args, 1) >= 0 {
+          if get(args, 1) < char_count(get(args, 0)) {
+            return map("ok", true, "value", char_at(get(args, 0), get(args, 1)), "error", "")
+          }
+          return map("ok", false, "value", "", "error", "char_at index out of bounds")
+        } otherwise {
+          if name == "to_string" and len(args) == 1 {
+            return map("ok", true, "value", to_string(get(args, 0)), "error", "")
+          } otherwise {
+            if name == "type_of" and len(args) == 1 {
+              return map("ok", true, "value", type_of(get(args, 0)), "error", "")
+            } otherwise {
+              if name == "abs" and len(args) == 1 and type_of(get(args, 0)) == "integer" {
+                return map("ok", true, "value", abs(get(args, 0)), "error", "")
+              } otherwise {
+                if name == "min" and len(args) == 2 {
+                  return map("ok", true, "value", min(get(args, 0), get(args, 1)), "error", "")
+                } otherwise {
+                  if name == "max" and len(args) == 2 {
+                    return map("ok", true, "value", max(get(args, 0), get(args, 1)), "error", "")
+                  } otherwise {
+                    if name == "first" and len(args) == 1 and type_of(get(args, 0)) == "array" and len(get(args, 0)) > 0 {
+                      return map("ok", true, "value", get(get(args, 0), 0), "error", "")
+                    } otherwise {
+                      if name == "last" and len(args) == 1 and type_of(get(args, 0)) == "array" and len(get(args, 0)) > 0 {
+                        return map("ok", true, "value", get(get(args, 0), len(get(args, 0)) - 1), "error", "")
+                      } otherwise {
+                        if name == "is_empty" and len(args) == 1 {
+                          return map("ok", true, "value", len(get(args, 0)) == 0, "error", "")
+                        } otherwise {
+                          if name == "reverse" and len(args) == 1 and type_of(get(args, 0)) == "array" {
+                            define reversed := array()
+                            define item_pos := len(get(args, 0)) - 1
+                            repeat item_pos >= 0 {
+                              reversed := push(reversed, get(get(args, 0), item_pos))
+                              item_pos := item_pos - 1
+                            }
+                            return map("ok", true, "value", reversed, "error", "")
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return map("ok", false, "value", "", "error", "built-in is not yet supported by the Zenvora VM: " + name)
+}
+
 fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
   if call_depth > 64 {
     return map("environment", initial_env, "output", initial_output, "error", "function call depth limit exceeded", "returned", false, "return_value", "")
@@ -1486,7 +1558,16 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
                             fn_index := fn_index + 1
                           }
                           if not found_fn and err == "" {
-                            err := "undefined function: " + fn_name
+                            if is_builtin_function(fn_name) {
+                              define builtin_result := execute_plan_builtin(fn_name, args)
+                              if get(builtin_result, "ok") {
+                                stack := push(stack, get(builtin_result, "value"))
+                              } otherwise {
+                                err := get(builtin_result, "error")
+                              }
+                            } otherwise {
+                              err := "undefined function: " + fn_name
+                            }
                           }
                         }
                       } otherwise {
@@ -1579,7 +1660,7 @@ show unsupported_nested_fn_opcode
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
 show bytecode_verification
-define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nfn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\nfn choose(a, b) {\nif a > 0 {\nreturn add(a, b)\n} otherwise {\nreturn b\n}\n}\nshow choose(2, 5)\nshow choose(0, 7)\nfn factorial(n) {\nif n <= 1 {\nreturn 1\n} otherwise {\nreturn n * factorial(n - 1)\n}\n}\nshow factorial(5)\n"
+define runnable_source := "define answer := 2 + 3 * 4\nshow answer\nfn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\nfn choose(a, b) {\nif a > 0 {\nreturn add(a, b)\n} otherwise {\nreturn b\n}\n}\nshow choose(2, 5)\nshow choose(0, 7)\nfn factorial(n) {\nif n <= 1 {\nreturn 1\n} otherwise {\nreturn n * factorial(n - 1)\n}\n}\nshow factorial(5)\nshow sum(array(3, 4))\nshow len(array(1, 2, 3))\nshow char_at(\\"zv\\", 1)\n"
 define runnable_lexed := lex(runnable_source)
 define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
@@ -1588,8 +1669,9 @@ define runnable_result := execute_bytecode_plan(runnable_plan)
 define runnable_output := get(runnable_result, "output")
 show "ZENVORA_VM"
 show runnable_result
-if get(runnable_result, "ok") and len(runnable_output) == 5 and get(runnable_output, 0) == "14" and get(runnable_output, 1) == "42" and get(runnable_output, 2) == "7" and get(runnable_output, 3) == "7" and get(runnable_output, 4) == "120" {
+if get(runnable_result, "ok") and len(runnable_output) == 8 and get(runnable_output, 0) == "14" and get(runnable_output, 1) == "42" and get(runnable_output, 2) == "7" and get(runnable_output, 3) == "7" and get(runnable_output, 4) == "120" and get(runnable_output, 5) == "7" and get(runnable_output, 6) == "3" and get(runnable_output, 7) == "v" {
   show "ZENVORA_VM_ASSERTIONS_PASS"
+  show "ZENVORA_VM_BUILTIN_ASSERTIONS_PASS"
 } otherwise {
   show "ZENVORA_VM_ASSERTIONS_FAIL"
 }
