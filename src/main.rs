@@ -40,7 +40,11 @@ fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), String> {
         let c = chars[i];
         let token_column = i + 1;
         if c.is_whitespace() { i += 1; continue; }
-        if c == '#' { break; }
+        if c == '#' {
+            // Skip this comment only; later source lines must still be tokenized.
+            while i < chars.len() && chars[i] != '\n' { i += 1; }
+            continue;
+        }
         if out.len() >= MAX_SOURCE_TOKENS {
             return Err(format!("column {}: token count exceeds safety limit ({MAX_SOURCE_TOKENS})", token_column));
         }
@@ -4639,7 +4643,13 @@ show sum(array(3, 4))
     #[test]
     fn function_brace_count_ignores_braces_in_strings_and_comments() {
         let output = execute(
-            "show render()\nfn render() {\n # these braces are only comment text: } {{{\n show \"left { brace\"\n show \"right } brace\"\n return \"done { }\"\n}\n"
+            "show render()\nfn render() {\n # these braces are only comment text: } {{{\n show \"left { brace\"\n show \"right } brace\"\n return \"done { }\"
+    #[test]
+    fn comments_do_not_discard_following_source_lines() {
+        let output = execute("show 1\\n# comment between statements\\nshow 2\\n").unwrap();
+        assert_eq!(output, vec!["1", "2"]);
+    }
+\n}\n"
         ).unwrap();
         assert_eq!(output, vec!["left { brace", "right } brace", "done { }"]);
     }
