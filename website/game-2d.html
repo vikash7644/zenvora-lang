@@ -137,7 +137,7 @@ define wall_9 := "2,6"</textarea>
     }
     draw();
   }
-  function reset(){scriptRunId++;player={...start};frame=0;moves=0;won=false;status.textContent="Find the goal.";draw();}
+  function reset(){scriptRunId++;if(vmScript.length)playScriptButton.disabled=false;player={...start};frame=0;moves=0;won=false;status.textContent="Find the goal.";draw();}
   const keyMap={ArrowUp:"up",w:"up",W:"up",ArrowDown:"down",s:"down",S:"down",ArrowLeft:"left",a:"left",A:"left",ArrowRight:"right",d:"right",D:"right"};
   window.addEventListener("keydown",event=>{const dir=keyMap[event.key];if(dir){event.preventDefault();step(dir)}});
   document.querySelectorAll("[data-dir]").forEach(button=>{
