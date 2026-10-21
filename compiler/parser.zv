@@ -1392,6 +1392,133 @@ fn execute_plan_builtin(name, reversed_args) {
   if name == "range" and len(args) == 2 {
     return map("ok", true, "value", range(get(args, 0), get(args, 1)), "error", "")
   }
+  if name == "factorial" and len(args) == 1 {
+    define n := get(args, 0)
+    if type_of(n) != "integer" or n < 0 or n > 20 {
+      return map("ok", false, "value", "", "error", "factorial expects an integer from 0 through 20")
+    }
+    define factorial_result := 1
+    define factorial_i := 2
+    repeat factorial_i <= n {
+      factorial_result := factorial_result * factorial_i
+      factorial_i := factorial_i + 1
+    }
+    return map("ok", true, "value", factorial_result, "error", "")
+  }
+  if name == "fibonacci" and len(args) == 1 {
+    define n := get(args, 0)
+    if type_of(n) != "integer" or n < 0 or n > 92 {
+      return map("ok", false, "value", "", "error", "fibonacci expects an integer from 0 through 92")
+    }
+    define fib_a := 0
+    define fib_b := 1
+    define fib_i := 0
+    repeat fib_i < n {
+      define fib_next := fib_a + fib_b
+      fib_a := fib_b
+      fib_b := fib_next
+      fib_i := fib_i + 1
+    }
+    return map("ok", true, "value", fib_a, "error", "")
+  }
+  if name == "pow_int" and len(args) == 2 {
+    define pow_base := get(args, 0)
+    define pow_exponent := get(args, 1)
+    if type_of(pow_base) != "integer" or type_of(pow_exponent) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: pow_int expects two integers")
+    }
+    if pow_exponent < 0 or pow_exponent > 63 {
+      return map("ok", false, "value", "", "error", "pow_int exponent must be from 0 through 63")
+    }
+    define pow_result := 1
+    define pow_i := 0
+    repeat pow_i < pow_exponent {
+      pow_result := pow_result * pow_base
+      pow_i := pow_i + 1
+    }
+    return map("ok", true, "value", pow_result, "error", "")
+  }
+  if name == "mean" and len(args) == 1 {
+    define mean_items := get(args, 0)
+    if type_of(mean_items) != "array" {
+      return map("ok", false, "value", "", "error", "type error: mean expects an array of integers")
+    }
+    if len(mean_items) == 0 {
+      return map("ok", false, "value", "", "error", "mean cannot be used with an empty array")
+    }
+    define mean_total := 0
+    define mean_i := 0
+    repeat mean_i < len(mean_items) {
+      define mean_item := get(mean_items, mean_i)
+      if type_of(mean_item) != "integer" {
+        return map("ok", false, "value", "", "error", "type error: mean expects an array containing only integers")
+      }
+      mean_total := mean_total + mean_item
+      mean_i := mean_i + 1
+    }
+    return map("ok", true, "value", mean_total / len(mean_items), "error", "")
+  }
+  if (name == "speed" or name == "density" or name == "molarity") and len(args) == 2 {
+    define ratio_numerator := get(args, 0)
+    define ratio_denominator := get(args, 1)
+    if type_of(ratio_numerator) != "integer" or type_of(ratio_denominator) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: " + name + " expects two integers")
+    }
+    if ratio_denominator <= 0 {
+      return map("ok", false, "value", "", "error", name + " denominator must be positive")
+    }
+    return map("ok", true, "value", ratio_numerator / ratio_denominator, "error", "")
+  }
+  if name == "force" and len(args) == 2 {
+    define force_mass := get(args, 0)
+    define force_acceleration := get(args, 1)
+    if type_of(force_mass) != "integer" or type_of(force_acceleration) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: force expects mass and acceleration as integers")
+    }
+    return map("ok", true, "value", force_mass * force_acceleration, "error", "")
+  }
+  if name == "kinetic_energy" and len(args) == 2 {
+    define energy_mass := get(args, 0)
+    define energy_velocity := get(args, 1)
+    if type_of(energy_mass) != "integer" or type_of(energy_velocity) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: kinetic_energy expects mass and velocity as integers")
+    }
+    if energy_mass < 0 {
+      return map("ok", false, "value", "", "error", "kinetic_energy mass cannot be negative")
+    }
+    return map("ok", true, "value", (energy_mass * energy_velocity * energy_velocity) / 2, "error", "")
+  }
+  if name == "bmi_x10" and len(args) == 2 {
+    define bmi_mass := get(args, 0)
+    define bmi_height := get(args, 1)
+    if type_of(bmi_mass) != "integer" or type_of(bmi_height) != "integer" {
+      return map("ok", false, "value", "", "error", "type error: bmi_x10 expects mass in kg and height in cm as integers")
+    }
+    if bmi_mass <= 0 or bmi_height <= 0 {
+      return map("ok", false, "value", "", "error", "bmi_x10 mass and height must be positive")
+    }
+    return map("ok", true, "value", (bmi_mass * 100000) / (bmi_height * bmi_height), "error", "")
+  }
+  if name == "molar_mass" and len(args) == 1 {
+    define masses := get(args, 0)
+    if type_of(masses) != "array" {
+      return map("ok", false, "value", "", "error", "type error: molar_mass expects an array of integer atomic masses")
+    }
+    if len(masses) == 0 {
+      return map("ok", false, "value", "", "error", "molar_mass expects at least one atomic mass")
+    }
+    define mass_total := 0
+    define mass_i := 0
+    repeat mass_i < len(masses) {
+      define atomic_mass := get(masses, mass_i)
+      if type_of(atomic_mass) != "integer" or atomic_mass < 0 {
+        return map("ok", false, "value", "", "error", "molar_mass expects non-negative integer atomic masses")
+      }
+      mass_total := mass_total + atomic_mass
+      mass_i := mass_i + 1
+    }
+    return map("ok", true, "value", mass_total, "error", "")
+  }
   if name == "map" {
     define result_map := map()
     define map_pos := 0
