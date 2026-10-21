@@ -5,15 +5,13 @@ Status: experimental source-to-scene prototype. A Zenvora program can execute in
 ## Verified baseline
 
 - `src/game_math.rs` provides deterministic integer vectors, rectangles, input snapshots, and a headless `GridWorld` with unit tests.
-- The console-grid and ASCII wireframe examples run through the Zenvora VM; the tests compare their source and experimental Bytecode v2 output.
-- `examples/game-2d-level.zv` defines a level and emits a `ZENVORA_GAME_LEVEL_V1` protocol using normal Zenvora `define` and `show` statements.
-- `scripts/export_game_level.py` executes source with the real `zv` CLI, validates the VM output, and writes a `ZENVORA_GAME_SCENE_V1` JSON descriptor.
-- `examples/game-2d-scripted.zv` emits a 12-step movement script using Zenvora `repeat` loops, in addition to the level and obstacles.
-- The exporter validates every emitted move against bounds and walls and requires a non-empty script to finish at the goal.
-- `website/game-2d.html` imports the VM-exported scene JSON and can replay the VM-emitted commands in its Canvas viewport; keyboard and touch play remain available.
-- CI runs the source through the release CLI, checks the exported script and its final goal position, and validates browser JavaScript syntax and bridge controls.
+- The VM has a checked `grid_step(x, y, direction, width, height, walls)` builtin. It computes a deterministic next grid position, blocks walls/world edges, validates dimensions and argument types, and returns a map with `x`, `y`, and `moved`. Rust unit tests cover movement, wall/boundary collisions, invalid directions, and unsafe world sizes.
+- `examples/game-2d-scripted.zv` calls `grid_step` from Zenvora `repeat` loops, so movement state is computed by the VM, not merely described as browser-side commands.
+- `scripts/export_game_level.py` runs source through the real `zv` CLI, validates each VM-reported position against the expected move, and emits the versioned scene, movement script, and per-step state trace.
+- `website/game-2d.html` imports the exported scene and replays commands while checking every rendered player position against the VM state trace; keyboard/touch controls remain available for manual play.
+- CI checks the VM-produced trace, goal position, builtin behavior, JavaScript syntax, and the source-to-Canvas bridge.
 
-This is a working source → real VM → validated scene/script JSON → graphical replay prototype, not a production engine. The browser still owns input, collision enforcement, timing, and drawing; the sample Zenvora program emits a deterministic command sequence rather than an arbitrary per-frame game function executed inside the graphical VM.
+This is a stronger working source → real VM game-step logic → validated scene/state trace → graphical replay prototype, not a production engine. The renderer still uses browser JavaScript for Canvas drawing, timing, and manual input, and the current source format describes a scripted grid game rather than arbitrary per-frame game functions.
 
 ## Reproduce the compiler-backed level path
 
@@ -29,11 +27,11 @@ Open `website/game-2d.html` and choose `game-script.json` in “Load VM-exported
 
 ## Next implementation gates
 
-1. Replace the custom `show`-output protocol with a stable compiler-owned scene artifact schema and validation/versioning.
-2. Expose deterministic game input/state/collision primitives through the Zenvora VM and maintain source/Bytecode v2 execution parity.
-3. Execute a Zenvora-defined per-frame update function in the runtime, then pass the resulting state to the renderer; test deterministic replays.
+1. Add a compiler-owned scene artifact command instead of relying on the current `show` protocol.
+2. Extend the VM game API beyond one grid-step primitive: persistent world/entity state, input snapshots, collision queries, and deterministic frame updates; add source/Bytecode v2 parity coverage.
+3. Execute a Zenvora-defined per-frame update function in the graphical runtime and pass its resulting state to the renderer.
 4. Add sprites/assets, a proper frame loop, audio, and documented browser/native runtime paths.
-5. Add end-to-end tests proving `.zv` source → actual VM execution → scene/state artifact → rendered game behavior.
+5. Keep the end-to-end VM trace test as a gate before claiming broader 2D game-engine support.
 
 ## Phase 3 — 3D
 
