@@ -1165,13 +1165,26 @@ fn validate_program(ast) {
 }
 
 # Verifier for the Zenvora-authored bytecode plan: validates opcode set and jump bounds.
-fn verify_code(code) {
+# Use explicit equality checks so verifier correctness does not depend on the
+# general-purpose contains built-in's behavior for arrays.
+fn is_allowed_opcode(op) {
   define allowed := array("push_const", "load", "unary", "binary", "index", "call", "declare", "store", "print", "return", "jump_if_false", "jump", "break", "continue")
+  define pos := 0
+  repeat pos < len(allowed) {
+    if get(allowed, pos) == op {
+      return true
+    }
+    pos := pos + 1
+  }
+  return false
+}
+
+fn verify_code(code) {
   define pos := 0
   repeat pos < len(code) {
     define instruction := get(code, pos)
     define op := get(instruction, "op")
-    if not contains(allowed, op) {
+    if not is_allowed_opcode(op) {
       return "unsupported bytecode opcode: " + op
     }
     if op == "jump" or op == "jump_if_false" {
