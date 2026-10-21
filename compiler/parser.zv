@@ -1372,14 +1372,14 @@ fn execute_plan_builtin(name, reversed_args) {
     return map("ok", true, "value", values(get(args, 0)), "error", "")
   }
   if name == "map" {
-    if len(args) % 2 != 0 {
-      return map("ok", false, "value", "", "error", "map expects key/value pairs")
-    }
     define result_map := map()
     define map_pos := 0
-    repeat map_pos < len(args) {
+    repeat map_pos + 1 < len(args) {
       result_map := put(result_map, get(args, map_pos), get(args, map_pos + 1))
       map_pos := map_pos + 2
+    }
+    if map_pos < len(args) {
+      return map("ok", false, "value", "", "error", "map expects key/value pairs")
     }
     return map("ok", true, "value", result_map, "error", "")
   }
