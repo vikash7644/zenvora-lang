@@ -2669,10 +2669,12 @@ fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
             return Err(format!("bytecode plan: duplicate function '{name}'"));
         }
         let has_value_return = code.iter().any(|item| item.get("op").and_then(|v| v.as_str()) == Some("return"));
-        let appended_void_return = !has_value_return;
-        let region_len = code.len().checked_add(usize::from(appended_void_return))
+        // Every function gets a same-kind sentinel at its end. Lowered conditional
+        // blocks may contain unreachable jumps to the local end boundary; the sentinel
+        // keeps those targets inside the function region without masking fallthrough.
+        let region_len = code.len().checked_add(1)
             .ok_or_else(|| format!("bytecode plan: function '{name}' size overflow"))?;
-        function_specs.push((name.to_string(), parameters, code, next_entry, appended_void_return, has_value_return));
+        function_specs.push((name.to_string(), parameters, code, next_entry, has_value_return));
         next_entry = next_entry.checked_add(region_len)
             .ok_or_else(|| "bytecode plan: total instruction count overflow".to_string())?;
     }
@@ -2680,12 +2682,10 @@ fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
     let mut instructions = plan_instructions_to_v2(main, 0, &function_entries)?;
     instructions.push(format!("JUMP {main_end}"));
     let mut regions = Vec::with_capacity(function_specs.len());
-    for (name, parameters, code, entry, appended_void_return, has_value_return) in function_specs {
+    for (name, parameters, code, entry, has_value_return) in function_specs {
         let mut function_code = plan_instructions_to_v2(code, entry, &function_entries)
             .map_err(|error| format!("function '{name}': {error}"))?;
-        if appended_void_return {
-            function_code.push("RETURN".into());
-        }
+        function_code.push(if has_value_return { "RETURN_VALUE".into() } else { "RETURN".into() });
         let end = entry.checked_add(function_code.len())
             .ok_or_else(|| format!("bytecode plan: function '{name}' end overflow"))?;
         regions.push(bytecode_v2::FunctionRegion {
@@ -3489,8 +3489,8 @@ mod tests {
         assert_eq!(parsed.layout.functions[1].parameters, vec!["value"]);
         assert_eq!(parsed.instructions, vec![
             "PUSH 40", "CALL 4 1", "PRINT", "JUMP 4",
-            "LOAD value", "CALL 7 1", "RETURN_VALUE",
-            "LOAD value", "PUSH 1", "ADD", "RETURN_VALUE",
+            "LOAD value", "CALL 8 1", "RETURN_VALUE", "RETURN_VALUE",
+            "LOAD value", "PUSH 1", "ADD", "RETURN_VALUE", "RETURN_VALUE",
         ]);
         let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
         let mut output = Vec::new();
