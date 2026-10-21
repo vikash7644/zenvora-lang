@@ -5020,3 +5020,38 @@ fn factorial(n) {
     }
 
 }
+
+
+#[cfg(test)]
+mod game_builtin_tests {
+    use super::{compile, run_with_output};
+
+    fn execute(source: &str) -> Result<Vec<String>, String> {
+        let code = compile(source)?;
+        let mut output = Vec::new();
+        run_with_output(&code, &mut |line| output.push(line))?;
+        Ok(output)
+    }
+
+    #[test]
+    fn grid_step_moves_blocks_walls_and_respects_world_bounds() {
+        let output = execute(concat!(
+            "define walls := array(\"3,1\", \"2,2\")\n",
+            "define moved := grid_step(1, 1, \"right\", 10, 8, walls)\n",
+            "show moved[\"x\"]\nshow moved[\"y\"]\nshow moved[\"moved\"]\n",
+            "define wall_hit := grid_step(2, 1, \"right\", 10, 8, walls)\n",
+            "show wall_hit[\"x\"]\nshow wall_hit[\"moved\"]\n",
+            "define edge_hit := grid_step(0, 0, \"left\", 10, 8, walls)\n",
+            "show edge_hit[\"x\"]\nshow edge_hit[\"y\"]\nshow edge_hit[\"moved\"]\n",
+        )).unwrap();
+        assert_eq!(output, vec!["2", "1", "true", "2", "false", "0", "0", "false"]);
+    }
+
+    #[test]
+    fn grid_step_rejects_invalid_directions_and_worlds() {
+        assert!(execute("show grid_step(0, 0, \"north\", 2, 2, array())").unwrap_err().contains("direction must be up, down, left, or right"));
+        assert!(execute("show grid_step(0, 0, \"right\", 0, 2, array())").unwrap_err().contains("world dimensions"));
+        assert!(execute("show grid_step(2, 0, \"right\", 2, 2, array())").unwrap_err().contains("outside the world"));
+        assert!(execute("show grid_step(0, 0, \"right\", 2000, 2000, array())").unwrap_err().contains("1000000 cells"));
+    }
+}
