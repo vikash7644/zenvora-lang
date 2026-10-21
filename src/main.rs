@@ -4643,13 +4643,7 @@ show sum(array(3, 4))
     #[test]
     fn function_brace_count_ignores_braces_in_strings_and_comments() {
         let output = execute(
-            "show render()\nfn render() {\n # these braces are only comment text: } {{{\n show \"left { brace\"\n show \"right } brace\"\n return \"done { }\"
-    #[test]
-    fn comments_do_not_discard_following_source_lines() {
-        let output = execute("show 1\\n# comment between statements\\nshow 2\\n").unwrap();
-        assert_eq!(output, vec!["1", "2"]);
-    }
-\n}\n"
+            "show render()\nfn render() {\n # these braces are only comment text: } {{{\n show \"left { brace\"\n show \"right } brace\"\n return \"done { }\"\n}\n"
         ).unwrap();
         assert_eq!(output, vec!["left { brace", "right } brace", "done { }"]);
     }
@@ -4879,5 +4873,11 @@ fn factorial(n) {
         assert!(output.is_empty(), "out-of-gas execution must not print a partial result");
         assert_eq!(meter.used(), super::contract_gas::BASE_EXECUTION_GAS + 1);
     }
+    #[test]
+    fn comments_do_not_discard_following_source_lines() {
+        let output = execute("show 1\\n# comment between statements\\nshow 2\\n").unwrap();
+        assert_eq!(output, vec!["1", "2"]);
+    }
+
 
 }
