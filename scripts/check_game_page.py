@@ -13,6 +13,8 @@ required = [
     'id="game"', 'id="reset"', 'id="status"', 'id="moves"',
     'keydown', 'data-dir', 'LEVEL COMPLETE', 'getContext("2d")',
     'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    'id="zv-source"', 'id="build-level"', 'function parseLevel',
+    'LEVEL BUILT', 'Duplicate declaration', 'overlaps spawn or goal',
 ]
 missing = [item for item in required if item not in source]
 if missing:
@@ -30,4 +32,12 @@ try:
 finally:
     Path(script_path).unlink(missing_ok=True)
 
-print("Browser game page checks passed: required controls/rendering hooks present and JavaScript syntax valid.")
+level_source = Path(__file__).resolve().parents[1] / "examples" / "game-2d-level.zv"
+level_text = level_source.read_text(encoding="utf-8")
+for declaration in ("define game_width := 10", "define game_height := 8",
+                    "define player_start_x := 1", "define goal_x := 8",
+                    'define wall_1 := "3,1"'):
+    if declaration not in level_text:
+        raise SystemExit(f"Missing Zenvora game-level declaration: {declaration}")
+
+print("Browser game page checks passed: canvas controls, Zenvora level bridge, source fixture, and JavaScript syntax valid.")
