@@ -82,6 +82,24 @@ jobs:
           grep -Fx '3D SCENE COMPLETE' /tmp/zenvora-3d-wireframe.txt
           cat /tmp/zenvora-3d-wireframe.txt
 
+      - name: Verify 2D game source and bytecode v2 output parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-2d-grid.zv > /tmp/zenvora-2d-source.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 examples/game-2d-grid.zv /tmp/zenvora-2d-grid.zv2b
+          cargo run --locked --quiet -- --run-bytecode /tmp/zenvora-2d-grid.zv2b > /tmp/zenvora-2d-bytecode.txt
+          diff -u /tmp/zenvora-2d-source.txt /tmp/zenvora-2d-bytecode.txt
+
+      - name: Verify 3D wireframe source and bytecode v2 output parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-3d-wireframe.zv > /tmp/zenvora-3d-source.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 examples/game-3d-wireframe.zv /tmp/zenvora-3d-wireframe.zv2b
+          cargo run --locked --quiet -- --run-bytecode /tmp/zenvora-3d-wireframe.zv2b > /tmp/zenvora-3d-bytecode.txt
+          diff -u /tmp/zenvora-3d-source.txt /tmp/zenvora-3d-bytecode.txt
+
       - name: Run loop-control example
         run: cargo run --locked -- examples/loops.zv
 
