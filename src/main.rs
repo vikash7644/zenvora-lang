@@ -3343,6 +3343,32 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn self_hosted_plan_adapter_emits_verified_executable_bytecode_v2() {
+        let plan = r#"{
+          "format":"ZENVORA_BYTECODE_PLAN_1",
+          "main":[
+            {"op":"push_const","type":"number","value":"40"},
+            {"op":"push_const","type":"number","value":"2"},
+            {"op":"binary","operator":"+"},
+            {"op":"print"}
+          ],
+          "functions":[]
+        }"#;
+        let bytecode = super::serialize_bytecode_plan_v2(plan).unwrap();
+        assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\n"));
+        let parsed = crate::bytecode_v2::parse_v2_file(&bytecode).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 40", "PUSH 2", "ADD", "PRINT"]);
+        let loaded = super::deserialize_bytecode(&bytecode).unwrap();
+        let output = super::run_with_output(&loaded).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn self_hosted_plan_adapter_rejects_unimplemented_user_functions() {
+        let plan = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[],"functions":[{"name":"f","parameters":[],"code":[]}]}"#;
+        assert!(super::serialize_bytecode_plan_v2(plan).unwrap_err().contains("user functions"));
+    }
     use super::{compile, compile_core, lex, read_chain_key, run_chain_command, run_with_output, Op};
     use ed25519_dalek::Signer;
 
