@@ -34,7 +34,11 @@ define wall_6 := "7,3"
 define wall_7 := "5,5"
 define wall_8 := "2,5"
 define wall_9 := "2,6"</textarea>
-<div class="actions" style="padding:12px 0 0;background:transparent;border:0"><button id="build-level" class="primary">Build level from Zenvora</button><span id="source-status" class="status" aria-live="polite">LEVEL SOURCE READY</span></div>
+<div class="actions" style="padding:12px 0 0;background:transparent;border:0;align-items:center">
+<button id="build-level" class="primary">Build level from source</button>
+<label style="font-size:12px;color:var(--muted)">Load VM-exported scene JSON <input id="scene-file" type="file" accept="application/json,.json" style="max-width:210px;font-size:12px"></label>
+<span id="source-status" class="status" aria-live="polite">LEVEL SOURCE READY</span>
+</div>
 </section>
 <section class="layout">
 <div class="panel">
@@ -137,6 +141,28 @@ define wall_9 := "2,6"</textarea>
     button.addEventListener("click",()=>step(button.dataset.dir));
   });
   document.getElementById("reset").addEventListener("click",reset);
+  document.getElementById("scene-file").addEventListener("change",async event=>{
+    const file=event.target.files&&event.target.files[0];
+    if(!file) return;
+    try {
+      const scene=JSON.parse(await file.text());
+      if(scene.format!=="ZENVORA_GAME_SCENE_V1"||!scene.world||!scene.spawn||!scene.goal||!Array.isArray(scene.walls)) throw new Error("Unsupported scene JSON format");
+      const declarations=[
+        "# Imported scene exported by the Zenvora VM",
+        "define game_width := "+scene.world.width,
+        "define game_height := "+scene.world.height,
+        "define player_start_x := "+scene.spawn.x,
+        "define player_start_y := "+scene.spawn.y,
+        "define goal_x := "+scene.goal.x,
+        "define goal_y := "+scene.goal.y,
+        ...scene.walls.map((wall,index)=>'define wall_'+(index+1)+' := "'+wall.x+','+wall.y+'"')
+      ];
+      document.getElementById("zv-source").value=declarations.join("\\n");
+      parseLevel(document.getElementById("zv-source").value);
+      sourceStatus.textContent="VM SCENE LOADED"; sourceStatus.style.color="#8de3b0";
+    } catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
+    event.target.value="";
+  });
   document.getElementById("build-level").addEventListener("click",()=>{
     try { parseLevel(document.getElementById("zv-source").value); sourceStatus.textContent="LEVEL BUILT"; sourceStatus.style.color="#8de3b0"; }
     catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
