@@ -41,12 +41,22 @@ jobs:
           {
             "format": "ZENVORA_BYTECODE_PLAN_1",
             "main": [
-              {"op":"push_const","type":"number","value":"40"},
-              {"op":"push_const","type":"number","value":"2"},
-              {"op":"binary","operator":"+"},
+              {"op":"push_const","type":"number","value":"41"},
+              {"op":"call","name":"increment","argc":1},
               {"op":"print"}
             ],
-            "functions": []
+            "functions": [
+              {
+                "name":"increment",
+                "parameters":["value"],
+                "code":[
+                  {"op":"load","name":"value"},
+                  {"op":"push_const","type":"number","value":"1"},
+                  {"op":"binary","operator":"+"},
+                  {"op":"return"}
+                ]
+              }
+            ]
           }
           PLAN
           target/debug/zv --emit-plan-bytecode-v2 plan.json plan.zv2b
