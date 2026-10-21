@@ -97,12 +97,14 @@ jobs:
           assert scene['script'][:3] == ['down'] * 3
           assert scene['script'][3:10] == ['right'] * 7
           assert scene['script'][10:] == ['down'] * 2
+          assert len(scene['trace']) == len(scene['script']) == 12
           x, y = scene['spawn']['x'], scene['spawn']['y']
-          for direction in scene['script']:
+          for direction, state in zip(scene['script'], scene['trace']):
               x += {'left': -1, 'right': 1}.get(direction, 0)
               y += {'up': -1, 'down': 1}.get(direction, 0)
-          assert {'x': x, 'y': y} == scene['goal']
-          print('Zenvora source -> VM -> validated scene + 12 movement commands -> goal: PASS')
+              assert state == {'x': x, 'y': y}, (direction, state, x, y)
+          assert scene['trace'][-1] == scene['goal']
+          print('Zenvora source -> grid_step VM builtin -> per-frame state trace -> validated Canvas scene: PASS')
           PY
 
       - name: Run 2D grid game smoke test
