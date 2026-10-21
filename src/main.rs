@@ -2658,8 +2658,13 @@ fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
 
 fn run_bytecode(path: &str) -> Result<(), String> {
     let serialized = read_bytecode_source(path)?;
-    let code = deserialize_bytecode(&serialized)?;
-    run(&code)
+    if serialized.starts_with("ZENVORA_BYTECODE 2\\n") {
+        let code = deserialize_bytecode_v2(&serialized)?;
+        run(&code)
+    } else {
+        let code = deserialize_bytecode(&serialized)?;
+        run(&code)
+    }
 }
 
 fn run_chain_command(args: &[String]) -> Result<(), String> {
