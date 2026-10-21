@@ -15,6 +15,27 @@
 <header class="wrap nav"><div class="brand">◈ ZENVORA <span style="color:#9aa9bc;font-weight:500">/ GAME LAB</span></div><a href="./playground.html">← Language playground</a></header>
 <main class="wrap">
 <section class="hero"><div class="tag">Playable browser prototype · 2D</div><h1>Grid Quest</h1><p>Move the glowing player to the green goal. Avoid the red blocks. This is a real canvas-rendered browser prototype with keyboard and touch input; it is separate from the Rust VM and does not yet compile Zenvora source into graphics.</p></section>
+<section class="panel" style="padding:16px;margin:0 0 16px">
+<h2 style="font-size:16px;margin:0 0 6px">Zenvora source → game runtime</h2>
+<p style="color:var(--muted);font-size:13px;margin:0 0 10px">Edit the supported level declarations below and press Build level. The Zenvora source controls the level dimensions, spawn, goal, and wall coordinates; the browser runtime handles input, collision, and canvas rendering. This is a level-source bridge, not yet execution of arbitrary Zenvora functions inside the graphical VM.</p>
+<textarea id="zv-source" spellcheck="false" autocapitalize="off" autocomplete="off" style="display:block;width:100%;min-height:250px;resize:vertical;background:#090e17;color:#dce6fa;border:1px solid var(--line);border-radius:10px;padding:12px;font:13px/1.7 ui-monospace,monospace"># Zenvora 2D Grid Quest level definition.
+define game_width := 10
+define game_height := 8
+define player_start_x := 1
+define player_start_y := 1
+define goal_x := 8
+define goal_y := 6
+define wall_1 := "3,1"
+define wall_2 := "3,2"
+define wall_3 := "3,3"
+define wall_4 := "5,3"
+define wall_5 := "6,3"
+define wall_6 := "7,3"
+define wall_7 := "5,5"
+define wall_8 := "2,5"
+define wall_9 := "2,6"</textarea>
+<div class="actions" style="padding:12px 0 0;background:transparent;border:0"><button id="build-level" class="primary">Build level from Zenvora</button><span id="source-status" class="status" aria-live="polite">LEVEL SOURCE READY</span></div>
+</section>
 <section class="layout">
 <div class="panel">
 <div class="panelhead"><span>GAME VIEWPORT</span><span class="pill" id="frame">FRAME 0</span></div>
