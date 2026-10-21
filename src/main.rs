@@ -4059,6 +4059,33 @@ mod tests {
     }
 
     #[test]
+    fn every_verifier_accepted_builtin_has_a_runtime_implementation() {
+        // Keep the Bytecode v2 verifier's accepted builtin surface in lockstep
+        // with the runtime dispatch. Zero arguments are intentional: builtins
+        // requiring arguments may report arity/type errors, but must never be
+        // rejected as an unknown runtime builtin.
+        let names = [
+            "array", "map", "get", "len", "contains", "push", "put", "keys",
+            "values", "type_of", "to_string", "abs", "min", "max", "range",
+            "assert", "sum", "starts_with", "ends_with", "split", "join",
+            "replace", "char_at", "first", "last", "reverse", "is_empty",
+            "clamp", "trim", "lower", "upper", "char_count", "to_int",
+            "index_of", "unique", "assert_eq", "gcd", "lcm", "factorial",
+            "is_prime", "fibonacci", "pow_int", "mean", "speed", "density",
+            "molarity", "force", "kinetic_energy", "bmi_x10", "molar_mass",
+            "dna_complement", "gc_content_percent",
+        ];
+        for name in names {
+            assert!(super::bytecode_v2::is_supported_builtin(name), "verifier rejected runtime builtin {name}");
+            let result = super::builtin_unchecked(name, Vec::new());
+            assert!(
+                !matches!(result, Err(ref error) if error.starts_with("unknown builtin")),
+                "verifier accepts {name}, but runtime dispatch does not implement it"
+            );
+        }
+    }
+
+    #[test]
     fn arithmetic_variables_and_assignment() {
         let output = execute(
             "define a := 10\ndefine b := 20\ndefine total := a + b\nshow total\nshow total * 2\ntotal := total + 5\nshow total\n"
