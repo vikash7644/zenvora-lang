@@ -84,6 +84,7 @@ jobs:
           ! grep -F 'compile_error' parser-output.txt
           grep -F 'ZENVORA_SEMANTICS' parser-output.txt
           grep -F 'ZENVORA_BUILTIN_CALL_PASS' parser-output.txt
+          grep -F 'char_at' parser-output.txt
           grep -F 'nested function declarations are not supported' parser-output.txt
           grep -F 'unsupported bytecode opcode: nested_function' parser-output.txt
           ! grep -F 'ZENVORA_BUILTIN_CALL_FAIL' parser-output.txt
