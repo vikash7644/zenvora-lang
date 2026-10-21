@@ -130,3 +130,56 @@ mod tests {
         assert_eq!(rect.translated(Vec2i::new(-7, -9)), Some(RectI::new(-5, -6, 4, 5)));
     }
 }
+/// Immutable input snapshot for one simulation tick. Backends should sample device
+/// state once and pass this value into the deterministic simulation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct InputSnapshot {
+    pub left: bool,
+    pub right: bool,
+    pub up: bool,
+    pub down: bool,
+    pub action: bool,
+}
+
+/// Minimal integer-only headless world. Coordinates use one world unit per tile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GridWorld {
+    pub player: Vec2i,
+    pub width: i64,
+    pub height: i64,
+    pub obstacles: Vec<RectI>,
+    pub frame: u64,
+}
+
+impl GridWorld {
+    pub fn new(player: Vec2i, width: i64, height: i64, obstacles: Vec<RectI>) -> Option<Self> {
+        if width <= 0 || height <= 0 { return None; }
+        let world = Self { player, width, height, obstacles, frame: 0 };
+        if !world.is_walkable(player) { return None; }
+        Some(world)
+    }
+
+    fn is_walkable(&self, position: Vec2i) -> bool {
+        if position.x < 0 || position.y < 0 || position.x >= self.width || position.y >= self.height {
+            return false;
+        }
+        let player_rect = RectI::new(position.x, position.y, 1, 1);
+        !self.obstacles.iter().any(|obstacle| player_rect.overlaps(*obstacle))
+    }
+
+    /// Applies one input snapshot. Opposing directions cancel; diagonal movement
+    /// is intentionally disabled so every tick advances at most one grid cell.
+    /// A blocked move leaves the player in place but still advances the frame.
+    pub fn step(&mut self, input: InputSnapshot) -> Result<(), &'static str> {
+        let dx = i64::from(input.right && !input.left) - i64::from(input.left && !input.right);
+        let dy = i64::from(input.down && !input.up) - i64::from(input.up && !input.down);
+        let (dx, dy) = if dx != 0 { (dx, 0) } else { (0, dy) };
+        let next = self.player.checked_add(Vec2i::new(dx, dy));
+        if let Some(position) = next {
+            if self.is_walkable(position) { self.player = position; }
+        }
+        self.frame = self.frame.checked_add(1).ok_or("frame counter overflow")?;
+        Ok(())
+    }
+}
+
