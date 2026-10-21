@@ -2620,9 +2620,13 @@ fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
         };
         instructions.push(line);
     }
+    // The verifier requires explicit termination of the main region.
+    // A jump to main_end is the canonical v2 main-exit sentinel.
+    let main_end = instructions.len() + 1;
+    instructions.push(format!("JUMP {main_end}"));
     let layout = bytecode_v2::ProgramLayout {
         instruction_count: instructions.len(),
-        main_end: instructions.len(),
+        main_end,
         functions: Vec::new(),
     };
     let file = bytecode_v2::ParsedV2File { layout, instructions };
