@@ -9,6 +9,7 @@ on:
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "docs/getting-started.md"
   push:
     branches:
       - main
@@ -20,6 +21,7 @@ on:
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "docs/getting-started.md"
   workflow_dispatch:
 
 permissions:
@@ -36,6 +38,10 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+      - name: Validate documented installation guidance
+        run: |
+          grep -F "GitHub Releases page" docs/getting-started.md
+          grep -F "Rust-independent self-hosted installation is not complete yet" docs/getting-started.md
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo dependencies
