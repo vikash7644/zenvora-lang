@@ -30,6 +30,20 @@ Target: Zenvora Lang v0.9 compiler/VM foundation. This document does not claim s
 - **Stage E — Reproducibility:** compile twice and compare normalized artifacts; compare behavior, diagnostics, and bytecode verifier results across bootstrap stages.
 - **Stage F — Remove build dependency:** demonstrate a clean build and tests using the Zenvora-produced compiler artifact without invoking the Rust compiler for language compilation. Only then can self-hosting be claimed.
 
+## Stage-D/E bootstrap gate (current blocker)
+
+The frontend smoke workflow is not, by itself, a self-hosting proof: `compiler/parser.zv` currently runs a fixed regression harness and emits a plan for a hard-coded `runnable_source`. The native Rust CLI still parses and executes that `.zv` file. Converting the emitted sample plan to Bytecode v2 proves the plan adapter/VM path, not that the Zenvora compiler compiled itself.
+
+A self-hosting release must add a generic compiler-driver entry point written in Zenvora that accepts a source path or source text, emits a complete executable artifact for arbitrary supported programs, and reports diagnostics without the Rust frontend. CI must then:
+
+1. Build the reference `zv` once and use it only for bootstrap stage 1.
+2. Use stage 1 to compile the Zenvora-written compiler driver into a runnable artifact.
+3. Run that artifact to compile the same compiler source again (stage 2), without invoking Cargo/Rust for language compilation.
+4. Compile a separate fixture with both stages; compare normalized artifacts and stdout/stderr/exit status.
+5. Start from a clean runner and prove the stage-2 compiler can build and execute the fixture using only the documented runtime/artifact dependencies.
+
+Until those commands exist and pass in CI, Stage D/E/F status is **blocked / not achieved**. Re-running the current parser harness or comparing its hard-coded sample plan must not be reported as self-hosting.
+
 ## Required release gates
 
 - Every checked-in `.zv` example executes in CI.
