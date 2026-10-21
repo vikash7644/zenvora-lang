@@ -156,5 +156,14 @@ jobs:
           2
           42
           3
+          720
+          55
+          256
+          6
+          25
+          21
+          18
+          228
+          29
           EXPECTED
           diff -u expected-bytecode-output.txt self-hosted-bytecode-output.txt
