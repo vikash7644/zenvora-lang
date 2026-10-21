@@ -4320,6 +4320,46 @@ show index_of(array(7, "x", true), false)
     }
 
     #[test]
+    fn bytecode_v2_executes_standard_library_builtin_parity_end_to_end() {
+        let source = r#"show starts_with("zenvora", "zen")
+show ends_with("zenvora", "ora")
+show trim("  zv  ")
+show lower("ZV")
+show upper("zv")
+show char_count("hé🙂")
+show index_of("zenvora", "v")
+show contains(array(1, 2, 3), 2)
+define profile := map("answer", 42)
+show get(profile, "answer")
+show len(push(array(1), 2))
+show keys(profile)
+show values(profile)
+show replace("zv", "z", "x")
+show split("a,b", ",")
+show join(array("a", "b"), "-")
+show clamp(9, 0, 5)
+show unique(array(1, 1, 2))
+show to_int("42")
+show range(0, 3)
+show sum(array(3, 4))
+"#;
+        let expected = execute(source).unwrap();
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\\n"));
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec![
+            "true", "true", "zv", "zv", "ZV", "3", "3", "true", "42", "2",
+            "[answer]", "[42]", "xv", "[a, b]", "a-b", "5", "[1, 2]", "42",
+            "[0, 1, 2]", "7",
+        ]);
+    }
+
+    #[test]
     fn bytecode_v2_loader_rejects_invalid_code_before_execution() {
         let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n";
         assert!(super::deserialize_bytecode(source).unwrap_err().contains("stack underflow"));
