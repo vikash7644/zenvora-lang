@@ -1192,14 +1192,19 @@ fn vm_binary(operator, left, right) {
   return map("value", "", "error", "unsupported binary operator: " + operator)
 }
 fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
+  if call_depth > 64 {
+    return map("environment", initial_env, "output", initial_output, "error", "function call depth limit exceeded", "returned", false, "return_value", "")
+  }
   define env := initial_env
   define output := initial_output
   define stack := array()
   define pc := 0
+  define steps := 0
   define err := ""
   define returned := false
   define return_value := ""
-  repeat pc < len(code) and err == "" and not returned {
+  repeat pc < len(code) and err == "" and not returned and steps < 10000 {
+    steps := steps + 1
     define ins := get(code, pc)
     define op := get(ins, "op")
     if op == "push_const" {
@@ -1424,3 +1429,20 @@ if get(runnable_result, "ok") and len(runnable_output) == 5 and get(runnable_out
 } otherwise {
   show "ZENVORA_VM_ASSERTIONS_FAIL"
 }
+
+# Resource-limit regressions: malicious plans must terminate instead of hanging or overflowing the host stack.
+define recursive_source := "fn recurse(n) {\nreturn recurse(n + 1)\n}\nshow recurse(0)\n"
+define recursive_lexed := lex(recursive_source)
+define recursive_ast := parse_program(get(recursive_lexed, "tokens"))
+define recursive_ir := lower_program(get(recursive_ast, "ast"))
+define recursive_plan := emit_bytecode_plan(recursive_ir)
+define recursive_result := execute_bytecode_plan(recursive_plan)
+show get(recursive_result, "error")
+
+define runaway_source := "repeat true {\ndefine counter := 1\n}\n"
+define runaway_lexed := lex(runaway_source)
+define runaway_ast := parse_program(get(runaway_lexed, "tokens"))
+define runaway_ir := lower_program(get(runaway_ast, "ast"))
+define runaway_plan := emit_bytecode_plan(runaway_ir)
+define runaway_result := execute_bytecode_plan(runaway_plan)
+show get(runaway_result, "error")
