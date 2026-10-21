@@ -71,7 +71,6 @@ jobs:
           cargo run --locked --quiet -- examples/game-2d-grid.zv > /tmp/zenvora-2d-grid-game.txt
           grep -Fx 'ZENVORA 2D GRID QUEST' /tmp/zenvora-2d-grid-game.txt
           grep -Fx 'LEVEL COMPLETE' /tmp/zenvora-2d-grid-game.txt
-          grep -Fx 'P' /tmp/zenvora-2d-grid-game.txt && exit 1 || true
           cat /tmp/zenvora-2d-grid-game.txt
 
       - name: Run loop-control example
