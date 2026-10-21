@@ -15,6 +15,7 @@ required = [
     'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
     'id="zv-source"', 'id="build-level"', 'id="scene-file"', 'function parseLevel', 'ZENVORA_GAME_SCENE_V1',
     'LEVEL BUILT', 'Duplicate declaration', 'overlaps spawn or goal',
+    'id="play-vm-script"', 'VM SCRIPT PASSED', 'incomingScript',
 ]
 missing = [item for item in required if item not in source]
 if missing:
@@ -44,4 +45,11 @@ exporter = Path(__file__).resolve().parent / "export_game_level.py"
 if not exporter.is_file():
     raise SystemExit("Missing Zenvora VM scene exporter script")
 
-print("Browser game checks passed: canvas, Zenvora level bridge, VM scene import, source fixture, and JavaScript syntax valid.")
+scripted_source = Path(__file__).resolve().parents[1] / "examples" / "game-2d-scripted.zv"
+if not scripted_source.is_file():
+    raise SystemExit("Missing Zenvora VM scripted-game fixture")
+for declaration in ('show "script"', 'show "down"', 'show "right"', 'repeat step < 3'):
+    if declaration not in scripted_source.read_text(encoding="utf-8"):
+        raise SystemExit(f"Missing Zenvora scripted-game command: {declaration}")
+
+print("Browser game checks passed: Canvas, Zenvora level/script bridge, VM scene import, source fixtures, and JavaScript syntax valid.")
