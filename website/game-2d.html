@@ -36,6 +36,7 @@ define wall_8 := "2,5"
 define wall_9 := "2,6"</textarea>
 <div class="actions" style="padding:12px 0 0;background:transparent;border:0;align-items:center">
 <button id="build-level" class="primary">Build level from source</button>
+<button id="play-vm-script" disabled>Play Zenvora VM script</button>
 <label style="font-size:12px;color:var(--muted)">Load VM-exported scene JSON <input id="scene-file" type="file" accept="application/json,.json" style="max-width:210px;font-size:12px"></label>
 <span id="source-status" class="status" aria-live="polite">LEVEL SOURCE READY</span>
 </div>
@@ -96,6 +97,8 @@ define wall_9 := "2,6"</textarea>
     start=nextStart; goal=nextGoal; walls=nextWalls; reset();
   }
   let player = {...start}, frame = 0, moves = 0, won = false;
+  let vmScript = [], scriptRunId = 0;
+  const playScriptButton = document.getElementById("play-vm-script");
   function draw() {
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle = "#090e17"; ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -134,7 +137,7 @@ define wall_9 := "2,6"</textarea>
     }
     draw();
   }
-  function reset(){player={...start};frame=0;moves=0;won=false;status.textContent="Find the goal.";draw();}
+  function reset(){scriptRunId++;player={...start};frame=0;moves=0;won=false;status.textContent="Find the goal.";draw();}
   const keyMap={ArrowUp:"up",w:"up",W:"up",ArrowDown:"down",s:"down",S:"down",ArrowLeft:"left",a:"left",A:"left",ArrowRight:"right",d:"right",D:"right"};
   window.addEventListener("keydown",event=>{const dir=keyMap[event.key];if(dir){event.preventDefault();step(dir)}});
   document.querySelectorAll("[data-dir]").forEach(button=>{
@@ -147,6 +150,8 @@ define wall_9 := "2,6"</textarea>
     try {
       const scene=JSON.parse(await file.text());
       if(scene.format!=="ZENVORA_GAME_SCENE_V1"||!scene.world||!scene.spawn||!scene.goal||!Array.isArray(scene.walls)) throw new Error("Unsupported scene JSON format");
+      const incomingScript=scene.script===undefined?[]:scene.script;
+      if(!Array.isArray(incomingScript)||incomingScript.length>10000||incomingScript.some(direction=>!["up","down","left","right"].includes(direction))) throw new Error("Invalid VM script: expected up/down/left/right commands");
       const declarations=[
         "# Imported scene exported by the Zenvora VM",
         "define game_width := "+scene.world.width,
@@ -159,13 +164,33 @@ define wall_9 := "2,6"</textarea>
       ];
       document.getElementById("zv-source").value=declarations.join("\\n");
       parseLevel(document.getElementById("zv-source").value);
-      sourceStatus.textContent="VM SCENE LOADED"; sourceStatus.style.color="#8de3b0";
+      vmScript=incomingScript.slice();
+      playScriptButton.disabled=vmScript.length===0;
+      sourceStatus.textContent=vmScript.length?"VM SCENE + SCRIPT LOADED":"VM SCENE LOADED (NO SCRIPT)"; sourceStatus.style.color="#8de3b0";
     } catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
     event.target.value="";
   });
   document.getElementById("build-level").addEventListener("click",()=>{
-    try { parseLevel(document.getElementById("zv-source").value); sourceStatus.textContent="LEVEL BUILT"; sourceStatus.style.color="#8de3b0"; }
+    try { parseLevel(document.getElementById("zv-source").value); vmScript=[]; playScriptButton.disabled=true; sourceStatus.textContent="LEVEL BUILT"; sourceStatus.style.color="#8de3b0"; }
     catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
+  });
+  playScriptButton.addEventListener("click",async()=>{
+    if(!vmScript.length||playScriptButton.disabled) return;
+    const runId=++scriptRunId;
+    reset();
+    playScriptButton.disabled=true;
+    sourceStatus.textContent="RUNNING ZENVORA VM SCRIPT"; sourceStatus.style.color="#ff9e57";
+    for(const direction of vmScript){
+      if(runId!==scriptRunId) return;
+      step(direction);
+      if(won) break;
+      await new Promise(resolve=>setTimeout(resolve,180));
+    }
+    if(runId===scriptRunId){
+      sourceStatus.textContent=won?"VM SCRIPT PASSED — GOAL REACHED":"VM SCRIPT FINISHED";
+      sourceStatus.style.color=won?"#8de3b0":"#ff858b";
+      playScriptButton.disabled=false;
+    }
   });
   draw();
 })();
