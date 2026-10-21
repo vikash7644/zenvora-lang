@@ -1146,6 +1146,54 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let arg_len = args.len();
     let arity = |expected: usize| if arg_len == expected { Ok(()) } else { Err(format!("builtin '{name}' expects {expected} argument(s), got {arg_len}")) };
     match name {
+        "grid_step" => {
+            arity(6)?;
+            let (x, y, width, height) = match (&args[0], &args[1], &args[3], &args[4]) {
+                (Value::Int(x), Value::Int(y), Value::Int(width), Value::Int(height)) => (*x, *y, *width, *height),
+                _ => return Err("type error: grid_step expects integer x, y, width, height".into()),
+            };
+            let Value::Str(direction) = &args[2] else {
+                return Err("type error: grid_step direction must be a string".into());
+            };
+            let Value::Array(walls) = &args[5] else {
+                return Err("type error: grid_step walls must be an array of coordinate strings".into());
+            };
+            if width <= 0 || height <= 0 || width > 10_000 || height > 10_000
+                || width.checked_mul(height).is_none_or(|area| area > 1_000_000) {
+                return Err("grid_step world dimensions must be positive, at most 10000 per axis, and at most 1000000 cells".into());
+            }
+            if x < 0 || y < 0 || x >= width || y >= height {
+                return Err("grid_step player position is outside the world".into());
+            }
+            let (dx, dy) = match direction.as_str() {
+                "up" => (0, -1),
+                "down" => (0, 1),
+                "left" => (-1, 0),
+                "right" => (1, 0),
+                _ => return Err("grid_step direction must be up, down, left, or right".into()),
+            };
+            let next_x = x.checked_add(dx).ok_or("grid_step x coordinate overflow")?;
+            let next_y = y.checked_add(dy).ok_or("grid_step y coordinate overflow")?;
+            let candidate_is_inside = next_x >= 0 && next_y >= 0 && next_x < width && next_y < height;
+            let candidate_key = format!("{next_x},{next_y}");
+            let mut blocked_by_wall = false;
+            for wall in walls {
+                let Value::Str(coordinate) = wall else {
+                    return Err("type error: grid_step wall coordinates must be strings like \"3,2\"".into());
+                };
+                if coordinate == &candidate_key {
+                    blocked_by_wall = true;
+                    break;
+                }
+            }
+            let moved = candidate_is_inside && !blocked_by_wall;
+            let (result_x, result_y) = if moved { (next_x, next_y) } else { (x, y) };
+            let mut result = std::collections::BTreeMap::new();
+            result.insert("x".to_string(), Value::Int(result_x));
+            result.insert("y".to_string(), Value::Int(result_y));
+            result.insert("moved".to_string(), Value::Bool(moved));
+            Ok(Value::Map(result))
+        }
         "array" => Ok(Value::Array(args)),
         "map" => {
             if !args.len().is_multiple_of(2) { return Err("builtin 'map' expects alternating string keys and values".into()); }
