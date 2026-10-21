@@ -237,11 +237,13 @@ fn find_block_end(tokens, open_pos) {
   define depth := 1
   define pos := open_pos + 1
   repeat pos < len(tokens) and depth > 0 {
-    define value := get(at(tokens, pos), "value")
-    if value == "{" {
+    define current_token := at(tokens, pos)
+    define value := get(current_token, "value")
+    # Braces inside string literals are data, not block delimiters.
+    if get(current_token, "kind") == "punctuation" and value == "{" {
       depth := depth + 1
     } otherwise {
-      if value == "}" {
+      if get(current_token, "kind") == "punctuation" and value == "}" {
         depth := depth - 1
       }
     }
@@ -1115,6 +1117,16 @@ show get(bad_return_parse, "error")
 show get(bad_assign_parse, "error")
 show get(bad_fn_param_parse, "error")
 show get(bad_fn_block_parse, "error")
+
+# Regression: braces inside string tokens must not terminate a function body.
+define brace_string_source := "fn braces() {\nshow \"}\"\nshow \"{\"\n}\nshow \"done\"\n"
+define brace_string_lexed := lex(brace_string_source)
+define brace_string_parse := parse_program(get(brace_string_lexed, "tokens"))
+if get(brace_string_parse, "error") == "" and len(get(brace_string_parse, "ast")) == 2 {
+  show "ZENVORA_BRACE_STRING_PASS"
+} otherwise {
+  show "ZENVORA_BRACE_STRING_FAIL"
+}
 show parsed
 
 # Minimal Zenvora-written bytecode-plan VM. This executes emitted instructions in Zenvora,
