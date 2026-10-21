@@ -2,1044 +2,1044 @@
 # Current supported statements: define name := expression; show expression.
 # Expressions: literals, names, parentheses, unary -, !, not, *, /, +, -, comparisons, and/or.
 fn node(kind, value, left, right, line) {
- return map("kind", kind, "value", value, "left", left, "right", right, "line", line)
+  return map("kind", kind, "value", value, "left", left, "right", right, "line", line)
 }
 fn result(ast, pos, err) {
- return map("ast", ast, "pos", pos, "error", err)
+  return map("ast", ast, "pos", pos, "error", err)
 }
 fn at(tokens, pos) {
- return get(tokens, pos)
+  return get(tokens, pos)
 }
 fn parse_primary(tokens, pos) {
- if pos >= len(tokens) {
-  return result("", pos, "expected expression")
- }
- define t := at(tokens, pos)
- define kind := get(t, "kind")
- define value := get(t, "value")
- define ln := get(t, "line")
- if kind == "number" {
-  return result(node("number", value, "", "", ln), pos + 1, "")
- } otherwise {
-  if kind == "string" {
-   return result(node("string", value, "", "", ln), pos + 1, "")
-  } otherwise {
-   if kind == "boolean" {
-    return result(node("boolean", value, "", "", ln), pos + 1, "")
-   } otherwise {
-    if kind == "identifier" {
-     return result(node("name", value, "", "", ln), pos + 1, "")
-    } otherwise {
-     if value == "(" {
-      define nested := parse_expr(tokens, pos + 1)
-      if get(nested, "error") != "" {
-       return nested
-      }
-      define close_pos := get(nested, "pos")
-      if close_pos >= len(tokens) or get(at(tokens, close_pos), "value") != ")" {
-       return result("", close_pos, "expected closing parenthesis")
-      }
-      return result(get(nested, "ast"), close_pos + 1, "")
-     } otherwise {
-      return result("", pos, "expected literal, name, or parenthesized expression")
-     }
-    }
-   }
+  if pos >= len(tokens) {
+    return result("", pos, "expected expression")
   }
- }
+  define t := at(tokens, pos)
+  define kind := get(t, "kind")
+  define value := get(t, "value")
+  define ln := get(t, "line")
+  if kind == "number" {
+    return result(node("number", value, "", "", ln), pos + 1, "")
+  } otherwise {
+    if kind == "string" {
+      return result(node("string", value, "", "", ln), pos + 1, "")
+    } otherwise {
+      if kind == "boolean" {
+        return result(node("boolean", value, "", "", ln), pos + 1, "")
+      } otherwise {
+        if kind == "identifier" {
+          return result(node("name", value, "", "", ln), pos + 1, "")
+        } otherwise {
+          if value == "(" {
+            define nested := parse_expr(tokens, pos + 1)
+            if get(nested, "error") != "" {
+              return nested
+            }
+            define close_pos := get(nested, "pos")
+            if close_pos >= len(tokens) or get(at(tokens, close_pos), "value") != ")" {
+              return result("", close_pos, "expected closing parenthesis")
+            }
+            return result(get(nested, "ast"), close_pos + 1, "")
+          } otherwise {
+            return result("", pos, "expected literal, name, or parenthesized expression")
+          }
+        }
+      }
+    }
+  }
 }
 
 fn parse_postfix(tokens, pos) {
- define base_result := parse_primary(tokens, pos)
- if get(base_result, "error") != "" {
-  return base_result
- }
- define base := get(base_result, "ast")
- define next := get(base_result, "pos")
- repeat next < len(tokens) and (get(at(tokens, next), "value") == "(" or get(at(tokens, next), "value") == "[") {
-  define opener := get(at(tokens, next), "value")
-  define ln := get(base, "line")
-  if opener == "(" {
-   define args := array()
-   next := next + 1
-   if next < len(tokens) and get(at(tokens, next), "value") != ")" {
-    define arg_result := parse_expr(tokens, next)
-    if get(arg_result, "error") != "" {
-     return arg_result
-    }
-    args := push(args, get(arg_result, "ast"))
-    next := get(arg_result, "pos")
-    repeat next < len(tokens) and get(at(tokens, next), "value") == "," {
-     next := next + 1
-     define more_arg := parse_expr(tokens, next)
-     if get(more_arg, "error") != "" {
-      return more_arg
-     }
-     args := push(args, get(more_arg, "ast"))
-     next := get(more_arg, "pos")
-    }
-   }
-   if next >= len(tokens) or get(at(tokens, next), "value") != ")" {
-    return result("", next, "expected closing parenthesis in call")
-   }
-   base := node("call", "", base, args, ln)
-   next := next + 1
-  } otherwise {
-   next := next + 1
-   define index_result := parse_expr(tokens, next)
-   if get(index_result, "error") != "" {
-    return index_result
-   }
-   next := get(index_result, "pos")
-   if next >= len(tokens) or get(at(tokens, next), "value") != "]" {
-    return result("", next, "expected closing bracket after index")
-   }
-   base := node("index", "", base, get(index_result, "ast"), ln)
-   next := next + 1
+  define base_result := parse_primary(tokens, pos)
+  if get(base_result, "error") != "" {
+    return base_result
   }
- }
- return result(base, next, "")
+  define base := get(base_result, "ast")
+  define next := get(base_result, "pos")
+  repeat next < len(tokens) and (get(at(tokens, next), "value") == "(" or get(at(tokens, next), "value") == "[") {
+    define opener := get(at(tokens, next), "value")
+    define ln := get(base, "line")
+    if opener == "(" {
+      define args := array()
+      next := next + 1
+      if next < len(tokens) and get(at(tokens, next), "value") != ")" {
+        define arg_result := parse_expr(tokens, next)
+        if get(arg_result, "error") != "" {
+          return arg_result
+        }
+        args := push(args, get(arg_result, "ast"))
+        next := get(arg_result, "pos")
+        repeat next < len(tokens) and get(at(tokens, next), "value") == "," {
+          next := next + 1
+          define more_arg := parse_expr(tokens, next)
+          if get(more_arg, "error") != "" {
+            return more_arg
+          }
+          args := push(args, get(more_arg, "ast"))
+          next := get(more_arg, "pos")
+        }
+      }
+      if next >= len(tokens) or get(at(tokens, next), "value") != ")" {
+        return result("", next, "expected closing parenthesis in call")
+      }
+      base := node("call", "", base, args, ln)
+      next := next + 1
+    } otherwise {
+      next := next + 1
+      define index_result := parse_expr(tokens, next)
+      if get(index_result, "error") != "" {
+        return index_result
+      }
+      next := get(index_result, "pos")
+      if next >= len(tokens) or get(at(tokens, next), "value") != "]" {
+        return result("", next, "expected closing bracket after index")
+      }
+      base := node("index", "", base, get(index_result, "ast"), ln)
+      next := next + 1
+    }
+  }
+  return result(base, next, "")
 }
 
 fn parse_unary(tokens, pos) {
- if pos >= len(tokens) {
-  return result("", pos, "expected expression")
- }
- define t := at(tokens, pos)
- define op := get(t, "value")
- if op == "-" or op == "!" or op == "not" {
-  define operand := parse_unary(tokens, pos + 1)
-  if get(operand, "error") != "" {
-   return operand
+  if pos >= len(tokens) {
+    return result("", pos, "expected expression")
   }
-  return result(node("unary", op, get(operand, "ast"), "", get(t, "line")), get(operand, "pos"), "")
- } otherwise {
-  return parse_postfix(tokens, pos)
- }
+  define t := at(tokens, pos)
+  define op := get(t, "value")
+  if op == "-" or op == "!" or op == "not" {
+    define operand := parse_unary(tokens, pos + 1)
+    if get(operand, "error") != "" {
+      return operand
+    }
+    return result(node("unary", op, get(operand, "ast"), "", get(t, "line")), get(operand, "pos"), "")
+  } otherwise {
+    return parse_postfix(tokens, pos)
+  }
 }
 
 fn parse_mul(tokens, pos) {
- define left_result := parse_unary(tokens, pos)
- if get(left_result, "error") != "" {
-  return left_result
- }
- define left := get(left_result, "ast")
- define next := get(left_result, "pos")
- define ln := get(left, "line")
- repeat next < len(tokens) and get(at(tokens, next), "line") == ln and (get(at(tokens, next), "value") == "*" or get(at(tokens, next), "value") == "/") {
-  define op := get(at(tokens, next), "value")
-  define right_result := parse_unary(tokens, next + 1)
-  if get(right_result, "error") != "" {
-   return right_result
+  define left_result := parse_unary(tokens, pos)
+  if get(left_result, "error") != "" {
+    return left_result
   }
-  define right_ast := get(right_result, "ast")
-  left := node("binary", op, left, right_ast, ln)
-  next := get(right_result, "pos")
- }
- return result(left, next, "")
+  define left := get(left_result, "ast")
+  define next := get(left_result, "pos")
+  define ln := get(left, "line")
+  repeat next < len(tokens) and get(at(tokens, next), "line") == ln and (get(at(tokens, next), "value") == "*" or get(at(tokens, next), "value") == "/") {
+    define op := get(at(tokens, next), "value")
+    define right_result := parse_unary(tokens, next + 1)
+    if get(right_result, "error") != "" {
+      return right_result
+    }
+    define right_ast := get(right_result, "ast")
+    left := node("binary", op, left, right_ast, ln)
+    next := get(right_result, "pos")
+  }
+  return result(left, next, "")
 }
 
 fn parse_add(tokens, pos) {
- define left_result := parse_mul(tokens, pos)
- if get(left_result, "error") != "" {
-  return left_result
- }
- define left := get(left_result, "ast")
- define next := get(left_result, "pos")
- define ln := get(left, "line")
- repeat next < len(tokens) and get(at(tokens, next), "line") == ln and (get(at(tokens, next), "value") == "+" or get(at(tokens, next), "value") == "-") {
-  define op := get(at(tokens, next), "value")
-  define right_result := parse_mul(tokens, next + 1)
-  if get(right_result, "error") != "" {
-   return right_result
+  define left_result := parse_mul(tokens, pos)
+  if get(left_result, "error") != "" {
+    return left_result
   }
-  define right_ast := get(right_result, "ast")
-  left := node("binary", op, left, right_ast, ln)
-  next := get(right_result, "pos")
- }
- return result(left, next, "")
+  define left := get(left_result, "ast")
+  define next := get(left_result, "pos")
+  define ln := get(left, "line")
+  repeat next < len(tokens) and get(at(tokens, next), "line") == ln and (get(at(tokens, next), "value") == "+" or get(at(tokens, next), "value") == "-") {
+    define op := get(at(tokens, next), "value")
+    define right_result := parse_mul(tokens, next + 1)
+    if get(right_result, "error") != "" {
+      return right_result
+    }
+    define right_ast := get(right_result, "ast")
+    left := node("binary", op, left, right_ast, ln)
+    next := get(right_result, "pos")
+  }
+  return result(left, next, "")
 }
 
 fn parse_compare(tokens, pos) {
- define left_result := parse_add(tokens, pos)
- if get(left_result, "error") != "" {
-  return left_result
- }
- define left := get(left_result, "ast")
- define next := get(left_result, "pos")
- define ln := get(left, "line")
- repeat next < len(tokens) and get(at(tokens, next), "line") == ln and (get(at(tokens, next), "value") == "==" or get(at(tokens, next), "value") == "!=" or get(at(tokens, next), "value") == "<" or get(at(tokens, next), "value") == "<=" or get(at(tokens, next), "value") == ">" or get(at(tokens, next), "value") == ">=") {
-  define op := get(at(tokens, next), "value")
-  define right_result := parse_add(tokens, next + 1)
-  if get(right_result, "error") != "" {
-   return right_result
+  define left_result := parse_add(tokens, pos)
+  if get(left_result, "error") != "" {
+    return left_result
   }
-  define right_ast := get(right_result, "ast")
-  left := node("binary", op, left, right_ast, ln)
-  next := get(right_result, "pos")
- }
- return result(left, next, "")
+  define left := get(left_result, "ast")
+  define next := get(left_result, "pos")
+  define ln := get(left, "line")
+  repeat next < len(tokens) and get(at(tokens, next), "line") == ln and (get(at(tokens, next), "value") == "==" or get(at(tokens, next), "value") == "!=" or get(at(tokens, next), "value") == "<" or get(at(tokens, next), "value") == "<=" or get(at(tokens, next), "value") == ">" or get(at(tokens, next), "value") == ">=") {
+    define op := get(at(tokens, next), "value")
+    define right_result := parse_add(tokens, next + 1)
+    if get(right_result, "error") != "" {
+      return right_result
+    }
+    define right_ast := get(right_result, "ast")
+    left := node("binary", op, left, right_ast, ln)
+    next := get(right_result, "pos")
+  }
+  return result(left, next, "")
 }
 
 fn parse_and(tokens, pos) {
- define left_result := parse_compare(tokens, pos)
- if get(left_result, "error") != "" {
-  return left_result
- }
- define left := get(left_result, "ast")
- define next := get(left_result, "pos")
- define ln := get(left, "line")
- repeat next < len(tokens) and get(at(tokens, next), "line") == ln and get(at(tokens, next), "value") == "and" {
-  define op := get(at(tokens, next), "value")
-  define right_result := parse_compare(tokens, next + 1)
-  if get(right_result, "error") != "" {
-   return right_result
+  define left_result := parse_compare(tokens, pos)
+  if get(left_result, "error") != "" {
+    return left_result
   }
-  left := node("binary", op, left, get(right_result, "ast"), ln)
-  next := get(right_result, "pos")
- }
- return result(left, next, "")
+  define left := get(left_result, "ast")
+  define next := get(left_result, "pos")
+  define ln := get(left, "line")
+  repeat next < len(tokens) and get(at(tokens, next), "line") == ln and get(at(tokens, next), "value") == "and" {
+    define op := get(at(tokens, next), "value")
+    define right_result := parse_compare(tokens, next + 1)
+    if get(right_result, "error") != "" {
+      return right_result
+    }
+    left := node("binary", op, left, get(right_result, "ast"), ln)
+    next := get(right_result, "pos")
+  }
+  return result(left, next, "")
 }
 
 fn parse_expr(tokens, pos) {
- define left_result := parse_and(tokens, pos)
- if get(left_result, "error") != "" {
-  return left_result
- }
- define left := get(left_result, "ast")
- define next := get(left_result, "pos")
- define ln := get(left, "line")
- repeat next < len(tokens) and get(at(tokens, next), "line") == ln and get(at(tokens, next), "value") == "or" {
-  define right_result := parse_and(tokens, next + 1)
-  if get(right_result, "error") != "" {
-   return right_result
+  define left_result := parse_and(tokens, pos)
+  if get(left_result, "error") != "" {
+    return left_result
   }
-  left := node("binary", "or", left, get(right_result, "ast"), ln)
-  next := get(right_result, "pos")
- }
- return result(left, next, "")
+  define left := get(left_result, "ast")
+  define next := get(left_result, "pos")
+  define ln := get(left, "line")
+  repeat next < len(tokens) and get(at(tokens, next), "line") == ln and get(at(tokens, next), "value") == "or" {
+    define right_result := parse_and(tokens, next + 1)
+    if get(right_result, "error") != "" {
+      return right_result
+    }
+    left := node("binary", "or", left, get(right_result, "ast"), ln)
+    next := get(right_result, "pos")
+  }
+  return result(left, next, "")
 }
 
 fn collect_tokens(tokens, start_pos, end_pos) {
- define out := array()
- define i := start_pos
- repeat i < end_pos {
-  out := push(out, at(tokens, i))
-  i := i + 1
- }
- return out
+  define out := array()
+  define i := start_pos
+  repeat i < end_pos {
+    out := push(out, at(tokens, i))
+    i := i + 1
+  }
+  return out
 }
 
 fn find_block_end(tokens, open_pos) {
- if open_pos >= len(tokens) or get(at(tokens, open_pos), "value") != "{" {
-  return map("pos", open_pos, "error", "expected opening brace")
- }
- define depth := 1
- define pos := open_pos + 1
- repeat pos < len(tokens) and depth > 0 {
-  define value := get(at(tokens, pos), "value")
-  if value == "{" {
-   depth := depth + 1
-  } otherwise {
-   if value == "}" {
-    depth := depth - 1
-   }
+  if open_pos >= len(tokens) or get(at(tokens, open_pos), "value") != "{" {
+    return map("pos", open_pos, "error", "expected opening brace")
   }
-  if depth > 0 {
-   pos := pos + 1
+  define depth := 1
+  define pos := open_pos + 1
+  repeat pos < len(tokens) and depth > 0 {
+    define value := get(at(tokens, pos), "value")
+    if value == "{" {
+      depth := depth + 1
+    } otherwise {
+      if value == "}" {
+        depth := depth - 1
+      }
+    }
+    if depth > 0 {
+      pos := pos + 1
+    }
   }
- }
- if depth != 0 {
-  return map("pos", pos, "error", "expected closing brace")
- }
- return map("pos", pos, "error", "")
+  if depth != 0 {
+    return map("pos", pos, "error", "expected closing brace")
+  }
+  return map("pos", pos, "error", "")
 }
 
 fn parse_program(tokens) {
- define ast := array()
- define pos := 0
- define err := ""
- repeat pos < len(tokens) and err == "" {
-  define start := at(tokens, pos)
-  define ln := get(start, "line")
-  define kw := get(start, "value")
-  if kw == "fn" {
-   if pos + 2 >= len(tokens) or get(at(tokens, pos + 1), "kind") != "identifier" or get(at(tokens, pos + 2), "value") != "(" {
-    err := "expected fn name(parameters)"
-   } otherwise {
-    define fn_name := get(at(tokens, pos + 1), "value")
-    define params := array()
-    define p := pos + 3
-    define params_done := false
-    repeat p < len(tokens) and not params_done and err == "" {
-     if get(at(tokens, p), "value") == ")" {
-      params_done := true
-      p := p + 1
-     } otherwise {
-      if get(at(tokens, p), "kind") != "identifier" {
-       err := "expected function parameter name"
+  define ast := array()
+  define pos := 0
+  define err := ""
+  repeat pos < len(tokens) and err == "" {
+    define start := at(tokens, pos)
+    define ln := get(start, "line")
+    define kw := get(start, "value")
+    if kw == "fn" {
+      if pos + 2 >= len(tokens) or get(at(tokens, pos + 1), "kind") != "identifier" or get(at(tokens, pos + 2), "value") != "(" {
+        err := "expected fn name(parameters)"
       } otherwise {
-       params := push(params, get(at(tokens, p), "value"))
-       p := p + 1
-       if p < len(tokens) and get(at(tokens, p), "value") == "," {
-        p := p + 1
-       } otherwise {
-        if p < len(tokens) and get(at(tokens, p), "value") == ")" {
-         params_done := true
-         p := p + 1
-        } otherwise {
-         err := "expected comma or closing parenthesis in parameters"
+        define fn_name := get(at(tokens, pos + 1), "value")
+        define params := array()
+        define p := pos + 3
+        define params_done := false
+        repeat p < len(tokens) and not params_done and err == "" {
+          if get(at(tokens, p), "value") == ")" {
+            params_done := true
+            p := p + 1
+          } otherwise {
+            if get(at(tokens, p), "kind") != "identifier" {
+              err := "expected function parameter name"
+            } otherwise {
+              params := push(params, get(at(tokens, p), "value"))
+              p := p + 1
+              if p < len(tokens) and get(at(tokens, p), "value") == "," {
+                p := p + 1
+              } otherwise {
+                if p < len(tokens) and get(at(tokens, p), "value") == ")" {
+                  params_done := true
+                  p := p + 1
+                } otherwise {
+                  err := "expected comma or closing parenthesis in parameters"
+                }
+              }
+            }
+          }
         }
-       }
-      }
-     }
-    }
-    if err == "" and not params_done {
-     err := "expected closing parenthesis in parameters"
-    }
-    if err == "" {
-     define body_end := find_block_end(tokens, p)
-     if get(body_end, "error") != "" {
-      err := get(body_end, "error")
-     } otherwise {
-      define body_close := get(body_end, "pos")
-      define fn_body_tokens := collect_tokens(tokens, p + 1, body_close)
-      define fn_body_result := parse_program(fn_body_tokens)
-      if get(fn_body_result, "error") != "" {
-       err := get(fn_body_result, "error")
-      } otherwise {
-       ast := push(ast, node("function", fn_name, params, get(fn_body_result, "ast"), ln))
-       pos := body_close + 1
-      }
-     }
-    }
-   }
-  } otherwise {
-  if kw == "if" or kw == "repeat" {
-   define condition := parse_expr(tokens, pos + 1)
-   if get(condition, "error") != "" {
-    err := get(condition, "error")
-   } otherwise {
-    define open_pos := get(condition, "pos")
-    define block_end := find_block_end(tokens, open_pos)
-    if get(block_end, "error") != "" {
-     err := get(block_end, "error")
-    } otherwise {
-     define close_pos := get(block_end, "pos")
-     define body_tokens := collect_tokens(tokens, open_pos + 1, close_pos)
-     define body_result := parse_program(body_tokens)
-     if get(body_result, "error") != "" {
-      err := get(body_result, "error")
-     } otherwise {
-      define body_ast := get(body_result, "ast")
-      define else_ast := array()
-      define next_pos := close_pos + 1
-      if kw == "if" and next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
-       define else_open := next_pos + 1
-       define else_end := find_block_end(tokens, else_open)
-       if get(else_end, "error") != "" {
-        err := get(else_end, "error")
-       } otherwise {
-        define else_close := get(else_end, "pos")
-        define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
-        define else_result := parse_program(else_tokens)
-        if get(else_result, "error") != "" {
-         err := get(else_result, "error")
-        } otherwise {
-         else_ast := get(else_result, "ast")
-         next_pos := else_close + 1
+        if err == "" and not params_done {
+          err := "expected closing parenthesis in parameters"
         }
-       }
+        if err == "" {
+          define body_end := find_block_end(tokens, p)
+          if get(body_end, "error") != "" {
+            err := get(body_end, "error")
+          } otherwise {
+            define body_close := get(body_end, "pos")
+            define fn_body_tokens := collect_tokens(tokens, p + 1, body_close)
+            define fn_body_result := parse_program(fn_body_tokens)
+            if get(fn_body_result, "error") != "" {
+              err := get(fn_body_result, "error")
+            } otherwise {
+              ast := push(ast, node("function", fn_name, params, get(fn_body_result, "ast"), ln))
+              pos := body_close + 1
+            }
+          }
+        }
       }
-      if err == "" {
-       if kw == "if" {
-        ast := push(ast, node("if", "", get(condition, "ast"), map("then", body_ast, "otherwise", else_ast), ln))
-       } otherwise {
-        ast := push(ast, node("repeat", "", get(condition, "ast"), body_ast, ln))
-       }
-       pos := next_pos
-      }
-     }
-    }
-   }
-  } otherwise {
-  if kw == "return" {
-   define expr := parse_expr(tokens, pos + 1)
-   if get(expr, "error") != "" {
-    err := get(expr, "error")
-   } otherwise {
-    if get(expr, "pos") == pos + 1 {
-     err := "expected expression after return"
     } otherwise {
-     ast := push(ast, node("return", "", get(expr, "ast"), "", ln))
-     pos := get(expr, "pos")
-    }
-   }
-  } otherwise {
-   if kw == "break" or kw == "continue" {
-    ast := push(ast, node(kw, "", "", "", ln))
-    pos := pos + 1
-   } otherwise {
-    if kw == "define" {
-   if pos + 2 >= len(tokens) {
-    err := "incomplete define statement"
-   } otherwise {
-    define name_token := at(tokens, pos + 1)
-    if get(name_token, "kind") != "identifier" or get(at(tokens, pos + 2), "value") != ":=" {
-     err := "expected define name := expression"
-    } otherwise {
-     define expr := parse_expr(tokens, pos + 3)
-     if get(expr, "error") != "" {
-      err := get(expr, "error")
-     } otherwise {
-      if get(expr, "pos") == pos + 3 {
-       err := "expected expression after :="
+      if kw == "if" or kw == "repeat" {
+        define condition := parse_expr(tokens, pos + 1)
+        if get(condition, "error") != "" {
+          err := get(condition, "error")
+        } otherwise {
+          define open_pos := get(condition, "pos")
+          define block_end := find_block_end(tokens, open_pos)
+          if get(block_end, "error") != "" {
+            err := get(block_end, "error")
+          } otherwise {
+            define close_pos := get(block_end, "pos")
+            define body_tokens := collect_tokens(tokens, open_pos + 1, close_pos)
+            define body_result := parse_program(body_tokens)
+            if get(body_result, "error") != "" {
+              err := get(body_result, "error")
+            } otherwise {
+              define body_ast := get(body_result, "ast")
+              define else_ast := array()
+              define next_pos := close_pos + 1
+              if kw == "if" and next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
+                define else_open := next_pos + 1
+                define else_end := find_block_end(tokens, else_open)
+                if get(else_end, "error") != "" {
+                  err := get(else_end, "error")
+                } otherwise {
+                  define else_close := get(else_end, "pos")
+                  define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
+                  define else_result := parse_program(else_tokens)
+                  if get(else_result, "error") != "" {
+                    err := get(else_result, "error")
+                  } otherwise {
+                    else_ast := get(else_result, "ast")
+                    next_pos := else_close + 1
+                  }
+                }
+              }
+              if err == "" {
+                if kw == "if" {
+                  ast := push(ast, node("if", "", get(condition, "ast"), map("then", body_ast, "otherwise", else_ast), ln))
+                } otherwise {
+                  ast := push(ast, node("repeat", "", get(condition, "ast"), body_ast, ln))
+                }
+                pos := next_pos
+              }
+            }
+          }
+        }
       } otherwise {
-       define name_value := get(name_token, "value")
-       define define_expr_ast := get(expr, "ast")
-       define define_statement_node := node("define", name_value, define_expr_ast, "", ln)
-       ast := push(ast, define_statement_node)
-       pos := get(expr, "pos")
+        if kw == "return" {
+          define expr := parse_expr(tokens, pos + 1)
+          if get(expr, "error") != "" {
+            err := get(expr, "error")
+          } otherwise {
+            if get(expr, "pos") == pos + 1 {
+              err := "expected expression after return"
+            } otherwise {
+              ast := push(ast, node("return", "", get(expr, "ast"), "", ln))
+              pos := get(expr, "pos")
+            }
+          }
+        } otherwise {
+          if kw == "break" or kw == "continue" {
+            ast := push(ast, node(kw, "", "", "", ln))
+            pos := pos + 1
+          } otherwise {
+            if kw == "define" {
+              if pos + 2 >= len(tokens) {
+                err := "incomplete define statement"
+              } otherwise {
+                define name_token := at(tokens, pos + 1)
+                if get(name_token, "kind") != "identifier" or get(at(tokens, pos + 2), "value") != ":=" {
+                  err := "expected define name := expression"
+                } otherwise {
+                  define expr := parse_expr(tokens, pos + 3)
+                  if get(expr, "error") != "" {
+                    err := get(expr, "error")
+                  } otherwise {
+                    if get(expr, "pos") == pos + 3 {
+                      err := "expected expression after :="
+                    } otherwise {
+                      define name_value := get(name_token, "value")
+                      define define_expr_ast := get(expr, "ast")
+                      define define_statement_node := node("define", name_value, define_expr_ast, "", ln)
+                      ast := push(ast, define_statement_node)
+                      pos := get(expr, "pos")
+                    }
+                  }
+                }
+              }
+            } otherwise {
+              if kw == "show" {
+                define expr := parse_expr(tokens, pos + 1)
+                if get(expr, "error") != "" {
+                  err := get(expr, "error")
+                } otherwise {
+                  if get(expr, "pos") == pos + 1 {
+                    err := "expected expression after show"
+                  } otherwise {
+                    define show_expr_ast := get(expr, "ast")
+                    define show_statement_node := node("show", "", show_expr_ast, "", ln)
+                    ast := push(ast, show_statement_node)
+                    pos := get(expr, "pos")
+                  }
+                }
+              } otherwise {
+                if get(start, "kind") == "identifier" and pos + 1 < len(tokens) and get(at(tokens, pos + 1), "value") == ":=" {
+                  define expr := parse_expr(tokens, pos + 2)
+                  if get(expr, "error") != "" {
+                    err := get(expr, "error")
+                  } otherwise {
+                    define assignment_node := node("assign", get(start, "value"), get(expr, "ast"), "", ln)
+                    ast := push(ast, assignment_node)
+                    pos := get(expr, "pos")
+                  }
+                } otherwise {
+                  err := "unsupported statement"
+                }
+              }
+            }
+          }
+        }
       }
-     }
     }
-   }
-  } otherwise {
-   if kw == "show" {
-    define expr := parse_expr(tokens, pos + 1)
-    if get(expr, "error") != "" {
-     err := get(expr, "error")
-    } otherwise {
-     if get(expr, "pos") == pos + 1 {
-      err := "expected expression after show"
-     } otherwise {
-      define show_expr_ast := get(expr, "ast")
-      define show_statement_node := node("show", "", show_expr_ast, "", ln)
-      ast := push(ast, show_statement_node)
-      pos := get(expr, "pos")
-     }
+    if pos < len(tokens) and get(at(tokens, pos), "line") == ln and err == "" {
+      err := "unexpected token at end of statement"
     }
-   } otherwise {
-    if get(start, "kind") == "identifier" and pos + 1 < len(tokens) and get(at(tokens, pos + 1), "value") == ":=" {
-     define expr := parse_expr(tokens, pos + 2)
-     if get(expr, "error") != "" {
-      err := get(expr, "error")
-     } otherwise {
-      define assignment_node := node("assign", get(start, "value"), get(expr, "ast"), "", ln)
-      ast := push(ast, assignment_node)
-      pos := get(expr, "pos")
-     }
-    } otherwise {
-     err := "unsupported statement"
-    }
-   }
-   }
   }
-  }
-  }
-  }
-  if pos < len(tokens) and get(at(tokens, pos), "line") == ln and err == "" {
-   err := "unexpected token at end of statement"
-  }
- }
- return map("ast", ast, "error", err)
+  return map("ast", ast, "error", err)
 }
 
 # Character-level lexer written in Zenvora. Tokens include kind/value/line/column.
 fn space(c) {
- return c == " " or c == "\t" or c == "\n" or c == "\r"
+  return c == " " or c == "\t" or c == "\n" or c == "\r"
 }
 fn letter(c) {
- return index_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c) >= 0
+  return index_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c) >= 0
 }
 fn digit(c) {
- return index_of("0123456789", c) >= 0
+  return index_of("0123456789", c) >= 0
 }
 fn word(c) {
- return letter(c) or digit(c)
+  return letter(c) or digit(c)
 }
 fn token(k, v, l, c) {
- return map("kind", k, "value", v, "line", l, "column", c)
+  return map("kind", k, "value", v, "line", l, "column", c)
 }
 
 fn lex(source) {
- define out := array()
- define n := char_count(source)
- define i := 0
- define line := 1
- define col := 1
- define start_line := 1
- define start_col := 1
- define c := ""
- define d := ""
- define v := ""
- define k := ""
- define err := ""
- define closed := false
- repeat i < n and err == "" {
-  c := char_at(source, i)
-  if space(c) {
-   if c == "\n" {
-    line := line + 1
-    col := 1
-   } otherwise {
-    col := col + 1
-   }
-   i := i + 1
-  } otherwise {
-   if c == "#" {
-    repeat i < n and char_at(source, i) != "\n" {
-     i := i + 1
-     col := col + 1
-    }
-   } otherwise {
-    start_line := line
-    start_col := col
-    v := ""
-    if c == "\"" {
-     k := "string"
-     closed := false
-     i := i + 1
-     col := col + 1
-     repeat i < n and not closed and err == "" {
-      c := char_at(source, i)
-      if c == "\"" {
-       closed := true
-       i := i + 1
-       col := col + 1
+  define out := array()
+  define n := char_count(source)
+  define i := 0
+  define line := 1
+  define col := 1
+  define start_line := 1
+  define start_col := 1
+  define c := ""
+  define d := ""
+  define v := ""
+  define k := ""
+  define err := ""
+  define closed := false
+  repeat i < n and err == "" {
+    c := char_at(source, i)
+    if space(c) {
+      if c == "\n" {
+        line := line + 1
+        col := 1
       } otherwise {
-       if c == "\\" {
-        i := i + 1
         col := col + 1
-        if i >= n {
-         err := "unterminated escape"
-        } otherwise {
-         d := char_at(source, i)
-         if d == "n" {
-          v := v + "\n"
-         } otherwise {
-          if d == "t" {
-           v := v + "\t"
-          } otherwise {
-           if d == "r" {
-            v := v + "\r"
-           } otherwise {
-            if d == "\"" or d == "\\" {
-             v := v + d
-            } otherwise {
-             err := "unsupported escape"
-            }
-           }
-          }
-         }
-         i := i + 1
-         col := col + 1
-        }
-       } otherwise {
-        if c == "\n" {
-         err := "newline in string literal"
-        } otherwise {
-         v := v + c
-         i := i + 1
-         col := col + 1
-        }
-       }
       }
-     }
-     if err == "" and not closed {
-      err := "unterminated string literal"
-     }
-     if err == "" {
-      out := push(out, token(k, v, start_line, start_col))
-     }
+      i := i + 1
     } otherwise {
-     if letter(c) {
-      k := "identifier"
-      repeat i < n and word(char_at(source, i)) {
-       v := v + char_at(source, i)
-       i := i + 1
-       col := col + 1
-      }
-      if v == "define" or v == "show" or v == "fn" or v == "call" or v == "return" or v == "if" or v == "otherwise" or v == "repeat" or v == "break" or v == "continue" or v == "use" or v == "contract" or v == "state" or v == "action" or v == "view" {
-       k := "keyword"
-      } otherwise {
-       if v == "true" or v == "false" {
-        k := "boolean"
-       } otherwise {
-        if v == "and" or v == "or" or v == "not" {
-         k := "operator"
+      if c == "#" {
+        repeat i < n and char_at(source, i) != "\n" {
+          i := i + 1
+          col := col + 1
         }
-       }
-      }
-      out := push(out, token(k, v, start_line, start_col))
-     } otherwise {
-      if digit(c) {
-       k := "number"
-       repeat i < n and digit(char_at(source, i)) {
-        v := v + char_at(source, i)
-        i := i + 1
-        col := col + 1
-       }
-       out := push(out, token(k, v, start_line, start_col))
       } otherwise {
-       d := ""
-       if i + 1 < n {
-        d := char_at(source, i + 1)
-       }
-       if (c == ":" and d == "=") or (c == "=" and d == "=") or (c == "!" and d == "=") or (c == "<" and d == "=") or (c == ">" and d == "=") {
-        v := c + d
-        k := "operator"
-        i := i + 2
-        col := col + 2
-        out := push(out, token(k, v, start_line, start_col))
-       } otherwise {
-        v := c
-        if c == "+" or c == "-" or c == "*" or c == "/" or c == "=" or c == "<" or c == ">" or c == "!" {
-         k := "operator"
+        start_line := line
+        start_col := col
+        v := ""
+        if c == "\"" {
+          k := "string"
+          closed := false
+          i := i + 1
+          col := col + 1
+          repeat i < n and not closed and err == "" {
+            c := char_at(source, i)
+            if c == "\"" {
+              closed := true
+              i := i + 1
+              col := col + 1
+            } otherwise {
+              if c == "\\" {
+                i := i + 1
+                col := col + 1
+                if i >= n {
+                  err := "unterminated escape"
+                } otherwise {
+                  d := char_at(source, i)
+                  if d == "n" {
+                    v := v + "\n"
+                  } otherwise {
+                    if d == "t" {
+                      v := v + "\t"
+                    } otherwise {
+                      if d == "r" {
+                        v := v + "\r"
+                      } otherwise {
+                        if d == "\"" or d == "\\" {
+                          v := v + d
+                        } otherwise {
+                          err := "unsupported escape"
+                        }
+                      }
+                    }
+                  }
+                  i := i + 1
+                  col := col + 1
+                }
+              } otherwise {
+                if c == "\n" {
+                  err := "newline in string literal"
+                } otherwise {
+                  v := v + c
+                  i := i + 1
+                  col := col + 1
+                }
+              }
+            }
+          }
+          if err == "" and not closed {
+            err := "unterminated string literal"
+          }
+          if err == "" {
+            out := push(out, token(k, v, start_line, start_col))
+          }
         } otherwise {
-         if c == "(" or c == ")" or c == "[" or c == "]" or c == "{" or c == "}" or c == "," {
-          k := "punctuation"
-         } otherwise {
-          err := "unexpected character"
-         }
+          if letter(c) {
+            k := "identifier"
+            repeat i < n and word(char_at(source, i)) {
+              v := v + char_at(source, i)
+              i := i + 1
+              col := col + 1
+            }
+            if v == "define" or v == "show" or v == "fn" or v == "call" or v == "return" or v == "if" or v == "otherwise" or v == "repeat" or v == "break" or v == "continue" or v == "use" or v == "contract" or v == "state" or v == "action" or v == "view" {
+              k := "keyword"
+            } otherwise {
+              if v == "true" or v == "false" {
+                k := "boolean"
+              } otherwise {
+                if v == "and" or v == "or" or v == "not" {
+                  k := "operator"
+                }
+              }
+            }
+            out := push(out, token(k, v, start_line, start_col))
+          } otherwise {
+            if digit(c) {
+              k := "number"
+              repeat i < n and digit(char_at(source, i)) {
+                v := v + char_at(source, i)
+                i := i + 1
+                col := col + 1
+              }
+              out := push(out, token(k, v, start_line, start_col))
+            } otherwise {
+              d := ""
+              if i + 1 < n {
+                d := char_at(source, i + 1)
+              }
+              if (c == ":" and d == "=") or (c == "=" and d == "=") or (c == "!" and d == "=") or (c == "<" and d == "=") or (c == ">" and d == "=") {
+                v := c + d
+                k := "operator"
+                i := i + 2
+                col := col + 2
+                out := push(out, token(k, v, start_line, start_col))
+              } otherwise {
+                v := c
+                if c == "+" or c == "-" or c == "*" or c == "/" or c == "=" or c == "<" or c == ">" or c == "!" {
+                  k := "operator"
+                } otherwise {
+                  if c == "(" or c == ")" or c == "[" or c == "]" or c == "{" or c == "}" or c == "," {
+                    k := "punctuation"
+                  } otherwise {
+                    err := "unexpected character"
+                  }
+                }
+                if err == "" {
+                  out := push(out, token(k, v, start_line, start_col))
+                  i := i + 1
+                  col := col + 1
+                }
+              }
+            }
+          }
         }
-        if err == "" {
-         out := push(out, token(k, v, start_line, start_col))
-         i := i + 1
-         col := col + 1
-        }
-       }
       }
-     }
     }
-   }
   }
- }
- return map("tokens", out, "error", err)
+  return map("tokens", out, "error", err)
 }
 
 # Zenvora-written structured IR lowering. This is deliberately separate from the Rust reference VM.
 # Expression IR is a flat stack sequence; control-flow IR remains structured for later bytecode emission.
 fn append_instructions(target, source) {
- define i := 0
- repeat i < len(source) {
-  target := push(target, get(source, i))
-  i := i + 1
- }
- return target
+  define i := 0
+  repeat i < len(source) {
+    target := push(target, get(source, i))
+    i := i + 1
+  }
+  return target
 }
 
 fn lower_expression(ast) {
- define out := array()
- define kind := get(ast, "kind")
- define value := get(ast, "value")
- if kind == "number" or kind == "string" or kind == "boolean" {
-  out := push(out, map("op", "const", "value", value, "type", kind, "line", get(ast, "line")))
- } otherwise {
-  if kind == "name" {
-   out := push(out, map("op", "load", "name", value, "line", get(ast, "line")))
+  define out := array()
+  define kind := get(ast, "kind")
+  define value := get(ast, "value")
+  if kind == "number" or kind == "string" or kind == "boolean" {
+    out := push(out, map("op", "const", "value", value, "type", kind, "line", get(ast, "line")))
   } otherwise {
-   if kind == "unary" {
-    out := append_instructions(out, lower_expression(get(ast, "left")))
-    out := push(out, map("op", "unary", "operator", value, "line", get(ast, "line")))
-   } otherwise {
-    if kind == "binary" {
-     out := append_instructions(out, lower_expression(get(ast, "left")))
-     out := append_instructions(out, lower_expression(get(ast, "right")))
-     out := push(out, map("op", "binary", "operator", value, "line", get(ast, "line")))
+    if kind == "name" {
+      out := push(out, map("op", "load", "name", value, "line", get(ast, "line")))
     } otherwise {
-     if kind == "index" {
-      out := append_instructions(out, lower_expression(get(ast, "left")))
-      out := append_instructions(out, lower_expression(get(ast, "right")))
-      out := push(out, map("op", "index", "line", get(ast, "line")))
-     } otherwise {
-      if kind == "call" {
-       define callee := get(ast, "left")
-       define args := get(ast, "right")
-       define argc := 0
-       if get(callee, "kind") == "name" {
-        define arg_pos := 0
-        repeat arg_pos < len(args) {
-         out := append_instructions(out, lower_expression(get(args, arg_pos)))
-         argc := argc + 1
-         arg_pos := arg_pos + 1
-        }
-        out := push(out, map("op", "call", "name", get(callee, "value"), "argc", argc, "line", get(ast, "line")))
-       } otherwise {
-        out := append_instructions(out, lower_expression(callee))
-        define arg_pos := 0
-        repeat arg_pos < len(args) {
-         out := append_instructions(out, lower_expression(get(args, arg_pos)))
-         argc := argc + 1
-         arg_pos := arg_pos + 1
-        }
-        out := push(out, map("op", "call_indirect", "argc", argc, "line", get(ast, "line")))
-       }
+      if kind == "unary" {
+        out := append_instructions(out, lower_expression(get(ast, "left")))
+        out := push(out, map("op", "unary", "operator", value, "line", get(ast, "line")))
       } otherwise {
-       out := push(out, map("op", "error", "message", "unsupported expression node", "kind", kind, "line", get(ast, "line")))
+        if kind == "binary" {
+          out := append_instructions(out, lower_expression(get(ast, "left")))
+          out := append_instructions(out, lower_expression(get(ast, "right")))
+          out := push(out, map("op", "binary", "operator", value, "line", get(ast, "line")))
+        } otherwise {
+          if kind == "index" {
+            out := append_instructions(out, lower_expression(get(ast, "left")))
+            out := append_instructions(out, lower_expression(get(ast, "right")))
+            out := push(out, map("op", "index", "line", get(ast, "line")))
+          } otherwise {
+            if kind == "call" {
+              define callee := get(ast, "left")
+              define args := get(ast, "right")
+              define argc := 0
+              if get(callee, "kind") == "name" {
+                define arg_pos := 0
+                repeat arg_pos < len(args) {
+                  out := append_instructions(out, lower_expression(get(args, arg_pos)))
+                  argc := argc + 1
+                  arg_pos := arg_pos + 1
+                }
+                out := push(out, map("op", "call", "name", get(callee, "value"), "argc", argc, "line", get(ast, "line")))
+              } otherwise {
+                out := append_instructions(out, lower_expression(callee))
+                define arg_pos := 0
+                repeat arg_pos < len(args) {
+                  out := append_instructions(out, lower_expression(get(args, arg_pos)))
+                  argc := argc + 1
+                  arg_pos := arg_pos + 1
+                }
+                out := push(out, map("op", "call_indirect", "argc", argc, "line", get(ast, "line")))
+              }
+            } otherwise {
+              out := push(out, map("op", "error", "message", "unsupported expression node", "kind", kind, "line", get(ast, "line")))
+            }
+          }
+        }
       }
-     }
     }
-   }
   }
- }
- return out
+  return out
 }
 
 fn lower_program(ast) {
- define out := array()
- define pos := 0
- repeat pos < len(ast) {
-  define statement := get(ast, pos)
-  define kind := get(statement, "kind")
-  define value := get(statement, "value")
-  define line := get(statement, "line")
-  if kind == "define" {
-   out := push(out, map("op", "declare", "name", value, "code", lower_expression(get(statement, "left")), "line", line))
-  } otherwise {
-   if kind == "assign" {
-    out := push(out, map("op", "store", "name", value, "code", lower_expression(get(statement, "left")), "line", line))
-   } otherwise {
-    if kind == "show" {
-     out := push(out, map("op", "print", "code", lower_expression(get(statement, "left")), "line", line))
+  define out := array()
+  define pos := 0
+  repeat pos < len(ast) {
+    define statement := get(ast, pos)
+    define kind := get(statement, "kind")
+    define value := get(statement, "value")
+    define line := get(statement, "line")
+    if kind == "define" {
+      out := push(out, map("op", "declare", "name", value, "code", lower_expression(get(statement, "left")), "line", line))
     } otherwise {
-     if kind == "return" {
-      out := push(out, map("op", "return", "code", lower_expression(get(statement, "left")), "line", line))
-     } otherwise {
-      if kind == "if" {
-       define branches := get(statement, "right")
-       out := push(out, map("op", "branch", "condition", lower_expression(get(statement, "left")), "then", lower_program(get(branches, "then")), "otherwise", lower_program(get(branches, "otherwise")), "line", line))
+      if kind == "assign" {
+        out := push(out, map("op", "store", "name", value, "code", lower_expression(get(statement, "left")), "line", line))
       } otherwise {
-       if kind == "repeat" {
-        out := push(out, map("op", "loop", "condition", lower_expression(get(statement, "left")), "body", lower_program(get(statement, "right")), "line", line))
-       } otherwise {
-        if kind == "function" {
-         out := push(out, map("op", "function", "name", value, "parameters", get(statement, "left"), "body", lower_program(get(statement, "right")), "line", line))
+        if kind == "show" {
+          out := push(out, map("op", "print", "code", lower_expression(get(statement, "left")), "line", line))
         } otherwise {
-         if kind == "break" or kind == "continue" {
-          out := push(out, map("op", kind, "line", line))
-         } otherwise {
-          out := push(out, map("op", "error", "message", "unsupported statement node", "kind", kind, "line", line))
-         }
+          if kind == "return" {
+            out := push(out, map("op", "return", "code", lower_expression(get(statement, "left")), "line", line))
+          } otherwise {
+            if kind == "if" {
+              define branches := get(statement, "right")
+              out := push(out, map("op", "branch", "condition", lower_expression(get(statement, "left")), "then", lower_program(get(branches, "then")), "otherwise", lower_program(get(branches, "otherwise")), "line", line))
+            } otherwise {
+              if kind == "repeat" {
+                out := push(out, map("op", "loop", "condition", lower_expression(get(statement, "left")), "body", lower_program(get(statement, "right")), "line", line))
+              } otherwise {
+                if kind == "function" {
+                  out := push(out, map("op", "function", "name", value, "parameters", get(statement, "left"), "body", lower_program(get(statement, "right")), "line", line))
+                } otherwise {
+                  if kind == "break" or kind == "continue" {
+                    out := push(out, map("op", kind, "line", line))
+                  } otherwise {
+                    out := push(out, map("op", "error", "message", "unsupported statement node", "kind", kind, "line", line))
+                  }
+                }
+              }
+            }
+          }
         }
-       }
       }
-     }
     }
-   }
+    pos := pos + 1
   }
-  pos := pos + 1
- }
- return out
+  return out
 }
 
 # Zenvora-written bytecode-plan emitter. It produces explicit op/operand records and patched jump targets.
 # The reference runtime still owns serialization/verification/execution; this emitter is the next bootstrap stage.
 fn patch_jump(code, index, target) {
- define old_instruction := get(code, index)
- code[index] := put(old_instruction, "target", target)
- return code
+  define old_instruction := get(code, index)
+  code[index] := put(old_instruction, "target", target)
+  return code
 }
 
 fn emit_expression(code_ir) {
- define out := array()
- define pos := 0
- repeat pos < len(code_ir) {
-  define item := get(code_ir, pos)
-  define op := get(item, "op")
-  if op == "const" {
-   out := push(out, map("op", "push_const", "value", get(item, "value"), "type", get(item, "type"), "line", get(item, "line")))
-  } otherwise {
-   if op == "load" {
-    out := push(out, map("op", "load", "name", get(item, "name"), "line", get(item, "line")))
-   } otherwise {
-    if op == "unary" {
-     out := push(out, map("op", "unary", "operator", get(item, "operator"), "line", get(item, "line")))
+  define out := array()
+  define pos := 0
+  repeat pos < len(code_ir) {
+    define item := get(code_ir, pos)
+    define op := get(item, "op")
+    if op == "const" {
+      out := push(out, map("op", "push_const", "value", get(item, "value"), "type", get(item, "type"), "line", get(item, "line")))
     } otherwise {
-     if op == "binary" {
-      out := push(out, map("op", "binary", "operator", get(item, "operator"), "line", get(item, "line")))
-     } otherwise {
-      if op == "index" {
-       out := push(out, map("op", "index", "line", get(item, "line")))
+      if op == "load" {
+        out := push(out, map("op", "load", "name", get(item, "name"), "line", get(item, "line")))
       } otherwise {
-       if op == "call" {
-        out := push(out, map("op", "call", "name", get(item, "name"), "argc", get(item, "argc"), "line", get(item, "line")))
-       } otherwise {
-        out := push(out, map("op", "compile_error", "message", "unsupported expression IR", "kind", op, "line", get(item, "line")))
-       }
+        if op == "unary" {
+          out := push(out, map("op", "unary", "operator", get(item, "operator"), "line", get(item, "line")))
+        } otherwise {
+          if op == "binary" {
+            out := push(out, map("op", "binary", "operator", get(item, "operator"), "line", get(item, "line")))
+          } otherwise {
+            if op == "index" {
+              out := push(out, map("op", "index", "line", get(item, "line")))
+            } otherwise {
+              if op == "call" {
+                out := push(out, map("op", "call", "name", get(item, "name"), "argc", get(item, "argc"), "line", get(item, "line")))
+              } otherwise {
+                out := push(out, map("op", "compile_error", "message", "unsupported expression IR", "kind", op, "line", get(item, "line")))
+              }
+            }
+          }
+        }
       }
-     }
     }
-   }
+    pos := pos + 1
   }
-  pos := pos + 1
- }
- return out
+  return out
 }
 
 fn emit_statements(ir) {
- define out := array()
- define pos := 0
- repeat pos < len(ir) {
-  define item := get(ir, pos)
-  define op := get(item, "op")
-  define line := get(item, "line")
-  if op == "declare" or op == "store" or op == "print" or op == "return" {
-   out := append_instructions(out, emit_expression(get(item, "code")))
-   if op == "declare" {
-    out := push(out, map("op", "declare", "name", get(item, "name"), "line", line))
-   } otherwise {
-    if op == "store" {
-     out := push(out, map("op", "store", "name", get(item, "name"), "line", line))
-    } otherwise {
-     if op == "print" {
-      out := push(out, map("op", "print", "line", line))
-     } otherwise {
-      out := push(out, map("op", "return", "line", line))
-     }
-    }
-   }
-  } otherwise {
-   if op == "branch" {
-    out := append_instructions(out, emit_expression(get(item, "condition")))
-    define false_jump := len(out)
-    out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
-    out := append_instructions(out, emit_statements(get(item, "then")))
-    define otherwise_code := get(item, "otherwise")
-    if len(otherwise_code) > 0 {
-     define end_jump := len(out)
-     out := push(out, map("op", "jump", "target", -1, "line", line))
-     out := patch_jump(out, false_jump, len(out))
-     out := append_instructions(out, emit_statements(otherwise_code))
-     out := patch_jump(out, end_jump, len(out))
-    } otherwise {
-     out := patch_jump(out, false_jump, len(out))
-    }
-   } otherwise {
-    if op == "loop" {
-     define loop_start := len(out)
-     out := append_instructions(out, emit_expression(get(item, "condition")))
-     define exit_jump := len(out)
-     out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
-     define body_start := len(out)
-     out := append_instructions(out, emit_statements(get(item, "body")))
-     out := push(out, map("op", "jump", "target", loop_start, "line", line))
-     define loop_end := len(out)
-     out := patch_jump(out, exit_jump, loop_end)
-     define scan := body_start
-     repeat scan < loop_end {
-      define candidate := get(out, scan)
-      if get(candidate, "op") == "break" {
-       out[scan] := map("op", "jump", "target", loop_end, "line", get(candidate, "line"))
+  define out := array()
+  define pos := 0
+  repeat pos < len(ir) {
+    define item := get(ir, pos)
+    define op := get(item, "op")
+    define line := get(item, "line")
+    if op == "declare" or op == "store" or op == "print" or op == "return" {
+      out := append_instructions(out, emit_expression(get(item, "code")))
+      if op == "declare" {
+        out := push(out, map("op", "declare", "name", get(item, "name"), "line", line))
       } otherwise {
-       if get(candidate, "op") == "continue" {
-        out[scan] := map("op", "jump", "target", loop_start, "line", get(candidate, "line"))
-       }
+        if op == "store" {
+          out := push(out, map("op", "store", "name", get(item, "name"), "line", line))
+        } otherwise {
+          if op == "print" {
+            out := push(out, map("op", "print", "line", line))
+          } otherwise {
+            out := push(out, map("op", "return", "line", line))
+          }
+        }
       }
-      scan := scan + 1
-     }
     } otherwise {
-     if op == "break" or op == "continue" {
-      out := push(out, map("op", op, "line", line))
-     } otherwise {
-      if op == "function" {
-       out := push(out, map("op", "nested_function", "name", get(item, "name"), "line", line))
+      if op == "branch" {
+        out := append_instructions(out, emit_expression(get(item, "condition")))
+        define false_jump := len(out)
+        out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
+        out := append_instructions(out, emit_statements(get(item, "then")))
+        define otherwise_code := get(item, "otherwise")
+        if len(otherwise_code) > 0 {
+          define end_jump := len(out)
+          out := push(out, map("op", "jump", "target", -1, "line", line))
+          out := patch_jump(out, false_jump, len(out))
+          out := append_instructions(out, emit_statements(otherwise_code))
+          out := patch_jump(out, end_jump, len(out))
+        } otherwise {
+          out := patch_jump(out, false_jump, len(out))
+        }
       } otherwise {
-       out := push(out, map("op", "compile_error", "message", "unsupported statement IR", "kind", op, "line", line))
+        if op == "loop" {
+          define loop_start := len(out)
+          out := append_instructions(out, emit_expression(get(item, "condition")))
+          define exit_jump := len(out)
+          out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
+          define body_start := len(out)
+          out := append_instructions(out, emit_statements(get(item, "body")))
+          out := push(out, map("op", "jump", "target", loop_start, "line", line))
+          define loop_end := len(out)
+          out := patch_jump(out, exit_jump, loop_end)
+          define scan := body_start
+          repeat scan < loop_end {
+            define candidate := get(out, scan)
+            if get(candidate, "op") == "break" {
+              out[scan] := map("op", "jump", "target", loop_end, "line", get(candidate, "line"))
+            } otherwise {
+              if get(candidate, "op") == "continue" {
+                out[scan] := map("op", "jump", "target", loop_start, "line", get(candidate, "line"))
+              }
+            }
+            scan := scan + 1
+          }
+        } otherwise {
+          if op == "break" or op == "continue" {
+            out := push(out, map("op", op, "line", line))
+          } otherwise {
+            if op == "function" {
+              out := push(out, map("op", "nested_function", "name", get(item, "name"), "line", line))
+            } otherwise {
+              out := push(out, map("op", "compile_error", "message", "unsupported statement IR", "kind", op, "line", line))
+            }
+          }
+        }
       }
-     }
     }
-   }
+    pos := pos + 1
   }
-  pos := pos + 1
- }
- return out
+  return out
 }
 
 fn emit_bytecode_plan(ir) {
- define main := array()
- define functions := array()
- define pos := 0
- repeat pos < len(ir) {
-  define item := get(ir, pos)
-  if get(item, "op") == "function" {
-   define function_code := emit_statements(get(item, "body"))
-   functions := push(functions, map("name", get(item, "name"), "parameters", get(item, "parameters"), "code", function_code, "line", get(item, "line")))
-  } otherwise {
-   main := append_instructions(main, emit_statements(array(item)))
+  define main := array()
+  define functions := array()
+  define pos := 0
+  repeat pos < len(ir) {
+    define item := get(ir, pos)
+    if get(item, "op") == "function" {
+      define function_code := emit_statements(get(item, "body"))
+      functions := push(functions, map("name", get(item, "name"), "parameters", get(item, "parameters"), "code", function_code, "line", get(item, "line")))
+    } otherwise {
+      main := append_instructions(main, emit_statements(array(item)))
+    }
+    pos := pos + 1
   }
-  pos := pos + 1
- }
- return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
+  return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
 }
 
 # Zenvora-written semantic checks for statement placement and supported AST shapes.
 fn validate_expression(ast) {
- define kind := get(ast, "kind")
- if kind == "number" or kind == "string" or kind == "boolean" or kind == "name" {
-  return ""
- } otherwise {
-  if kind == "unary" {
-   return validate_expression(get(ast, "left"))
+  define kind := get(ast, "kind")
+  if kind == "number" or kind == "string" or kind == "boolean" or kind == "name" {
+    return ""
   } otherwise {
-   if kind == "binary" or kind == "index" {
-    define left_error := validate_expression(get(ast, "left"))
-    if left_error != "" {
-     return left_error
-    }
-    return validate_expression(get(ast, "right"))
-   } otherwise {
-    if kind == "call" {
-     define callee_error := validate_expression(get(ast, "left"))
-     if callee_error != "" {
-      return callee_error
-     }
-     define args := get(ast, "right")
-     define pos := 0
-     repeat pos < len(args) {
-      define arg_error := validate_expression(get(args, pos))
-      if arg_error != "" {
-       return arg_error
-      }
-      pos := pos + 1
-     }
-     return ""
+    if kind == "unary" {
+      return validate_expression(get(ast, "left"))
     } otherwise {
-     return "unsupported expression node: " + kind
+      if kind == "binary" or kind == "index" {
+        define left_error := validate_expression(get(ast, "left"))
+        if left_error != "" {
+          return left_error
+        }
+        return validate_expression(get(ast, "right"))
+      } otherwise {
+        if kind == "call" {
+          define callee_error := validate_expression(get(ast, "left"))
+          if callee_error != "" {
+            return callee_error
+          }
+          define args := get(ast, "right")
+          define pos := 0
+          repeat pos < len(args) {
+            define arg_error := validate_expression(get(args, pos))
+            if arg_error != "" {
+              return arg_error
+            }
+            pos := pos + 1
+          }
+          return ""
+        } otherwise {
+          return "unsupported expression node: " + kind
+        }
+      }
     }
-   }
   }
- }
 }
 
 fn validate_statements(ast, function_depth, loop_depth) {
- define pos := 0
- repeat pos < len(ast) {
-  define statement := get(ast, pos)
-  define kind := get(statement, "kind")
-  define expression_error := ""
-  if kind == "define" or kind == "assign" or kind == "show" {
-   expression_error := validate_expression(get(statement, "left"))
-  } otherwise {
-   if kind == "if" {
-    expression_error := validate_expression(get(statement, "left"))
-    if expression_error == "" {
-     define branches := get(statement, "right")
-     expression_error := validate_statements(get(branches, "then"), function_depth, loop_depth)
-     if expression_error == "" {
-      expression_error := validate_statements(get(branches, "otherwise"), function_depth, loop_depth)
-     }
-    }
-   } otherwise {
-    if kind == "repeat" {
-     expression_error := validate_expression(get(statement, "left"))
-     if expression_error == "" {
-      expression_error := validate_statements(get(statement, "right"), function_depth, loop_depth + 1)
-     }
+  define pos := 0
+  repeat pos < len(ast) {
+    define statement := get(ast, pos)
+    define kind := get(statement, "kind")
+    define expression_error := ""
+    if kind == "define" or kind == "assign" or kind == "show" {
+      expression_error := validate_expression(get(statement, "left"))
     } otherwise {
-     if kind == "function" {
-      define params := get(statement, "left")
-      define param_pos := 0
-      repeat param_pos < len(params) {
-       define param := get(params, param_pos)
-       define prior := 0
-       repeat prior < param_pos and expression_error == "" {
-        if get(params, prior) == param {
-         expression_error := "duplicate function parameter: " + param
-        }
-        prior := prior + 1
-       }
-       param_pos := param_pos + 1
-      }
-      if expression_error == "" {
-       expression_error := validate_statements(get(statement, "right"), function_depth + 1, 0)
-      }
-     } otherwise {
-      if kind == "return" {
-       if function_depth == 0 {
-        expression_error := "return outside function"
-       } otherwise {
+      if kind == "if" {
         expression_error := validate_expression(get(statement, "left"))
-       }
-      } otherwise {
-       if kind == "break" or kind == "continue" {
-        if loop_depth == 0 {
-         expression_error := kind + " outside loop"
+        if expression_error == "" {
+          define branches := get(statement, "right")
+          expression_error := validate_statements(get(branches, "then"), function_depth, loop_depth)
+          if expression_error == "" {
+            expression_error := validate_statements(get(branches, "otherwise"), function_depth, loop_depth)
+          }
         }
-       } otherwise {
-        expression_error := "unsupported statement node: " + kind
-       }
+      } otherwise {
+        if kind == "repeat" {
+          expression_error := validate_expression(get(statement, "left"))
+          if expression_error == "" {
+            expression_error := validate_statements(get(statement, "right"), function_depth, loop_depth + 1)
+          }
+        } otherwise {
+          if kind == "function" {
+            define params := get(statement, "left")
+            define param_pos := 0
+            repeat param_pos < len(params) {
+              define param := get(params, param_pos)
+              define prior := 0
+              repeat prior < param_pos and expression_error == "" {
+                if get(params, prior) == param {
+                  expression_error := "duplicate function parameter: " + param
+                }
+                prior := prior + 1
+              }
+              param_pos := param_pos + 1
+            }
+            if expression_error == "" {
+              expression_error := validate_statements(get(statement, "right"), function_depth + 1, 0)
+            }
+          } otherwise {
+            if kind == "return" {
+              if function_depth == 0 {
+                expression_error := "return outside function"
+              } otherwise {
+                expression_error := validate_expression(get(statement, "left"))
+              }
+            } otherwise {
+              if kind == "break" or kind == "continue" {
+                if loop_depth == 0 {
+                  expression_error := kind + " outside loop"
+                }
+              } otherwise {
+                expression_error := "unsupported statement node: " + kind
+              }
+            }
+          }
+        }
       }
-     }
     }
-   }
+    if expression_error != "" {
+      return expression_error
+    }
+    pos := pos + 1
   }
-  if expression_error != "" {
-   return expression_error
-  }
-  pos := pos + 1
- }
- return ""
+  return ""
 }
 
 fn validate_program(ast) {
- define seen_functions := array()
- define pos := 0
- repeat pos < len(ast) {
-  define statement := get(ast, pos)
-  if get(statement, "kind") == "function" {
-   define name := get(statement, "value")
-   if contains(seen_functions, name) {
-    return map("ok", false, "error", "duplicate function: " + name)
-   }
-   seen_functions := push(seen_functions, name)
+  define seen_functions := array()
+  define pos := 0
+  repeat pos < len(ast) {
+    define statement := get(ast, pos)
+    if get(statement, "kind") == "function" {
+      define name := get(statement, "value")
+      if contains(seen_functions, name) {
+        return map("ok", false, "error", "duplicate function: " + name)
+      }
+      seen_functions := push(seen_functions, name)
+    }
+    pos := pos + 1
   }
-  pos := pos + 1
- }
- define error := validate_statements(ast, 0, 0)
- return map("ok", error == "", "error", error)
+  define error := validate_statements(ast, 0, 0)
+  return map("ok", error == "", "error", error)
 }
 
 # Verifier for the Zenvora-authored bytecode plan: validates opcode set and jump bounds.
 fn verify_code(code) {
- define allowed := array("push_const", "load", "unary", "binary", "index", "call", "declare", "store", "print", "return", "jump_if_false", "jump", "break", "continue", "nested_function")
- define pos := 0
- repeat pos < len(code) {
-  define instruction := get(code, pos)
-  define op := get(instruction, "op")
-  if not contains(allowed, op) {
-   return "unsupported bytecode opcode: " + op
+  define allowed := array("push_const", "load", "unary", "binary", "index", "call", "declare", "store", "print", "return", "jump_if_false", "jump", "break", "continue", "nested_function")
+  define pos := 0
+  repeat pos < len(code) {
+    define instruction := get(code, pos)
+    define op := get(instruction, "op")
+    if not contains(allowed, op) {
+      return "unsupported bytecode opcode: " + op
+    }
+    if op == "jump" or op == "jump_if_false" {
+      define target := get(instruction, "target")
+      if target < 0 or target > len(code) {
+        return "invalid jump target"
+      }
+    }
+    pos := pos + 1
   }
-  if op == "jump" or op == "jump_if_false" {
-   define target := get(instruction, "target")
-   if target < 0 or target > len(code) {
-    return "invalid jump target"
-   }
-  }
-  pos := pos + 1
- }
- return ""
+  return ""
 }
 
 fn verify_bytecode_plan(plan) {
- if get(plan, "format") != "ZENVORA_BYTECODE_PLAN_1" {
-  return map("ok", false, "error", "unknown bytecode plan format")
- }
- define main_error := verify_code(get(plan, "main"))
- if main_error != "" {
-  return map("ok", false, "error", "main: " + main_error)
- }
- define functions := get(plan, "functions")
- define pos := 0
- repeat pos < len(functions) {
-  define fn_record := get(functions, pos)
-  define fn_error := verify_code(get(fn_record, "code"))
-  if fn_error != "" {
-   return map("ok", false, "error", "function " + get(fn_record, "name") + ": " + fn_error)
+  if get(plan, "format") != "ZENVORA_BYTECODE_PLAN_1" {
+    return map("ok", false, "error", "unknown bytecode plan format")
   }
-  pos := pos + 1
- }
- return map("ok", true, "error", "")
+  define main_error := verify_code(get(plan, "main"))
+  if main_error != "" {
+    return map("ok", false, "error", "main: " + main_error)
+  }
+  define functions := get(plan, "functions")
+  define pos := 0
+  repeat pos < len(functions) {
+    define fn_record := get(functions, pos)
+    define fn_error := verify_code(get(fn_record, "code"))
+    if fn_error != "" {
+      return map("ok", false, "error", "function " + get(fn_record, "name") + ": " + fn_error)
+    }
+    pos := pos + 1
+  }
+  return map("ok", true, "error", "")
 }
 
 define parser_source := "define answer := 2 + 3 * 4\nshow answer\ndefine negative := -2\ndefine inverted := not false\ndefine called := sum(1, 2 + 3)\ndefine first_item := values[0]\ndefine logic := true or false and false\nif answer > 0 { show answer } otherwise { show 0 }\nrepeat answer > 0 { answer := answer - 1 }\nfn add(a, b) { if a > 0 { return a + b } otherwise { return b } }\nanswer := 42\nreturn answer\nbreak\ncontinue\n"
@@ -1117,230 +1117,271 @@ show get(bad_fn_param_parse, "error")
 show get(bad_fn_block_parse, "error")
 show parsed
 
-
 # Minimal Zenvora-written bytecode-plan VM. This executes emitted instructions in Zenvora,
 # rather than asking the Rust reference VM to execute the plan.
 fn pop_stack(stack) {
- if len(stack) == 0 {
-  return map("stack", stack, "value", "", "error", "operand stack underflow")
- }
- define last := get(stack, len(stack) - 1)
- define rest := array()
- define i := 0
- repeat i < len(stack) - 1 {
-  rest := push(rest, get(stack, i))
-  i := i + 1
- }
- return map("stack", rest, "value", last, "error", "")
+  if len(stack) == 0 {
+    return map("stack", stack, "value", "", "error", "operand stack underflow")
+  }
+  define last := get(stack, len(stack) - 1)
+  define rest := array()
+  define i := 0
+  repeat i < len(stack) - 1 {
+    rest := push(rest, get(stack, i))
+    i := i + 1
+  }
+  return map("stack", rest, "value", last, "error", "")
 }
 fn vm_truthy(value) {
- return value == true
+  return value == true
 }
 fn vm_binary(operator, left, right) {
- if operator == "+" {
-  if type_of(left) == "string" or type_of(right) == "string" {
-   return map("value", to_string(left) + to_string(right), "error", "")
-  }
-  return map("value", left + right, "error", "")
- } otherwise {
-  if operator == "-" { return map("value", left - right, "error", "") } otherwise {
-   if operator == "*" { return map("value", left * right, "error", "") } otherwise {
-    if operator == "/" {
-     if right == 0 { return map("value", 0, "error", "division by zero") }
-     return map("value", left / right, "error", "")
-    } otherwise {
-     if operator == "==" { return map("value", left == right, "error", "") } otherwise {
-      if operator == "!=" { return map("value", left != right, "error", "") } otherwise {
-       if operator == "<" { return map("value", left < right, "error", "") } otherwise {
-        if operator == "<=" { return map("value", left <= right, "error", "") } otherwise {
-         if operator == ">" { return map("value", left > right, "error", "") } otherwise {
-          if operator == ">=" { return map("value", left >= right, "error", "") } otherwise {
-           if operator == "and" { return map("value", left and right, "error", "") } otherwise {
-            if operator == "or" { return map("value", left or right, "error", "") }
-           }
-          }
-         }
-        }
-       }
-      }
-     }
+  if operator == "+" {
+    if type_of(left) == "string" or type_of(right) == "string" {
+      return map("value", to_string(left) + to_string(right), "error", "")
     }
-   }
+    return map("value", left + right, "error", "")
+  } otherwise {
+    if operator == "-" {
+      return map("value", left - right, "error", "")
+    } otherwise {
+      if operator == "*" {
+        return map("value", left * right, "error", "")
+      } otherwise {
+        if operator == "/" {
+          if right == 0 {
+            return map("value", 0, "error", "division by zero")
+          }
+          return map("value", left / right, "error", "")
+        } otherwise {
+          if operator == "==" {
+            return map("value", left == right, "error", "")
+          } otherwise {
+            if operator == "!=" {
+              return map("value", left != right, "error", "")
+            } otherwise {
+              if operator == "<" {
+                return map("value", left < right, "error", "")
+              } otherwise {
+                if operator == "<=" {
+                  return map("value", left <= right, "error", "")
+                } otherwise {
+                  if operator == ">" {
+                    return map("value", left > right, "error", "")
+                  } otherwise {
+                    if operator == ">=" {
+                      return map("value", left >= right, "error", "")
+                    } otherwise {
+                      if operator == "and" {
+                        return map("value", left and right, "error", "")
+                      } otherwise {
+                        if operator == "or" {
+                          return map("value", left or right, "error", "")
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
- }
- return map("value", "", "error", "unsupported binary operator: " + operator)
+  return map("value", "", "error", "unsupported binary operator: " + operator)
 }
 fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
- define env := initial_env
- define output := initial_output
- define stack := array()
- define pc := 0
- define err := ""
- define returned := false
- define return_value := ""
- repeat pc < len(code) and err == "" and not returned {
-  define ins := get(code, pc)
-  define op := get(ins, "op")
-  if op == "push_const" {
-   define value := get(ins, "value")
-   if get(ins, "type") == "number" { value := to_int(value) } otherwise {
-    if get(ins, "type") == "boolean" { value := value == "true" }
-   }
-   stack := push(stack, value)
-  } otherwise {
-   if op == "load" {
-    define name := get(ins, "name")
-    if not contains(env, name) {
-     err := "undefined variable: " + name
-    } otherwise {
-     stack := push(stack, get(env, name))
-    }
-   } otherwise {
-    if op == "declare" or op == "store" {
-     define popped := pop_stack(stack)
-     stack := get(popped, "stack")
-     if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
-      env := put(env, get(ins, "name"), get(popped, "value"))
-     }
-    } otherwise {
-     if op == "print" {
-      define popped := pop_stack(stack)
-      stack := get(popped, "stack")
-      if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
-       output := push(output, to_string(get(popped, "value")))
-      }
-     } otherwise {
-      if op == "unary" {
-       define popped := pop_stack(stack)
-       stack := get(popped, "stack")
-       if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
-        define value := get(popped, "value")
-        define operator := get(ins, "operator")
-        if operator == "-" { stack := push(stack, 0 - value) } otherwise {
-         if operator == "!" or operator == "not" { stack := push(stack, not value) } otherwise {
-          err := "unsupported unary operator: " + operator
-         }
-        }
-       }
+  define env := initial_env
+  define output := initial_output
+  define stack := array()
+  define pc := 0
+  define err := ""
+  define returned := false
+  define return_value := ""
+  repeat pc < len(code) and err == "" and not returned {
+    define ins := get(code, pc)
+    define op := get(ins, "op")
+    if op == "push_const" {
+      define value := get(ins, "value")
+      if get(ins, "type") == "number" {
+        value := to_int(value)
       } otherwise {
-       if op == "binary" {
-        define right := pop_stack(stack)
-        stack := get(right, "stack")
-        define left := pop_stack(stack)
-        stack := get(left, "stack")
-        if get(right, "error") != "" or get(left, "error") != "" {
-         err := "operand stack underflow"
-        } otherwise {
-         define evaluated := vm_binary(get(ins, "operator"), get(left, "value"), get(right, "value"))
-         if get(evaluated, "error") != "" { err := get(evaluated, "error") } otherwise {
-          stack := push(stack, get(evaluated, "value"))
-         }
+        if get(ins, "type") == "boolean" {
+          value := value == "true"
         }
-       } otherwise {
-        if op == "index" {
-         define index_value := pop_stack(stack)
-         stack := get(index_value, "stack")
-         define collection := pop_stack(stack)
-         stack := get(collection, "stack")
-         if get(index_value, "error") != "" or get(collection, "error") != "" {
-          err := "operand stack underflow"
-         } otherwise {
-          define index := get(index_value, "value")
-          define target := get(collection, "value")
-          if type_of(index) != "integer" or index < 0 or index >= len(target) {
-           err := "invalid collection index"
-          } otherwise {
-           stack := push(stack, get(target, index))
-          }
-         }
-        } otherwise {
-         if op == "jump" {
-          pc := get(ins, "target") - 1
-         } otherwise {
-          if op == "jump_if_false" {
-           define popped := pop_stack(stack)
-           stack := get(popped, "stack")
-           if get(popped, "error") != "" { err := get(popped, "error") } otherwise {
-            if not get(popped, "value") { pc := get(ins, "target") - 1 }
-           }
-          } otherwise {
-           if op == "call" {
-            define fn_name := get(ins, "name")
-            define argc := get(ins, "argc")
-            define args := array()
-            define arg_pos := 0
-            if len(stack) < argc {
-             err := "operand stack underflow in function call"
-            } otherwise {
-             repeat arg_pos < argc {
-              define popped_arg := pop_stack(stack)
-              stack := get(popped_arg, "stack")
-              args := push(args, get(popped_arg, "value"))
-              arg_pos := arg_pos + 1
-             }
-             define fn_index := 0
-             define found_fn := false
-             repeat fn_index < len(functions) and not found_fn and err == "" {
-              define fn_record := get(functions, fn_index)
-              if get(fn_record, "name") == fn_name {
-               found_fn := true
-               define params := get(fn_record, "parameters")
-               if len(params) != argc {
-                err := "function argument count mismatch: " + fn_name
-               } otherwise {
-                define fn_env := env
-                define param_pos := 0
-                repeat param_pos < len(params) {
-                 fn_env := put(fn_env, get(params, param_pos), get(args, argc - param_pos - 1))
-                 param_pos := param_pos + 1
-                }
-                define called := execute_plan_code(get(fn_record, "code"), fn_env, output, functions, call_depth + 1)
-                output := get(called, "output")
-                if get(called, "error") != "" {
-                 err := get(called, "error")
-                } otherwise {
-                 stack := push(stack, get(called, "return_value"))
-                }
-               }
-              }
-              fn_index := fn_index + 1
-             }
-             if not found_fn and err == "" {
-              err := "undefined function: " + fn_name
-             }
-            }
-           } otherwise {
-            if op == "return" {
-             returned := true
-             if len(stack) > 0 {
-              define popped_return := pop_stack(stack)
-              stack := get(popped_return, "stack")
-              return_value := get(popped_return, "value")
-             }
-            } otherwise {
-             err := "unsupported VM opcode: " + op
-            }
-           }
-          }
-         }
-        }
-       }
       }
-     }
+      stack := push(stack, value)
+    } otherwise {
+      if op == "load" {
+        define name := get(ins, "name")
+        if not contains(env, name) {
+          err := "undefined variable: " + name
+        } otherwise {
+          stack := push(stack, get(env, name))
+        }
+      } otherwise {
+        if op == "declare" or op == "store" {
+          define popped := pop_stack(stack)
+          stack := get(popped, "stack")
+          if get(popped, "error") != "" {
+            err := get(popped, "error")
+          } otherwise {
+            env := put(env, get(ins, "name"), get(popped, "value"))
+          }
+        } otherwise {
+          if op == "print" {
+            define popped := pop_stack(stack)
+            stack := get(popped, "stack")
+            if get(popped, "error") != "" {
+              err := get(popped, "error")
+            } otherwise {
+              output := push(output, to_string(get(popped, "value")))
+            }
+          } otherwise {
+            if op == "unary" {
+              define popped := pop_stack(stack)
+              stack := get(popped, "stack")
+              if get(popped, "error") != "" {
+                err := get(popped, "error")
+              } otherwise {
+                define value := get(popped, "value")
+                define operator := get(ins, "operator")
+                if operator == "-" {
+                  stack := push(stack, 0 - value)
+                } otherwise {
+                  if operator == "!" or operator == "not" {
+                    stack := push(stack, not value)
+                  } otherwise {
+                    err := "unsupported unary operator: " + operator
+                  }
+                }
+              }
+            } otherwise {
+              if op == "binary" {
+                define right := pop_stack(stack)
+                stack := get(right, "stack")
+                define left := pop_stack(stack)
+                stack := get(left, "stack")
+                if get(right, "error") != "" or get(left, "error") != "" {
+                  err := "operand stack underflow"
+                } otherwise {
+                  define evaluated := vm_binary(get(ins, "operator"), get(left, "value"), get(right, "value"))
+                  if get(evaluated, "error") != "" {
+                    err := get(evaluated, "error")
+                  } otherwise {
+                    stack := push(stack, get(evaluated, "value"))
+                  }
+                }
+              } otherwise {
+                if op == "index" {
+                  define index_value := pop_stack(stack)
+                  stack := get(index_value, "stack")
+                  define collection := pop_stack(stack)
+                  stack := get(collection, "stack")
+                  if get(index_value, "error") != "" or get(collection, "error") != "" {
+                    err := "operand stack underflow"
+                  } otherwise {
+                    define index := get(index_value, "value")
+                    define target := get(collection, "value")
+                    if type_of(index) != "integer" or index < 0 or index >= len(target) {
+                      err := "invalid collection index"
+                    } otherwise {
+                      stack := push(stack, get(target, index))
+                    }
+                  }
+                } otherwise {
+                  if op == "jump" {
+                    pc := get(ins, "target") - 1
+                  } otherwise {
+                    if op == "jump_if_false" {
+                      define popped := pop_stack(stack)
+                      stack := get(popped, "stack")
+                      if get(popped, "error") != "" {
+                        err := get(popped, "error")
+                      } otherwise {
+                        if not get(popped, "value") {
+                          pc := get(ins, "target") - 1
+                        }
+                      }
+                    } otherwise {
+                      if op == "call" {
+                        define fn_name := get(ins, "name")
+                        define argc := get(ins, "argc")
+                        define args := array()
+                        define arg_pos := 0
+                        if len(stack) < argc {
+                          err := "operand stack underflow in function call"
+                        } otherwise {
+                          repeat arg_pos < argc {
+                            define popped_arg := pop_stack(stack)
+                            stack := get(popped_arg, "stack")
+                            args := push(args, get(popped_arg, "value"))
+                            arg_pos := arg_pos + 1
+                          }
+                          define fn_index := 0
+                          define found_fn := false
+                          repeat fn_index < len(functions) and not found_fn and err == "" {
+                            define fn_record := get(functions, fn_index)
+                            if get(fn_record, "name") == fn_name {
+                              found_fn := true
+                              define params := get(fn_record, "parameters")
+                              if len(params) != argc {
+                                err := "function argument count mismatch: " + fn_name
+                              } otherwise {
+                                define fn_env := env
+                                define param_pos := 0
+                                repeat param_pos < len(params) {
+                                  fn_env := put(fn_env, get(params, param_pos), get(args, argc - param_pos - 1))
+                                  param_pos := param_pos + 1
+                                }
+                                define called := execute_plan_code(get(fn_record, "code"), fn_env, output, functions, call_depth + 1)
+                                output := get(called, "output")
+                                if get(called, "error") != "" {
+                                  err := get(called, "error")
+                                } otherwise {
+                                  stack := push(stack, get(called, "return_value"))
+                                }
+                              }
+                            }
+                            fn_index := fn_index + 1
+                          }
+                          if not found_fn and err == "" {
+                            err := "undefined function: " + fn_name
+                          }
+                        }
+                      } otherwise {
+                        if op == "return" {
+                          returned := true
+                          if len(stack) > 0 {
+                            define popped_return := pop_stack(stack)
+                            stack := get(popped_return, "stack")
+                            return_value := get(popped_return, "value")
+                          }
+                        } otherwise {
+                          err := "unsupported VM opcode: " + op
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
-   }
+    pc := pc + 1
   }
-  pc := pc + 1
- }
- return map("environment", env, "output", output, "error", err, "returned", returned, "return_value", return_value)
+  return map("environment", env, "output", output, "error", err, "returned", returned, "return_value", return_value)
 }
 fn execute_bytecode_plan(plan) {
- define verification := verify_bytecode_plan(plan)
- if not get(verification, "ok") {
-  return map("ok", false, "output", array(), "error", get(verification, "error"))
- }
- define executed := execute_plan_code(get(plan, "main"), map(), array(), get(plan, "functions"), 0)
- return map("ok", get(executed, "error") == "", "output", get(executed, "output"), "error", get(executed, "error"), "environment", get(executed, "environment"))
+  define verification := verify_bytecode_plan(plan)
+  if not get(verification, "ok") {
+    return map("ok", false, "output", array(), "error", get(verification, "error"))
+  }
+  define executed := execute_plan_code(get(plan, "main"), map(), array(), get(plan, "functions"), 0)
+  return map("ok", get(executed, "error") == "", "output", get(executed, "output"), "error", get(executed, "error"), "environment", get(executed, "environment"))
 }
 
 # Exercise the Zenvora-written AST-to-IR lowering on the parsed source above.
@@ -1379,8 +1420,7 @@ define runnable_output := get(runnable_result, "output")
 show "ZENVORA_VM"
 show runnable_result
 if get(runnable_result, "ok") and len(runnable_output) == 5 and get(runnable_output, 0) == "14" and get(runnable_output, 1) == "42" and get(runnable_output, 2) == "7" and get(runnable_output, 3) == "7" and get(runnable_output, 4) == "120" {
- show "ZENVORA_VM_ASSERTIONS_PASS"
+  show "ZENVORA_VM_ASSERTIONS_PASS"
 } otherwise {
- show "ZENVORA_VM_ASSERTIONS_FAIL"
+  show "ZENVORA_VM_ASSERTIONS_FAIL"
 }
-
