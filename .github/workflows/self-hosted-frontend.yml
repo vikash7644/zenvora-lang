@@ -83,6 +83,8 @@ jobs:
           grep -F 'parameters' parser-output.txt
           ! grep -F 'compile_error' parser-output.txt
           grep -F 'ZENVORA_SEMANTICS' parser-output.txt
+          grep -F 'undefined function: missing' parser-output.txt
+          grep -F 'function argument count mismatch: one' parser-output.txt
           grep -F 'break outside loop' parser-output.txt
           grep -F 'return outside function' parser-output.txt
           grep -F 'ZENVORA_BYTECODE_VERIFY' parser-output.txt
