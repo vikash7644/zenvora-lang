@@ -73,6 +73,15 @@ jobs:
           grep -Fx 'LEVEL COMPLETE' /tmp/zenvora-2d-grid-game.txt
           cat /tmp/zenvora-2d-grid-game.txt
 
+      - name: Run 3D wireframe smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-3d-wireframe.zv > /tmp/zenvora-3d-wireframe.txt
+          grep -Fx 'ZENVORA 3D WIREFRAME' /tmp/zenvora-3d-wireframe.txt
+          grep -Fx '3D SCENE COMPLETE' /tmp/zenvora-3d-wireframe.txt
+          cat /tmp/zenvora-3d-wireframe.txt
+
       - name: Run loop-control example
         run: cargo run --locked -- examples/loops.zv
 
