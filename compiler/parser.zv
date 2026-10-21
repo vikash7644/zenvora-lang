@@ -1434,8 +1434,12 @@ fn execute_plan_builtin(name, reversed_args) {
     if type_of(gcd_a) != "integer" or type_of(gcd_b) != "integer" {
       return map("ok", false, "value", "", "error", "type error: gcd expects two integers")
     }
-    if gcd_a < 0 { gcd_a := 0 - gcd_a }
-    if gcd_b < 0 { gcd_b := 0 - gcd_b }
+    if gcd_a < 0 {
+      gcd_a := 0 - gcd_a
+    }
+    if gcd_b < 0 {
+      gcd_b := 0 - gcd_b
+    }
     repeat gcd_b != 0 {
       define gcd_remainder := gcd_a - (gcd_a / gcd_b) * gcd_b
       gcd_a := gcd_b
@@ -1452,8 +1456,12 @@ fn execute_plan_builtin(name, reversed_args) {
     if lcm_a == 0 or lcm_b == 0 {
       return map("ok", true, "value", 0, "error", "")
     }
-    if lcm_a < 0 { lcm_a := 0 - lcm_a }
-    if lcm_b < 0 { lcm_b := 0 - lcm_b }
+    if lcm_a < 0 {
+      lcm_a := 0 - lcm_a
+    }
+    if lcm_b < 0 {
+      lcm_b := 0 - lcm_b
+    }
     define lcm_x := lcm_a
     define lcm_y := lcm_b
     repeat lcm_y != 0 {
@@ -1472,10 +1480,18 @@ fn execute_plan_builtin(name, reversed_args) {
     define dna_pos := 0
     repeat dna_pos < char_count(dna_sequence) {
       define dna_base := char_at(dna_sequence, dna_pos)
-      if dna_base == "A" { dna_result := dna_result + "T" } otherwise {
-        if dna_base == "T" { dna_result := dna_result + "A" } otherwise {
-          if dna_base == "C" { dna_result := dna_result + "G" } otherwise {
-            if dna_base == "G" { dna_result := dna_result + "C" } otherwise {
+      if dna_base == "A" {
+        dna_result := dna_result + "T"
+      } otherwise {
+        if dna_base == "T" {
+          dna_result := dna_result + "A"
+        } otherwise {
+          if dna_base == "C" {
+            dna_result := dna_result + "G"
+          } otherwise {
+            if dna_base == "G" {
+              dna_result := dna_result + "C"
+            } otherwise {
               return map("ok", false, "value", "", "error", "dna_complement found an invalid DNA base")
             }
           }
