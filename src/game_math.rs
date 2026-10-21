@@ -183,3 +183,58 @@ impl GridWorld {
     }
 }
 
+
+#[cfg(test)]
+mod simulation_tests {
+    use super::{GridWorld, InputSnapshot, RectI, Vec2i};
+
+    #[test]
+    fn input_moves_one_tile_and_blocks_obstacles_and_bounds() {
+        let mut world = GridWorld::new(
+            Vec2i::new(1, 1), 5, 4,
+            vec![RectI::new(2, 1, 1, 1)],
+        ).unwrap();
+
+        world.step(InputSnapshot { right: true, ..InputSnapshot::default() }).unwrap();
+        assert_eq!(world.player, Vec2i::new(1, 1), "obstacle blocks movement");
+        world.step(InputSnapshot { down: true, ..InputSnapshot::default() }).unwrap();
+        assert_eq!(world.player, Vec2i::new(1, 2));
+        world.step(InputSnapshot { left: true, ..InputSnapshot::default() }).unwrap();
+        assert_eq!(world.player, Vec2i::new(0, 2));
+        world.step(InputSnapshot { left: true, ..InputSnapshot::default() }).unwrap();
+        assert_eq!(world.player, Vec2i::new(0, 2), "world boundary blocks movement");
+        assert_eq!(world.frame, 4);
+    }
+
+    #[test]
+    fn opposing_inputs_cancel_and_diagonal_prefers_horizontal() {
+        let mut world = GridWorld::new(Vec2i::new(1, 1), 5, 5, vec![]).unwrap();
+        world.step(InputSnapshot { left: true, right: true, ..InputSnapshot::default() }).unwrap();
+        assert_eq!(world.player, Vec2i::new(1, 1));
+        world.step(InputSnapshot { right: true, down: true, ..InputSnapshot::default() }).unwrap();
+        assert_eq!(world.player, Vec2i::new(2, 1));
+    }
+
+    #[test]
+    fn invalid_world_or_blocked_spawn_is_rejected() {
+        assert!(GridWorld::new(Vec2i::new(0, 0), 0, 4, vec![]).is_none());
+        assert!(GridWorld::new(Vec2i::new(1, 1), 4, 4, vec![RectI::new(1, 1, 1, 1)]).is_none());
+        assert!(GridWorld::new(Vec2i::new(-1, 0), 4, 4, vec![]).is_none());
+    }
+
+    #[test]
+    fn same_input_sequence_produces_same_world_state() {
+        let mut a = GridWorld::new(Vec2i::new(0, 0), 8, 8, vec![RectI::new(2, 0, 1, 1)]).unwrap();
+        let mut b = a.clone();
+        let inputs = [
+            InputSnapshot { right: true, ..InputSnapshot::default() },
+            InputSnapshot { down: true, ..InputSnapshot::default() },
+            InputSnapshot { right: true, ..InputSnapshot::default() },
+        ];
+        for input in inputs {
+            a.step(input).unwrap();
+            b.step(input).unwrap();
+        }
+        assert_eq!(a, b);
+    }
+}
