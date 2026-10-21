@@ -167,3 +167,18 @@ jobs:
           29
           EXPECTED
           diff -u expected-bytecode-output.txt self-hosted-bytecode-output.txt
+
+      - name: Check deterministic frontend plan and executable artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- compiler/token_stream.zv > token-output-repeat.txt
+          cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
+          awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
+          test -s self-hosted-plan-repeat.json
+          python3 -m json.tool self-hosted-plan-repeat.json >/dev/null
+          diff -u self-hosted-plan.json self-hosted-plan-repeat.json
+          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-plan-repeat.zv2b
+          cmp self-hosted-plan.zv2b self-hosted-plan-repeat.zv2b
+          cargo run --locked --quiet -- --run-bytecode self-hosted-plan-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
+          diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
