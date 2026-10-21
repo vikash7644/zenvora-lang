@@ -984,6 +984,11 @@ fn validate_statements(ast, function_depth, loop_depth) {
   return ""
 }
 
+# Built-ins are callable without user-defined function declarations.
+fn is_builtin_function(name) {
+  return name == "array" or name == "map" or name == "get" or name == "len" or name == "contains" or name == "push" or name == "put" or name == "keys" or name == "values" or name == "type_of" or name == "to_string" or name == "abs" or name == "min" or name == "max" or name == "range" or name == "assert" or name == "sum" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "clamp" or name == "starts_with" or name == "ends_with" or name == "replace" or name == "split" or name == "join" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "index_of" or name == "unique" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "pow_int" or name == "mean" or name == "speed" or name == "force" or name == "kinetic_energy" or name == "density" or name == "molarity" or name == "bmi_x10" or name == "molar_mass" or name == "dna_complement" or name == "gc_content_percent"
+}
+
 fn validate_call_expression(ast, functions) {
   define kind := get(ast, "kind")
   if kind == "call" {
@@ -1005,7 +1010,7 @@ fn validate_call_expression(ast, functions) {
       }
       pos := pos + 1
     }
-    if not found {
+    if not found and not is_builtin_function(name) {
       return "undefined function: " + name
     }
     define arg_pos := 0
@@ -1513,6 +1518,9 @@ define valid_semantic_result := validate_program(get(valid_semantic_ast, "ast"))
 define bad_call_lexed := lex("fn one(a) {\nreturn a\n}\nshow missing(1)\n")
 define bad_call_ast := parse_program(get(bad_call_lexed, "tokens"))
 define bad_call_result := validate_program(get(bad_call_ast, "ast"))
+define builtin_call_lexed := lex("show len(array(1, 2))\nshow sum(array(3, 4))\n")
+define builtin_call_ast := parse_program(get(builtin_call_lexed, "tokens"))
+define builtin_call_result := validate_program(get(builtin_call_ast, "ast"))
 define bad_arity_lexed := lex("fn one(a) {\nreturn a\n}\nshow one(1, 2)\n")
 define bad_arity_ast := parse_program(get(bad_arity_lexed, "tokens"))
 define bad_arity_result := validate_program(get(bad_arity_ast, "ast"))
@@ -1523,6 +1531,11 @@ define invalid_return_lexed := lex("return 1\n")
 define invalid_return_ast := parse_program(get(invalid_return_lexed, "tokens"))
 define invalid_return_result := validate_program(get(invalid_return_ast, "ast"))
 show "ZENVORA_SEMANTICS"
+if get(builtin_call_result, "ok") {
+  show "ZENVORA_BUILTIN_CALL_PASS"
+} otherwise {
+  show "ZENVORA_BUILTIN_CALL_FAIL"
+}
 show valid_semantic_result
 show get(bad_call_result, "error")
 show get(bad_arity_result, "error")
