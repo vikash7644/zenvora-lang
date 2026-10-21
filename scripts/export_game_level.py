@@ -50,8 +50,23 @@ def main():
         goal = {"x": int(lines[cursor]), "y": int(lines[cursor + 1])}
         cursor += 2
         walls = []
+        script = []
         while cursor < len(lines):
+            if lines[cursor] == "script":
+                cursor += 1
+                while cursor < len(lines):
+                    take("move")
+                    if cursor >= len(lines):
+                        raise ValueError("missing direction after move")
+                    direction = lines[cursor]
+                    cursor += 1
+                    if direction not in {"up", "down", "left", "right"}:
+                        raise ValueError(f"unsupported move direction: {direction!r}")
+                    script.append(direction)
+                break
             take("wall")
+            if cursor >= len(lines):
+                raise ValueError("missing wall coordinate")
             x, y = lines[cursor].split(",", 1)
             walls.append({"x": int(x), "y": int(y)})
             cursor += 1
@@ -67,6 +82,19 @@ def main():
             raise ValueError("a wall overlaps spawn or goal")
         if len({(wall["x"], wall["y"]) for wall in walls}) != len(walls):
             raise ValueError("duplicate wall coordinate")
+        if len(script) > 10000:
+            raise ValueError("script exceeds 10000 moves")
+        occupied = {(wall["x"], wall["y"]) for wall in walls}
+        position = dict(spawn)
+        deltas = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
+        for index, direction in enumerate(script, start=1):
+            dx, dy = deltas[direction]
+            candidate = {"x": position["x"] + dx, "y": position["y"] + dy}
+            if not inside(candidate) or (candidate["x"], candidate["y"]) in occupied:
+                raise ValueError(f"script move {index} collides with a wall or world boundary")
+            position = candidate
+        if script and position != goal:
+            raise ValueError("script must finish at the goal")
         if cursor != len(lines):
             raise ValueError("unexpected trailing VM output")
     except (ValueError, IndexError) as error:
@@ -79,6 +107,7 @@ def main():
         "spawn": spawn,
         "goal": goal,
         "walls": walls,
+        "script": script,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
