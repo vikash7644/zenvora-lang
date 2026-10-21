@@ -2056,14 +2056,14 @@ if get(runnable_result, "ok") and len(runnable_output) == 30 and get(runnable_ou
   show "ZENVORA_VM_ASSERTIONS_FAIL"
 }
 
-define extended_builtin_source := "show gcd(48, 18)\nshow lcm(6, 8)\nshow is_prime(29)\nshow is_prime(21)\nshow factorial(6)\nshow fibonacci(10)\nshow pow_int(2, 8)\nshow mean(array(3, 6, 9))\nshow speed(100, 4)\nshow force(3, 7)\nshow kinetic_energy(4, 3)\nshow bmi_x10(70, 175)\nshow molar_mass(array(12, 16, 1))\nshow assert(true)\nshow assert_eq(4, 4)\nshow dna_complement(\"ACGT\")\nshow gc_content_percent(\"GCGC\")\n"
+define extended_builtin_source := "show gcd(48, 18)\nshow lcm(6, 8)\nshow is_prime(29)\nshow is_prime(21)\nshow factorial(6)\nshow fibonacci(10)\nshow pow_int(2, 8)\nshow mean(array(3, 6, 9))\nshow speed(100, 4)\nshow force(3, 7)\nshow kinetic_energy(4, 3)\nshow bmi_x10(70, 175)\nshow molar_mass(array(12, 16, 1))\nshow assert(true)\nshow assert_eq(4, 4)\nshow dna_complement(\"ACGT\")\nshow gc_content_percent(\"GCGC\")\ndefine join_values := array(\"a\", \"b\")\nshow join(join_values, \",\")\n"
 define extended_builtin_lexed := lex(extended_builtin_source)
 define extended_builtin_ast := parse_program(get(extended_builtin_lexed, "tokens"))
 define extended_builtin_ir := lower_program(get(extended_builtin_ast, "ast"))
 define extended_builtin_plan := emit_bytecode_plan(extended_builtin_ir)
 define extended_builtin_result := execute_bytecode_plan(extended_builtin_plan)
 define extended_builtin_output := get(extended_builtin_result, "output")
-if get(extended_builtin_result, "ok") and len(extended_builtin_output) == 17 and get(extended_builtin_output, 0) == "6" and get(extended_builtin_output, 1) == "24" and get(extended_builtin_output, 2) == "true" and get(extended_builtin_output, 3) == "false" and get(extended_builtin_output, 4) == "720" and get(extended_builtin_output, 5) == "55" and get(extended_builtin_output, 6) == "256" and get(extended_builtin_output, 7) == "6" and get(extended_builtin_output, 8) == "25" and get(extended_builtin_output, 9) == "21" and get(extended_builtin_output, 10) == "18" and get(extended_builtin_output, 11) == "228" and get(extended_builtin_output, 12) == "29" and get(extended_builtin_output, 13) == "true" and get(extended_builtin_output, 14) == "true" and get(extended_builtin_output, 15) == "TGCA" and get(extended_builtin_output, 16) == "100" {
+if get(extended_builtin_result, "ok") and len(extended_builtin_output) == 18 and get(extended_builtin_output, 0) == "6" and get(extended_builtin_output, 1) == "24" and get(extended_builtin_output, 2) == "true" and get(extended_builtin_output, 3) == "false" and get(extended_builtin_output, 4) == "720" and get(extended_builtin_output, 5) == "55" and get(extended_builtin_output, 6) == "256" and get(extended_builtin_output, 7) == "6" and get(extended_builtin_output, 8) == "25" and get(extended_builtin_output, 9) == "21" and get(extended_builtin_output, 10) == "18" and get(extended_builtin_output, 11) == "228" and get(extended_builtin_output, 12) == "29" and get(extended_builtin_output, 13) == "true" and get(extended_builtin_output, 14) == "true" and get(extended_builtin_output, 15) == "TGCA" and get(extended_builtin_output, 16) == "100" and get(extended_builtin_output, 17) == "a,b" {
   show "ZENVORA_VM_EXTENDED_BUILTIN_PARITY_PASS"
 } otherwise {
   show "ZENVORA_VM_EXTENDED_BUILTIN_PARITY_FAIL"
