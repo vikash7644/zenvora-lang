@@ -2555,24 +2555,17 @@ fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), S
         })
 }
 
-fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
-    let plan: serde_json::Value = serde_json::from_str(plan_text)
-        .map_err(|error| format!("bytecode plan: invalid JSON: {error}"))?;
-    if plan.get("format").and_then(|v| v.as_str()) != Some("ZENVORA_BYTECODE_PLAN_1") {
-        return Err("bytecode plan: expected format ZENVORA_BYTECODE_PLAN_1".into());
-    }
-    if plan.get("functions").and_then(|v| v.as_array()).is_some_and(|items| !items.is_empty()) {
-        return Err("bytecode plan v1 adapter: user functions are not supported yet".into());
-    }
-    let main = plan.get("main").and_then(|v| v.as_array())
-        .ok_or_else(|| "bytecode plan: missing main instruction array".to_string())?;
-    let mut instructions = Vec::with_capacity(main.len());
-    for (pc, item) in main.iter().enumerate() {
+fn plan_instructions_to_v2(
+    code: &[serde_json::Value],
+    base: usize,
+    function_entries: &HashMap<String, usize>,
+) -> Result<Vec<String>, String> {
+    let mut instructions = Vec::with_capacity(code.len());
+    for (pc, item) in code.iter().enumerate() {
         let op = item.get("op").and_then(|v| v.as_str())
             .ok_or_else(|| format!("bytecode plan: instruction {pc} has no op"))?;
         let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let operand = item.get("value").and_then(|v| v.as_str()).unwrap_or("");
-        let target = item.get("target").and_then(|v| v.as_i64());
         let line = match op {
             "push_const" => match item.get("type").and_then(|v| v.as_str()).unwrap_or("") {
                 "number" => {
@@ -2605,13 +2598,25 @@ fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
                 other => return Err(format!("bytecode plan: unsupported binary operator '{other}' at {pc}")),
             }.to_string(),
             "index" => "INDEX".into(),
-            "jump" => format!("JUMP {}", target.ok_or_else(|| format!("bytecode plan: missing jump target at {pc}"))?),
-            "jump_if_false" => format!("JUMP_IF_FALSE {}", target.ok_or_else(|| format!("bytecode plan: missing conditional target at {pc}"))?),
+            "jump" | "jump_if_false" => {
+                let target = item.get("target").and_then(|v| v.as_i64())
+                    .ok_or_else(|| format!("bytecode plan: missing jump target at {pc}"))?;
+                let target = usize::try_from(target)
+                    .map_err(|_| format!("bytecode plan: negative jump target at {pc}"))?;
+                let target = target.checked_add(base)
+                    .ok_or_else(|| format!("bytecode plan: jump target overflow at {pc}"))?;
+                if op == "jump" { format!("JUMP {target}") } else { format!("JUMP_IF_FALSE {target}") }
+            }
             "call" if valid_identifier(name) => {
                 let argc = item.get("argc").and_then(|v| v.as_u64())
                     .ok_or_else(|| format!("bytecode plan: invalid call arity at {pc}"))?;
-                if !is_builtin(name) { return Err(format!("bytecode plan v1 adapter: only built-in calls are supported (got '{name}')")); }
-                format!("BUILTIN {name} {argc}")
+                if is_builtin(name) {
+                    format!("BUILTIN {name} {argc}")
+                } else if let Some(target) = function_entries.get(name) {
+                    format!("CALL {target} {argc}")
+                } else {
+                    return Err(format!("bytecode plan: call to undefined function '{name}'"));
+                }
             }
             "return" => "RETURN_VALUE".into(),
             "break" | "continue" | "nested_function" | "compile_error" =>
@@ -2620,14 +2625,86 @@ fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
         };
         instructions.push(line);
     }
-    // The verifier requires explicit termination of the main region.
-    // A jump to main_end is the canonical v2 main-exit sentinel.
-    let main_end = instructions.len() + 1;
+    Ok(instructions)
+}
+
+fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
+    let plan: serde_json::Value = serde_json::from_str(plan_text)
+        .map_err(|error| format!("bytecode plan: invalid JSON: {error}"))?;
+    if plan.get("format").and_then(|v| v.as_str()) != Some("ZENVORA_BYTECODE_PLAN_1") {
+        return Err("bytecode plan: expected format ZENVORA_BYTECODE_PLAN_1".into());
+    }
+    let main = plan.get("main").and_then(|v| v.as_array())
+        .ok_or_else(|| "bytecode plan: missing main instruction array".to_string())?;
+    let functions = plan.get("functions").and_then(|v| v.as_array())
+        .ok_or_else(|| "bytecode plan: missing functions array".to_string())?;
+
+    let mut function_entries = HashMap::new();
+    let mut function_specs = Vec::with_capacity(functions.len());
+    let main_end = main.len().checked_add(1)
+        .ok_or_else(|| "bytecode plan: main instruction count overflow".to_string())?;
+    let mut next_entry = main_end;
+    for (index, function) in functions.iter().enumerate() {
+        let name = function.get("name").and_then(|v| v.as_str())
+            .ok_or_else(|| format!("bytecode plan: function {index} has no name"))?;
+        if !valid_identifier(name) {
+            return Err(format!("bytecode plan: invalid function name '{name}'"));
+        }
+        let parameters = function.get("parameters").and_then(|v| v.as_array())
+            .ok_or_else(|| format!("bytecode plan: function '{name}' has no parameter array"))?
+            .iter().map(|parameter| {
+                let parameter = parameter.as_str()
+                    .ok_or_else(|| format!("bytecode plan: non-string parameter in '{name}'"))?;
+                if !valid_identifier(parameter) {
+                    return Err(format!("bytecode plan: invalid parameter '{parameter}' in '{name}'"));
+                }
+                Ok(parameter.to_string())
+            }).collect::<Result<Vec<_>, String>>()?;
+        let code = function.get("code").and_then(|v| v.as_array())
+            .ok_or_else(|| format!("bytecode plan: function '{name}' has no code array"))?;
+        if code.is_empty() {
+            return Err(format!("bytecode plan: function '{name}' has an empty body"));
+        }
+        if function_entries.insert(name.to_string(), next_entry).is_some() {
+            return Err(format!("bytecode plan: duplicate function '{name}'"));
+        }
+        let has_value_return = code.iter().any(|item| item.get("op").and_then(|v| v.as_str()) == Some("return"));
+        let appended_void_return = !has_value_return;
+        let region_len = code.len().checked_add(usize::from(appended_void_return))
+            .ok_or_else(|| format!("bytecode plan: function '{name}' size overflow"))?;
+        function_specs.push((name.to_string(), parameters, code, next_entry, appended_void_return, has_value_return));
+        next_entry = next_entry.checked_add(region_len)
+            .ok_or_else(|| "bytecode plan: total instruction count overflow".to_string())?;
+    }
+
+    let mut instructions = plan_instructions_to_v2(main, 0, &function_entries)?;
     instructions.push(format!("JUMP {main_end}"));
+    let mut regions = Vec::with_capacity(function_specs.len());
+    for (name, parameters, code, entry, appended_void_return, has_value_return) in function_specs {
+        let mut function_code = plan_instructions_to_v2(code, entry, &function_entries)
+            .map_err(|error| format!("function '{name}': {error}"))?;
+        if appended_void_return {
+            function_code.push("RETURN".into());
+        }
+        let end = entry.checked_add(function_code.len())
+            .ok_or_else(|| format!("bytecode plan: function '{name}' end overflow"))?;
+        regions.push(bytecode_v2::FunctionRegion {
+            entry,
+            end,
+            parameters,
+            return_kind: if has_value_return {
+                bytecode_v2::ReturnKind::Value
+            } else {
+                bytecode_v2::ReturnKind::Void
+            },
+        });
+        instructions.extend(function_code);
+    }
+
     let layout = bytecode_v2::ProgramLayout {
         instruction_count: instructions.len(),
         main_end,
-        functions: Vec::new(),
+        functions: regions,
     };
     let file = bytecode_v2::ParsedV2File { layout, instructions };
     bytecode_v2::verify_v2_file(&file)?;
