@@ -1106,7 +1106,7 @@ fn validate_program(ast) {
 
 # Verifier for the Zenvora-authored bytecode plan: validates opcode set and jump bounds.
 fn verify_code(code) {
-  define allowed := array("push_const", "load", "unary", "binary", "index", "call", "declare", "store", "print", "return", "jump_if_false", "jump", "break", "continue", "nested_function")
+  define allowed := array("push_const", "load", "unary", "binary", "index", "call", "declare", "store", "print", "return", "jump_if_false", "jump", "break", "continue")
   define pos := 0
   repeat pos < len(code) {
     define instruction := get(code, pos)
@@ -1549,6 +1549,8 @@ show get(invalid_break_result, "error")
 show get(invalid_return_result, "error")
 show get(nested_function_result, "error")
 
+define unsupported_nested_fn_opcode := verify_code(array(map("op", "nested_function", "name", "inner", "line", 1)))
+show unsupported_nested_fn_opcode
 define bytecode_verification := verify_bytecode_plan(bytecode_plan)
 show "ZENVORA_BYTECODE_VERIFY"
 show bytecode_verification
