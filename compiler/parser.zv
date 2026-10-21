@@ -984,8 +984,97 @@ fn validate_statements(ast, function_depth, loop_depth) {
   return ""
 }
 
+fn validate_call_expression(ast, functions) {
+  define kind := get(ast, "kind")
+  if kind == "call" {
+    define callee := get(ast, "left")
+    if get(callee, "kind") != "name" {
+      return "indirect function calls are not supported"
+    }
+    define name := get(callee, "value")
+    define args := get(ast, "right")
+    define found := false
+    define pos := 0
+    repeat pos < len(functions) and not found {
+      define signature := get(functions, pos)
+      if get(signature, "name") == name {
+        found := true
+        if len(get(signature, "parameters")) != len(args) {
+          return "function argument count mismatch: " + name
+        }
+      }
+      pos := pos + 1
+    }
+    if not found {
+      return "undefined function: " + name
+    }
+    define arg_pos := 0
+    repeat arg_pos < len(args) {
+      define arg_error := validate_call_expression(get(args, arg_pos), functions)
+      if arg_error != "" {
+        return arg_error
+      }
+      arg_pos := arg_pos + 1
+    }
+    return ""
+  } otherwise {
+    if kind == "unary" {
+      return validate_call_expression(get(ast, "left"), functions)
+    } otherwise {
+      if kind == "binary" or kind == "index" {
+        define left_error := validate_call_expression(get(ast, "left"), functions)
+        if left_error != "" {
+          return left_error
+        }
+        return validate_call_expression(get(ast, "right"), functions)
+      }
+    }
+  }
+  return ""
+}
+
+fn validate_call_statements(ast, functions) {
+  define pos := 0
+  repeat pos < len(ast) {
+    define statement := get(ast, pos)
+    define kind := get(statement, "kind")
+    define err := ""
+    if kind == "define" or kind == "assign" or kind == "show" or kind == "return" {
+      err := validate_call_expression(get(statement, "left"), functions)
+    } otherwise {
+      if kind == "if" {
+        err := validate_call_expression(get(statement, "left"), functions)
+        if err == "" {
+          define branches := get(statement, "right")
+          err := validate_call_statements(get(branches, "then"), functions)
+          if err == "" {
+            err := validate_call_statements(get(branches, "otherwise"), functions)
+          }
+        }
+      } otherwise {
+        if kind == "repeat" {
+          err := validate_call_expression(get(statement, "left"), functions)
+          if err == "" {
+            err := validate_call_statements(get(statement, "right"), functions)
+          }
+        } otherwise {
+          if kind == "function" {
+            err := validate_call_statements(get(statement, "right"), functions)
+          }
+        }
+      }
+    }
+    if err != "" {
+      return err
+    }
+    pos := pos + 1
+  }
+  return ""
+}
+
 fn validate_program(ast) {
   define seen_functions := array()
+  define function_signatures := array()
   define pos := 0
   repeat pos < len(ast) {
     define statement := get(ast, pos)
@@ -995,8 +1084,13 @@ fn validate_program(ast) {
         return map("ok", false, "error", "duplicate function: " + name)
       }
       seen_functions := push(seen_functions, name)
+      function_signatures := push(function_signatures, map("name", name, "parameters", get(statement, "left")))
     }
     pos := pos + 1
+  }
+  define call_error := validate_call_statements(ast, function_signatures)
+  if call_error != "" {
+    return map("ok", false, "error", call_error)
   }
   define error := validate_statements(ast, 0, 0)
   return map("ok", error == "", "error", error)
@@ -1416,6 +1510,12 @@ show bytecode_plan
 define valid_semantic_lexed := lex("define total := 0\nfn count_down(n) {\nrepeat n > 0 {\nif n > 2 {\nbreak\n} otherwise {\ncontinue\n}\n}\nreturn n\n}\n")
 define valid_semantic_ast := parse_program(get(valid_semantic_lexed, "tokens"))
 define valid_semantic_result := validate_program(get(valid_semantic_ast, "ast"))
+define bad_call_lexed := lex("fn one(a) {\nreturn a\n}\nshow missing(1)\n")
+define bad_call_ast := parse_program(get(bad_call_lexed, "tokens"))
+define bad_call_result := validate_program(get(bad_call_ast, "ast"))
+define bad_arity_lexed := lex("fn one(a) {\nreturn a\n}\nshow one(1, 2)\n")
+define bad_arity_ast := parse_program(get(bad_arity_lexed, "tokens"))
+define bad_arity_result := validate_program(get(bad_arity_ast, "ast"))
 define invalid_break_lexed := lex("break\n")
 define invalid_break_ast := parse_program(get(invalid_break_lexed, "tokens"))
 define invalid_break_result := validate_program(get(invalid_break_ast, "ast"))
@@ -1424,6 +1524,8 @@ define invalid_return_ast := parse_program(get(invalid_return_lexed, "tokens"))
 define invalid_return_result := validate_program(get(invalid_return_ast, "ast"))
 show "ZENVORA_SEMANTICS"
 show valid_semantic_result
+show get(bad_call_result, "error")
+show get(bad_arity_result, "error")
 show get(invalid_break_result, "error")
 show get(invalid_return_result, "error")
 
