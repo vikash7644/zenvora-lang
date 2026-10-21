@@ -64,6 +64,25 @@ jobs:
       - name: Run Zenvora Lang language tour
         run: cargo run --locked -- examples/zenvora-language-tour.zv
 
+      - name: Export Zenvora-authored game level through the VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./target/release/zv examples/game-2d-level.zv > /tmp/zenvora-game-level-vm.txt
+          grep -Fx 'ZENVORA_GAME_LEVEL_V1' /tmp/zenvora-game-level-vm.txt
+          python scripts/export_game_level.py examples/game-2d-level.zv /tmp/zenvora-game-scene.json --zv ./target/release/zv
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          scene = json.loads(Path('/tmp/zenvora-game-scene.json').read_text())
+          assert scene['format'] == 'ZENVORA_GAME_SCENE_V1'
+          assert scene['world'] == {'width': 10, 'height': 8}
+          assert scene['spawn'] == {'x': 1, 'y': 1}
+          assert scene['goal'] == {'x': 8, 'y': 6}
+          assert len(scene['walls']) == 9
+          print('Zenvora VM -> validated game scene JSON: PASS')
+          PY
+
       - name: Run 2D grid game smoke test
         shell: bash
         run: |
