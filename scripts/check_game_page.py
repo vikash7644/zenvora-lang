@@ -16,6 +16,7 @@ required = [
     'id="zv-source"', 'id="build-level"', 'id="scene-file"', 'function parseLevel', 'ZENVORA_GAME_SCENE_V1',
     'LEVEL BUILT', 'Duplicate declaration', 'overlaps spawn or goal',
     'id="play-vm-script"', 'VM SCRIPT PASSED', 'incomingScript', 'incomingTrace', 'VM STATE TRACE MISMATCH',
+    'declarations.join("\\n")',
 ]
 missing = [item for item in required if item not in source]
 if missing:
