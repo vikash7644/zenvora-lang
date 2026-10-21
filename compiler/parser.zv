@@ -1203,7 +1203,7 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
   define err := ""
   define returned := false
   define return_value := ""
-  repeat pc < len(code) and err == "" and not returned and steps < 10000 {
+  repeat pc < len(code) and err == "" and not returned and steps < 500 {
     steps := steps + 1
     define ins := get(code, pc)
     define op := get(ins, "op")
