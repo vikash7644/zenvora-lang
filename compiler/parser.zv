@@ -858,6 +858,46 @@ fn emit_statements(ir) {
   return out
 }
 
+fn json_quote(value) {
+  define escaped := replace(value, "\\", "\\\\")
+  escaped := replace(escaped, "\"", "\\\"")
+  escaped := replace(escaped, "\n", "\\n")
+  escaped := replace(escaped, "\r", "\\r")
+  escaped := replace(escaped, "\t", "\\t")
+  return "\"" + escaped + "\""
+}
+
+fn json_encode(value) {
+  define kind := type_of(value)
+  if kind == "string" {
+    return json_quote(value)
+  }
+  if kind == "integer" or kind == "boolean" {
+    return to_string(value)
+  }
+  if kind == "array" {
+    define parts := array()
+    define pos := 0
+    repeat pos < len(value) {
+      parts := push(parts, json_encode(get(value, pos)))
+      pos := pos + 1
+    }
+    return "[" + join(parts, ",") + "]"
+  }
+  if kind == "map" {
+    define parts := array()
+    define map_keys := keys(value)
+    define pos := 0
+    repeat pos < len(map_keys) {
+      define key := get(map_keys, pos)
+      parts := push(parts, json_quote(key) + ":" + json_encode(get(value, key)))
+      pos := pos + 1
+    }
+    return "{" + join(parts, ",") + "}"
+  }
+  return "null"
+}
+
 fn emit_bytecode_plan(ir) {
   define main := array()
   define functions := array()
@@ -2001,6 +2041,8 @@ define runnable_lexed := lex(runnable_source)
 define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
 define runnable_plan := emit_bytecode_plan(runnable_ir)
+show "ZENVORA_BYTECODE_PLAN_JSON"
+show json_encode(runnable_plan)
 define runnable_result := execute_bytecode_plan(runnable_plan)
 define runnable_output := get(runnable_result, "output")
 show get(runnable_ast_result, "error")
