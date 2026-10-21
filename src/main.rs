@@ -2555,6 +2555,89 @@ fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), S
         })
 }
 
+fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
+    let plan: serde_json::Value = serde_json::from_str(plan_text)
+        .map_err(|error| format!("bytecode plan: invalid JSON: {error}"))?;
+    if plan.get("format").and_then(|v| v.as_str()) != Some("ZENVORA_BYTECODE_PLAN_1") {
+        return Err("bytecode plan: expected format ZENVORA_BYTECODE_PLAN_1".into());
+    }
+    if plan.get("functions").and_then(|v| v.as_array()).is_some_and(|items| !items.is_empty()) {
+        return Err("bytecode plan v1 adapter: user functions are not supported yet".into());
+    }
+    let main = plan.get("main").and_then(|v| v.as_array())
+        .ok_or_else(|| "bytecode plan: missing main instruction array".to_string())?;
+    let mut instructions = Vec::with_capacity(main.len());
+    for (pc, item) in main.iter().enumerate() {
+        let op = item.get("op").and_then(|v| v.as_str())
+            .ok_or_else(|| format!("bytecode plan: instruction {pc} has no op"))?;
+        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let operand = item.get("value").and_then(|v| v.as_str()).unwrap_or("");
+        let target = item.get("target").and_then(|v| v.as_i64());
+        let line = match op {
+            "push_const" => match item.get("type").and_then(|v| v.as_str()).unwrap_or("") {
+                "number" => {
+                    let number = item.get("value").and_then(|v| v.as_i64())
+                        .or_else(|| operand.parse::<i64>().ok())
+                        .ok_or_else(|| format!("bytecode plan: invalid numeric constant at {pc}"))?;
+                    format!("PUSH {number}")
+                }
+                "string" => format!("PUSH_STRING_HEX {}", hex_encode(operand)),
+                "boolean" => match operand {
+                    "true" => "PUSH_BOOL true".into(),
+                    "false" => "PUSH_BOOL false".into(),
+                    _ => return Err(format!("bytecode plan: invalid boolean constant at {pc}")),
+                },
+                other => return Err(format!("bytecode plan: unsupported constant type '{other}' at {pc}")),
+            },
+            "load" if valid_identifier(name) => format!("LOAD {name}"),
+            "declare" if valid_identifier(name) => format!("DECLARE {name}"),
+            "store" if valid_identifier(name) => format!("STORE {name}"),
+            "print" => "PRINT".into(),
+            "unary" => match item.get("operator").and_then(|v| v.as_str()).unwrap_or("") {
+                "-" => "NEG".into(),
+                "!" | "not" => "NOT".into(),
+                other => return Err(format!("bytecode plan: unsupported unary operator '{other}' at {pc}")),
+            },
+            "binary" => match item.get("operator").and_then(|v| v.as_str()).unwrap_or("") {
+                "+" => "ADD", "-" => "SUB", "*" => "MUL", "/" => "DIV",
+                "==" => "EQ", "!=" => "NE", "<" => "LT", "<=" => "LE",
+                ">" => "GT", ">=" => "GE", "and" => "AND", "or" => "OR",
+                other => return Err(format!("bytecode plan: unsupported binary operator '{other}' at {pc}")),
+            }.to_string(),
+            "index" => "INDEX".into(),
+            "jump" => format!("JUMP {}", target.ok_or_else(|| format!("bytecode plan: missing jump target at {pc}"))?),
+            "jump_if_false" => format!("JUMP_IF_FALSE {}", target.ok_or_else(|| format!("bytecode plan: missing conditional target at {pc}"))?),
+            "call" if valid_identifier(name) => {
+                let argc = item.get("argc").and_then(|v| v.as_u64())
+                    .ok_or_else(|| format!("bytecode plan: invalid call arity at {pc}"))?;
+                if !is_builtin(name) { return Err(format!("bytecode plan v1 adapter: only built-in calls are supported (got '{name}')")); }
+                format!("BUILTIN {name} {argc}")
+            }
+            "return" => "RETURN_VALUE".into(),
+            "break" | "continue" | "nested_function" | "compile_error" =>
+                return Err(format!("bytecode plan: unresolved control-flow or compile-error instruction '{op}' at {pc}")),
+            other => return Err(format!("bytecode plan: unsupported instruction '{other}' at {pc}")),
+        };
+        instructions.push(line);
+    }
+    let layout = bytecode_v2::ProgramLayout {
+        instruction_count: instructions.len(),
+        main_end: instructions.len(),
+        functions: Vec::new(),
+    };
+    let file = bytecode_v2::ParsedV2File { layout, instructions };
+    bytecode_v2::verify_v2_file(&file)?;
+    bytecode_v2::serialize_v2_file(&file)
+}
+
+fn write_bytecode_plan_v2(plan_path: &str, output_path: &str) -> Result<(), String> {
+    let plan_text = fs::read_to_string(plan_path)
+        .map_err(|error| format!("cannot read bytecode plan {plan_path}: {error}"))?;
+    let serialized = serialize_bytecode_plan_v2(&plan_text)?;
+    fs::write(output_path, serialized)
+        .map_err(|error| format!("cannot write {output_path}: {error}"))
+}
+
 fn write_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String> {
     let source = read_program(source_path)?;
     let (code, layout) = compile_with_layout(&source)?;
@@ -3237,6 +3320,7 @@ fn main() {
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
+        [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_bytecode_plan_v2(plan, output),
         [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
@@ -3247,7 +3331,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
