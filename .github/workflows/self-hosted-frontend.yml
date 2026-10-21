@@ -71,6 +71,7 @@ jobs:
           grep -F 'ZENVORA_VM' parser-output.txt
           grep -F 'ZENVORA_VM_ASSERTIONS_PASS' parser-output.txt
           grep -F 'ZENVORA_VM_BUILTIN_ASSERTIONS_PASS' parser-output.txt
+          grep -F 'ZENVORA_VM_BUILTIN_PARITY_PASS' parser-output.txt
           grep -F 'ZENVORA_BRACE_STRING_PASS' parser-output.txt
           ! grep -F 'ZENVORA_BRACE_STRING_FAIL' parser-output.txt
           grep -F 'function call depth limit exceeded' parser-output.txt
