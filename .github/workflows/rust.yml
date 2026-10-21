@@ -83,6 +83,28 @@ jobs:
           print('Zenvora VM -> validated game scene JSON: PASS')
           PY
 
+      - name: Execute Zenvora-authored game script through the VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/export_game_level.py examples/game-2d-scripted.zv /tmp/zenvora-scripted-scene.json --zv ./target/release/zv
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          scene = json.loads(Path('/tmp/zenvora-scripted-scene.json').read_text())
+          assert scene['format'] == 'ZENVORA_GAME_SCENE_V1'
+          assert len(scene['script']) == 12, scene['script']
+          assert scene['script'][:3] == ['down'] * 3
+          assert scene['script'][3:10] == ['right'] * 7
+          assert scene['script'][10:] == ['down'] * 2
+          x, y = scene['spawn']['x'], scene['spawn']['y']
+          for direction in scene['script']:
+              x += {'left': -1, 'right': 1}.get(direction, 0)
+              y += {'up': -1, 'down': 1}.get(direction, 0)
+          assert {'x': x, 'y': y} == scene['goal']
+          print('Zenvora source -> VM -> validated scene + 12 movement commands -> goal: PASS')
+          PY
+
       - name: Run 2D grid game smoke test
         shell: bash
         run: |
