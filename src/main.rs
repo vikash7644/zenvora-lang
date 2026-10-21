@@ -4907,4 +4907,25 @@ fn factorial(n) {
     }
 
 
+    #[test]
+    fn two_dimensional_grid_game_runs_and_reaches_goal() {
+        let source = include_str!("../examples/game-2d-grid.zv");
+        let expected = execute(source).expect("2D grid game must execute");
+        assert!(expected.iter().any(|line| line == "ZENVORA 2D GRID QUEST"));
+        assert!(expected.iter().any(|line| line == "LEVEL COMPLETE"));
+        assert!(!expected.iter().any(|line| line == "LEVEL FAILED"));
+
+        // Ensure the same game survives compile -> bytecode-v2 encode/decode -> VM execution.
+        let (code, layout) = super::compile_with_layout(source).expect("2D game must compile");
+        let encoded = super::serialize_bytecode_v2(&code, &layout)
+            .expect("2D game bytecode must serialize");
+        let decoded = super::deserialize_bytecode_v2(&encoded)
+            .expect("2D game bytecode must deserialize");
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line))
+            .expect("2D game bytecode must execute");
+        assert_eq!(actual, expected);
+    }
+
+
 }
