@@ -164,7 +164,7 @@ define wall_9 := "2,6"</textarea>
         "define goal_y := "+scene.goal.y,
         ...scene.walls.map((wall,index)=>'define wall_'+(index+1)+' := "'+wall.x+','+wall.y+'"')
       ];
-      document.getElementById("zv-source").value=declarations.join("\\n");
+      document.getElementById("zv-source").value=declarations.join("\n");
       parseLevel(document.getElementById("zv-source").value);
       vmScript=incomingScript.slice(); vmTrace=incomingTrace.map(point=>({x:point.x,y:point.y}));
       playScriptButton.disabled=vmScript.length===0;
