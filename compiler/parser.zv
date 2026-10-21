@@ -994,7 +994,7 @@ fn is_builtin_function(name) {
 
 # Returns a fixed arity for built-ins; -1 means the builtin has a variable arity.
 fn builtin_fixed_arity(name) {
-  if name == "len" or name == "keys" or name == "values" or name == "type_of" or name == "to_string" or name == "abs" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "unique" or name == "assert" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "mean" or name == "molar_mass" or name == "dna_complement" or name == "gc_content_percent" {
+  if name == "len" or name == "keys" or name == "values" or name == "type_of" or name == "to_string" or name == "abs" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "unique" or name == "assert" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "mean" or name == "molar_mass" or name == "sum" or name == "dna_complement" or name == "gc_content_percent" {
     return 1
   }
   if name == "get" or name == "contains" or name == "push" or name == "min" or name == "max" or name == "starts_with" or name == "ends_with" or name == "split" or name == "join" or name == "char_at" or name == "index_of" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "pow_int" or name == "speed" or name == "density" or name == "molarity" or name == "force" or name == "kinetic_energy" or name == "bmi_x10" {
