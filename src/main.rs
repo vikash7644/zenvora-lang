@@ -3452,9 +3452,37 @@ mod tests {
     }
 
     #[test]
-    fn self_hosted_plan_adapter_rejects_unimplemented_user_functions() {
-        let plan = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[],"functions":[{"name":"f","parameters":[],"code":[]}]}"#;
-        assert!(super::serialize_bytecode_plan_v2(plan).unwrap_err().contains("user functions"));
+    fn self_hosted_plan_adapter_emits_and_executes_user_function_calls() {
+        let plan = r#"{
+          "format":"ZENVORA_BYTECODE_PLAN_1",
+          "main":[
+            {"op":"push_const","type":"number","value":"41"},
+            {"op":"call","name":"increment","argc":1},
+            {"op":"print"}
+          ],
+          "functions":[{
+            "name":"increment",
+            "parameters":["value"],
+            "code":[
+              {"op":"load","name":"value"},
+              {"op":"push_const","type":"number","value":"1"},
+              {"op":"binary","operator":"+"},
+              {"op":"return"}
+            ]
+          }]
+        }"#;
+        let bytecode = super::serialize_bytecode_plan_v2(plan).unwrap();
+        let parsed = crate::bytecode_v2::parse_v2_file(&bytecode).unwrap();
+        assert_eq!(parsed.layout.functions.len(), 1);
+        assert_eq!(parsed.layout.functions[0].parameters, vec!["value"]);
+        assert_eq!(parsed.instructions, vec![
+            "PUSH 41", "CALL 4 1", "PRINT", "JUMP 4",
+            "LOAD value", "PUSH 1", "ADD", "RETURN_VALUE",
+        ]);
+        let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
     }
     use super::{compile, compile_core, lex, read_chain_key, run_chain_command, run_with_output, Op};
     use ed25519_dalek::Signer;
