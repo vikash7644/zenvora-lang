@@ -2601,7 +2601,7 @@ fn plan_instructions_to_v2(
             "jump" | "jump_if_false" => {
                 let raw_target = item.get("target").and_then(|v| v.as_i64())
                     .ok_or_else(|| format!("bytecode plan: missing jump target at {pc}"))?;
-                let mut target = usize::try_from(raw_target)
+                let target = usize::try_from(raw_target)
                     .map_err(|_| format!("bytecode plan: negative jump target at {pc}"))?;
                 let target = target.checked_add(base)
                     .ok_or_else(|| format!("bytecode plan: jump target overflow at {pc}"))?;
