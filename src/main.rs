@@ -4875,7 +4875,7 @@ fn factorial(n) {
     }
     #[test]
     fn comments_do_not_discard_following_source_lines() {
-        let output = execute("show 1\\n# comment between statements\\nshow 2\\n").unwrap();
+        let output = execute("show 1\n# comment between statements\nshow 2\n").unwrap();
         assert_eq!(output, vec!["1", "2"]);
     }
 
