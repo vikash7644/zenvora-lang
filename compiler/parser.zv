@@ -1371,6 +1371,21 @@ fn execute_plan_builtin(name, reversed_args) {
   if name == "values" and len(args) == 1 {
     return map("ok", true, "value", values(get(args, 0)), "error", "")
   }
+  if name == "map" {
+    if len(args) % 2 != 0 {
+      return map("ok", false, "value", "", "error", "map expects key/value pairs")
+    }
+    define result_map := map()
+    define map_pos := 0
+    repeat map_pos < len(args) {
+      result_map := put(result_map, get(args, map_pos), get(args, map_pos + 1))
+      map_pos := map_pos + 2
+    }
+    return map("ok", true, "value", result_map, "error", "")
+  }
+  if name == "put" and len(args) == 3 {
+    return map("ok", true, "value", put(get(args, 0), get(args, 1), get(args, 2)), "error", "")
+  }
   if name == "array" {
     return map("ok", true, "value", args, "error", "")
   } otherwise {
@@ -1659,7 +1674,7 @@ define valid_semantic_result := validate_program(get(valid_semantic_ast, "ast"))
 define bad_call_lexed := lex("fn one(a) {\nreturn a\n}\nshow missing(1)\n")
 define bad_call_ast := parse_program(get(bad_call_lexed, "tokens"))
 define bad_call_result := validate_program(get(bad_call_ast, "ast"))
-define builtin_call_lexed := lex("show len(array(1, 2))\nshow sum(array(3, 4))\nshow char_at(\"zv\", 1)\nshow starts_with(\"zenvora\", \"zen\")\nshow upper(\"zv\")\nshow char_count(\"zv\")\nshow index_of(\"zenvora\", \"v\")\nshow contains(array(1, 2, 3), 2)\nshow get(array(42), 0)\nshow len(push(array(1), 2))\n")
+define builtin_call_lexed := lex("show len(array(1, 2))\nshow sum(array(3, 4))\nshow char_at(\"zv\", 1)\nshow starts_with(\"zenvora\", \"zen\")\nshow upper(\"zv\")\nshow char_count(\"zv\")\nshow index_of(\"zenvora\", \"v\")\nshow contains(array(1, 2, 3), 2)\nshow get(map(\"answer\", 42), \"answer\")\nshow len(push(array(1), 2))\n")
 define builtin_call_ast := parse_program(get(builtin_call_lexed, "tokens"))
 define builtin_call_result := validate_program(get(builtin_call_ast, "ast"))
 define bad_builtin_arity_lexed := lex("show len(array(1), array(2))\n")
