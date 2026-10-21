@@ -1559,6 +1559,7 @@ define nested_function_result := validate_program(get(nested_function_ast, "ast"
 define invalid_return_lexed := lex("return 1\n")
 define invalid_return_ast := parse_program(get(invalid_return_lexed, "tokens"))
 define invalid_return_result := validate_program(get(invalid_return_ast, "ast"))
+show builtin_call_ast
 show "ZENVORA_SEMANTICS"
 if get(builtin_call_result, "ok") {
   show "ZENVORA_BUILTIN_CALL_PASS"
