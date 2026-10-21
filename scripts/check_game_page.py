@@ -40,4 +40,8 @@ for declaration in ("define game_width := 10", "define game_height := 8",
     if declaration not in level_text:
         raise SystemExit(f"Missing Zenvora game-level declaration: {declaration}")
 
-exporter = Path(__file__).resolve().parent / "export_game_level.py"\nif not exporter.is_file():\n    raise SystemExit("Missing Zenvora VM scene exporter script")\n\nprint("Browser game checks passed: canvas, Zenvora level bridge, VM scene import, source fixture, and JavaScript syntax valid.")
+exporter = Path(__file__).resolve().parent / "export_game_level.py"
+if not exporter.is_file():
+    raise SystemExit("Missing Zenvora VM scene exporter script")
+
+print("Browser game checks passed: canvas, Zenvora level bridge, VM scene import, source fixture, and JavaScript syntax valid.")
