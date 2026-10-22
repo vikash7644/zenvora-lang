@@ -1213,13 +1213,23 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
             let candidate_is_inside = next_x >= 0 && next_y >= 0 && next_x < width && next_y < height;
             let candidate_key = format!("{next_x},{next_y}");
             let mut blocked_by_wall = false;
+            // Validate the entire wall list, even after finding a blocking wall. Otherwise
+            // malformed trailing entries could be silently accepted by direct VM callers.
             for wall in walls {
                 let Value::Str(coordinate) = wall else {
                     return Err("type error: grid_step wall coordinates must be strings like \"3,2\"".into());
                 };
+                let Some((wall_x, wall_y)) = coordinate.split_once(',') else {
+                    return Err("grid_step wall coordinates must use the \"x,y\" format".into());
+                };
+                let (Ok(wall_x), Ok(wall_y)) = (wall_x.parse::<i64>(), wall_y.parse::<i64>()) else {
+                    return Err("grid_step wall coordinates must contain integers".into());
+                };
+                if wall_x < 0 || wall_y < 0 || wall_x >= width || wall_y >= height {
+                    return Err("grid_step wall coordinates must be inside the world".into());
+                }
                 if coordinate == &candidate_key {
                     blocked_by_wall = true;
-                    break;
                 }
             }
             let moved = candidate_is_inside && !blocked_by_wall;
