@@ -58,7 +58,7 @@ pub fn is_supported_builtin(name: &str) -> bool {
         "to_int" | "index_of" | "unique" | "assert_eq" | "gcd" | "lcm" | "factorial" |
         "is_prime" | "fibonacci" | "pow_int" | "mean" | "speed" | "density" | "molarity" |
         "force" | "kinetic_energy" | "bmi_x10" | "molar_mass" | "dna_complement" |
-        "gc_content_percent" | "grid_step"
+        "gc_content_percent" | "grid_step" | "input_step"
     )
 }
 
