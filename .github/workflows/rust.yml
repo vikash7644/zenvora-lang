@@ -129,6 +129,19 @@ jobs:
           grep -Fx '3D SCENE COMPLETE' /tmp/zenvora-3d-wireframe.txt
           cat /tmp/zenvora-3d-wireframe.txt
 
+      - name: Verify VM game input snapshots and bytecode v2 parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-2d-input.zv > /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'right+down (horizontal priority)' /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'right into wall' /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'left+right (cancelled)' /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'up+down (cancelled)' /tmp/zenvora-2d-input-source.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 examples/game-2d-input.zv /tmp/zenvora-2d-input.zv2b
+          cargo run --locked --quiet -- --run-bytecode /tmp/zenvora-2d-input.zv2b > /tmp/zenvora-2d-input-bytecode.txt
+          diff -u /tmp/zenvora-2d-input-source.txt /tmp/zenvora-2d-input-bytecode.txt
+
       - name: Verify 2D game source and bytecode v2 output parity
         shell: bash
         run: |
