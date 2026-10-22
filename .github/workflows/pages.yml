@@ -36,6 +36,15 @@ jobs:
           grep -q '<title>' website/index.html
           grep -q 'playground.html' website/index.html
 
+      - name: Generate Google-compatible raster favicons
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin imagemagick
+          rsvg-convert -w 48 -h 48 website/zenvora-favicon.svg -o website/favicon-48.png
+          convert website/favicon-48.png -define icon:auto-resize=16,32,48 website/favicon.ico
+          test -s website/favicon-48.png
+          test -s website/favicon.ico
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
