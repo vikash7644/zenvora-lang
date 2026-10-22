@@ -5084,6 +5084,34 @@ mod game_builtin_tests {
     }
 
     #[test]
+    fn input_step_consumes_button_snapshot_and_matches_bytecode() {
+        let source = concat!(
+            "define walls := array(\"2,1\")\n",
+            "define a := input_step(1, 1, false, true, false, true, 5, 4, walls)\n",
+            "show a[\"x\"]\nshow a[\"y\"]\nshow a[\"moved\"]\n",
+            "define b := input_step(1, 1, true, false, false, false, 5, 4, walls)\n",
+            "show b[\"x\"]\nshow b[\"y\"]\nshow b[\"moved\"]\n",
+            "define c := input_step(1, 1, false, false, true, true, 5, 4, walls)\n",
+            "show c[\"x\"]\nshow c[\"y\"]\nshow c[\"moved\"]\n",
+            "define d := input_step(1, 1, true, true, false, false, 5, 4, walls)\n",
+            "show d[\"x\"]\nshow d[\"y\"]\nshow d[\"moved\"]\n",
+        );
+        let expected = execute(source).unwrap();
+        assert_eq!(expected, vec!["1", "1", "false", "0", "1", "true", "1", "2", "true", "1", "1", "false"]);
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn input_step_rejects_non_boolean_button_snapshots() {
+        assert!(execute("show input_step(0, 0, 1, false, false, false, 2, 2, array())").unwrap_err().contains("buttons must be booleans"));
+    }
+
+    #[test]
     fn grid_step_rejects_invalid_directions_and_worlds() {
         assert!(execute("show grid_step(0, 0, \"north\", 2, 2, array())").unwrap_err().contains("direction must be up, down, left, or right"));
         assert!(execute("show grid_step(0, 0, \"right\", 0, 2, array())").unwrap_err().contains("world dimensions"));
