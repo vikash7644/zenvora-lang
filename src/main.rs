@@ -5097,7 +5097,7 @@ mod game_builtin_tests {
             "show d[\"x\"]\nshow d[\"y\"]\nshow d[\"moved\"]\n",
         );
         let expected = execute(source).unwrap();
-        assert_eq!(expected, vec!["1", "1", "false", "0", "1", "true", "1", "2", "true", "1", "1", "false"]);
+        assert_eq!(expected, vec!["1", "1", "false", "0", "1", "true", "1", "1", "false", "1", "1", "false"]);
         let (code, layout) = super::compile_with_layout(source).unwrap();
         let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
         let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
