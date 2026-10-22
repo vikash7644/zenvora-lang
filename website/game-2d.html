@@ -150,10 +150,19 @@ define wall_9 := "2,6"</textarea>
     try {
       const scene=JSON.parse(await file.text());
       if(scene.format!=="ZENVORA_GAME_SCENE_V1"||!scene.world||!scene.spawn||!scene.goal||!Array.isArray(scene.walls)) throw new Error("Unsupported scene JSON format");
+      const isIntegerPoint=point=>point&&Number.isSafeInteger(point.x)&&Number.isSafeInteger(point.y);
+      const incomingCols=scene.world.width, incomingRows=scene.world.height;
+      if(!Number.isSafeInteger(incomingCols)||!Number.isSafeInteger(incomingRows)||incomingCols<4||incomingCols>20||incomingRows<4||incomingRows>16) throw new Error("Invalid scene world dimensions");
+      const insidePoint=point=>isIntegerPoint(point)&&point.x>=0&&point.y>=0&&point.x<incomingCols&&point.y<incomingRows;
+      if(!insidePoint(scene.spawn)||!insidePoint(scene.goal)) throw new Error("Scene spawn and goal must be integer coordinates inside the world");
+      if(scene.walls.length>300||scene.walls.some(wall=>!insidePoint(wall))) throw new Error("Scene walls must be valid integer coordinates inside the world (maximum 300)");
+      const wallKeys=scene.walls.map(wall=>wall.x+","+wall.y);
+      if(new Set(wallKeys).size!==wallKeys.length) throw new Error("Scene contains duplicate walls");
+      if(wallKeys.includes(scene.spawn.x+","+scene.spawn.y)||wallKeys.includes(scene.goal.x+","+scene.goal.y)) throw new Error("Scene wall overlaps spawn or goal");
       const incomingScript=scene.script===undefined?[]:scene.script;
       const incomingTrace=scene.trace===undefined?[]:scene.trace;
-      if(!Array.isArray(incomingScript)||incomingScript.length>10000||incomingScript.some(direction=>!["up","down","left","right"].includes(direction))) throw new Error("Invalid VM script: expected up/down/left/right commands");
-      if(!Array.isArray(incomingTrace)||incomingTrace.length!==incomingScript.length||incomingTrace.some(point=>!point||!Number.isSafeInteger(point.x)||!Number.isSafeInteger(point.y))) throw new Error("Invalid VM state trace: expected one integer coordinate per move");
+      if(!Array.isArray(incomingScript)||incomingScript.length>10000||incomingScript.some(direction=>!["up","down","left","right"].includes(direction))) throw new Error("Invalid VM script: expected up/down/left/right commands (maximum 10000)");
+      if(!Array.isArray(incomingTrace)||incomingTrace.length!==incomingScript.length||incomingTrace.some(point=>!insidePoint(point))) throw new Error("Invalid VM state trace: expected one in-world integer coordinate per move");
       const declarations=[
         "# Imported scene exported by the Zenvora VM",
         "define game_width := "+scene.world.width,
