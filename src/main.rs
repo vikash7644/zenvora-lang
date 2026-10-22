@@ -1146,6 +1146,42 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let arg_len = args.len();
     let arity = |expected: usize| if arg_len == expected { Ok(()) } else { Err(format!("builtin '{name}' expects {expected} argument(s), got {arg_len}")) };
     match name {
+        "input_step" => {
+            arity(9)?;
+            let (x, y, width, height) = match (&args[0], &args[1], &args[6], &args[7]) {
+                (Value::Int(x), Value::Int(y), Value::Int(width), Value::Int(height)) => (*x, *y, *width, *height),
+                _ => return Err("type error: input_step expects integer x, y, width, height".into()),
+            };
+            let (left, right, up, down) = match (&args[2], &args[3], &args[4], &args[5]) {
+                (Value::Bool(left), Value::Bool(right), Value::Bool(up), Value::Bool(down)) => (*left, *right, *up, *down),
+                _ => return Err("type error: input_step buttons must be booleans".into()),
+            };
+            let direction = if right != left {
+                if right { Some("right") } else { Some("left") }
+            } else if down != up {
+                if down { Some("down") } else { Some("up") }
+            } else {
+                None
+            };
+            let Some(direction) = direction else {
+                if width <= 0 || height <= 0 || width > 10_000 || height > 10_000
+                    || width.checked_mul(height).is_none_or(|area| area > 1_000_000) {
+                    return Err("input_step world dimensions must be positive, at most 10000 per axis, and at most 1000000 cells".into());
+                }
+                if x < 0 || y < 0 || x >= width || y >= height {
+                    return Err("input_step player position is outside the world".into());
+                }
+                let mut result = std::collections::BTreeMap::new();
+                result.insert("x".to_string(), Value::Int(x));
+                result.insert("y".to_string(), Value::Int(y));
+                result.insert("moved".to_string(), Value::Bool(false));
+                return Ok(Value::Map(result));
+            };
+            builtin_unchecked("grid_step", vec![
+                Value::Int(x), Value::Int(y), Value::Str(direction.to_string()),
+                Value::Int(width), Value::Int(height), args[8].clone(),
+            ])
+        }
         "grid_step" => {
             arity(6)?;
             let (x, y, width, height) = match (&args[0], &args[1], &args[3], &args[4]) {
