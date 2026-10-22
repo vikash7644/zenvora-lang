@@ -17,6 +17,8 @@ required = [
     'LEVEL BUILT', 'Duplicate declaration', 'overlaps spawn or goal',
     'id="play-vm-script"', 'VM SCRIPT PASSED', 'incomingScript', 'incomingTrace', 'VM STATE TRACE MISMATCH',
     'declarations.join("\\n")',
+    'Scene contains duplicate walls', 'Scene wall overlaps spawn or goal',
+    'Scene walls must be valid integer coordinates', 'Scene spawn and goal must be integer coordinates',
 ]
 missing = [item for item in required if item not in source]
 if missing:
