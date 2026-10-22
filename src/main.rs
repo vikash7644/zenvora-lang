@@ -1156,6 +1156,30 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 (Value::Bool(left), Value::Bool(right), Value::Bool(up), Value::Bool(down)) => (*left, *right, *up, *down),
                 _ => return Err("type error: input_step buttons must be booleans".into()),
             };
+            if width <= 0 || height <= 0 || width > 10_000 || height > 10_000
+                || width.checked_mul(height).is_none_or(|area| area > 1_000_000) {
+                return Err("input_step world dimensions must be positive, at most 10000 per axis, and at most 1000000 cells".into());
+            }
+            if x < 0 || y < 0 || x >= width || y >= height {
+                return Err("input_step player position is outside the world".into());
+            }
+            let Value::Array(walls) = &args[8] else {
+                return Err("type error: input_step walls must be an array of coordinate strings".into());
+            };
+            for wall in walls {
+                let Value::Str(coordinate) = wall else {
+                    return Err("type error: input_step wall coordinates must be strings like \"3,2\"".into());
+                };
+                let Some((wall_x, wall_y)) = coordinate.split_once(',') else {
+                    return Err("input_step wall coordinates must use the \"x,y\" format".into());
+                };
+                let (Ok(wall_x), Ok(wall_y)) = (wall_x.parse::<i64>(), wall_y.parse::<i64>()) else {
+                    return Err("input_step wall coordinates must contain integers".into());
+                };
+                if wall_x < 0 || wall_y < 0 || wall_x >= width || wall_y >= height {
+                    return Err("input_step wall coordinates must be inside the world".into());
+                }
+            }
             let direction = if right != left {
                 if right { Some("right") } else { Some("left") }
             } else if down != up {
