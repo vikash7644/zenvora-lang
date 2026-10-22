@@ -5143,6 +5143,7 @@ mod game_builtin_tests {
     #[test]
     fn input_step_rejects_non_boolean_button_snapshots() {
         assert!(execute("show input_step(0, 0, 1, false, false, false, 2, 2, array())").unwrap_err().contains("buttons must be booleans"));
+        assert!(execute("show input_step(0, 0, false, false, false, false, 2, 2, array(\"bad\"))").unwrap_err().contains("x,y format"));
     }
 
     #[test]
