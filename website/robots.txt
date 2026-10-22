@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vikash7644.github.io/zenvora-lang/sitemap.xml
