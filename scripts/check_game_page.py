@@ -55,4 +55,13 @@ for declaration in ('grid_step(', 'show "script"', 'show "state"', 'show "down"'
     if declaration not in scripted_source.read_text(encoding="utf-8"):
         raise SystemExit(f"Missing Zenvora scripted-game command: {declaration}")
 
-print("Browser game checks passed: Canvas, Zenvora level/script bridge, VM scene import, source fixtures, and JavaScript syntax valid.")
+input_source = Path(__file__).resolve().parents[1] / "examples" / "game-2d-input.zv"
+if not input_source.is_file():
+    raise SystemExit("Missing Zenvora VM input-snapshot fixture")
+input_text = input_source.read_text(encoding="utf-8")
+for declaration in ("input_step(", "right+down (horizontal priority)", "right into wall",
+                    "left+right (cancelled)", "up+down (cancelled)"):
+    if declaration not in input_text:
+        raise SystemExit(f"Missing Zenvora VM input-snapshot coverage: {declaration}")
+
+print("Browser game checks passed: Canvas, Zenvora level/script bridge, VM scene import, source/input fixtures, and JavaScript syntax valid.")
