@@ -5122,6 +5122,16 @@ mod game_builtin_tests {
     }
 
     #[test]
+    fn grid_step_validates_all_wall_coordinates_even_after_a_hit() {
+        assert!(execute("show grid_step(1, 1, \"right\", 4, 4, array(\"2,1\", \"bad\"))")
+            .unwrap_err().contains("x,y format"));
+        assert!(execute("show grid_step(1, 1, \"right\", 4, 4, array(\"2,1\", \"9,9\"))")
+            .unwrap_err().contains("inside the world"));
+        assert!(execute("show grid_step(1, 1, \"right\", 4, 4, array(\"2,q\"))")
+            .unwrap_err().contains("must contain integers"));
+    }
+
+    #[test]
     fn grid_step_rejects_invalid_directions_and_worlds() {
         assert!(execute("show grid_step(0, 0, \"north\", 2, 2, array())").unwrap_err().contains("direction must be up, down, left, or right"));
         assert!(execute("show grid_step(0, 0, \"right\", 0, 2, array())").unwrap_err().contains("world dimensions"));
