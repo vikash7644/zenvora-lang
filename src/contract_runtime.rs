@@ -280,6 +280,20 @@ mod tests {
     }
 
     #[test]
+    fn block_replay_rolls_back_all_prior_calls_when_a_later_call_fails() {
+        use super::{replay_block, ContractCall};
+        let calls = vec![
+            ContractCall { invocation: "call increment(3)".into(), mode: AccessMode::Action, gas_limit: 100_000 },
+            ContractCall { invocation: "call missing_method(4)".into(), mode: AccessMode::Action, gas_limit: 100_000 },
+        ];
+        let mut state = ContractState::new();
+        let before = state.state_root();
+        let error = replay_block(COUNTER, "counter", &calls, &mut state, [0; 32]).unwrap_err();
+        assert!(error.contains("contract call 2 failed during replay"), "{error}");
+        assert_eq!(state.state_root(), before, "failed replay must not publish the first call's state");
+    }
+
+    #[test]
     fn view_execution_cannot_commit_or_invoke_an_action() {
         let mut state = ContractState::new();
         let before = state.state_root();
