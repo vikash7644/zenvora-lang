@@ -99,6 +99,8 @@ jobs:
           grep -F 'unsupported bytecode opcode: nested_function' parser-output.txt
           ! grep -F 'ZENVORA_BUILTIN_CALL_FAIL' parser-output.txt
           grep -F 'undefined function: missing' parser-output.txt
+          grep -F 'undefined variable: missing_value' parser-output.txt
+          grep -F 'assignment to undefined variable: ghost' parser-output.txt
           grep -F 'function argument count mismatch: one' parser-output.txt
           grep -F 'built-in argument count mismatch: len' parser-output.txt
           grep -F 'built-in argument count mismatch: sum' parser-output.txt
