@@ -53,6 +53,7 @@ run('define count := 0\nrepeat count < 5 {\n count := count + 1\n if count == 2 
 run('show multiply(6, 7)\nfn multiply(a, b) {\n return a * b\n}', "42", "function declaration and return");
 run('define items := array(10, 20, 30)\nshow get(items, 1)\nshow len(items)\ndefine user := map("name", "Zenvora", "level", 8)\nshow get(user, "name")\nshow keys(user)', "20\n3\nZenvora\n[level, name]", "arrays and maps");
 run('show type_of(42)\nshow to_string(true)\nshow abs(-15)\nshow min(7, 3)\nshow range(1, 4)', "integer\ntrue\n15\n3\n[1, 2, 3]", "standard library helpers");
+run('define weird := map("__proto__", 7, "constructor", 8)\nshow get(weird, "__proto__")\nshow get(weird, "constructor")\nshow contains(weird, "toString")\nshow keys(weird)', "7\n8\nfalse\n[__proto__, constructor]", "maps safely handle prototype-named keys");
 
 elements.code.value = "show 1 / 0";
 elements.run.click();
