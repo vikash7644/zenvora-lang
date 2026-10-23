@@ -74,6 +74,8 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 
 - Browser playground map handling was hardened so keys such as `__proto__` and `constructor` are stored as ordinary map keys and inherited object properties are not mistaken for user keys. Regression coverage added in commit `c4434455c810e99e44f23eeb99f37c2c51db218b`; playground CI passed on that commit (run [39934086610](https://github.com/vikash7644/zenvora-lang/actions/runs/39934086610)). This remains a browser syntax demo, not the real Rust compiler backend.
 
+- Added a contract replay regression test proving that if a later call fails, earlier candidate writes are not published; commit `c5a909b578b11cf0ba5e0e504aecb4493d3a1344`. CI for this new commit is pending, so this test is not yet recorded as passing.
+
 ## Required CI evidence before calling the current milestone complete
 
 1. Main workflow is green on the latest `main` SHA, including `cargo check --locked --all-targets`, Clippy, all tests, optimized release build, `cargo package --locked`, examples, CLI checks, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor metadata/regex validation.
