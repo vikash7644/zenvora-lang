@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn invalid_or_reserved_state_names_are_rejected() {
         for state_decl in ["state true := 0", "state bad-name := 0", "state 9count := 0"] {
-            let source = format!("contract Counter {{\\n{state_decl}\\naction increment(amount) {{\\nreturn amount\\n}}\\n}}\\n");
+            let source = format!("contract Counter {{\n{state_decl}\naction increment(amount) {{\nreturn amount\n}}\n}}\n");
             let mut state = ContractState::new();
             let error = execute(&source, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap_err();
             assert!(error.contains("invalid contract state variable name"), "declaration {state_decl}: {error}");
