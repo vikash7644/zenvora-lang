@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn invalid_or_reserved_method_names_are_rejected() {
         for method_decl in ["action true() {", "action bad-name() {", "action () {"] {
-            let source = format!("contract Counter {{\\nstate count := 0\\n{method_decl}\\nreturn 1\\n}}\\n}}\\n");
+            let source = format!("contract Counter {{\nstate count := 0\n{method_decl}\nreturn 1\n}}\n}}\n");
             let mut state = ContractState::new();
             let error = execute(&source, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap_err();
             assert!(error.contains("invalid action name"), "declaration {method_decl}: {error}");
