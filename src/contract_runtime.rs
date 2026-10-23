@@ -198,7 +198,7 @@ fn prepare_source(
             if let Some(header) = line.strip_prefix(prefix).and_then(|v| v.strip_suffix('{')) {
                 let name = header.split_once('(').map(|(name, _)| name.trim())
                     .ok_or_else(|| format!("invalid {kind} header: {line}"))?;
-                if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                if !valid_contract_identifier(name) {
                     return Err(format!("invalid {kind} name in contract header: {line}"));
                 }
                 if methods.insert(name.to_string(), kind).is_some() {
@@ -310,6 +310,17 @@ mod tests {
         let error = replay_block(COUNTER, "counter", &calls, &mut state, [0; 32]).unwrap_err();
         assert!(error.contains("contract call 2 failed during replay"), "{error}");
         assert_eq!(state.state_root(), before, "failed replay must not publish the first call's state");
+    }
+
+    #[test]
+    fn invalid_or_reserved_method_names_are_rejected() {
+        for method_decl in ["action true() {", "action bad-name() {", "action () {"] {
+            let source = format!("contract Counter {{\\nstate count := 0\\n{method_decl}\\nreturn 1\\n}}\\n}}\\n");
+            let mut state = ContractState::new();
+            let error = execute(&source, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap_err();
+            assert!(error.contains("invalid action name"), "declaration {method_decl}: {error}");
+            assert!(state.is_empty());
+        }
     }
 
     #[test]
