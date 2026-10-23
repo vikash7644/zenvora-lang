@@ -1157,4 +1157,26 @@ JUMP 2
         ).unwrap();
         assert!(verify_v2_file(&call_into_body).unwrap_err().contains("undeclared function"));
     }
+
+    #[test]
+    fn reserved_parameter_identifiers_are_rejected() {
+        for reserved in [
+            "true", "false", "and", "or", "not", "define", "show", "print",
+            "if", "otherwise", "repeat", "break", "continue", "return", "call",
+            "fn", "use", "contract", "state", "action", "view",
+        ] {
+            assert!(
+                !valid_identifier(reserved),
+                "reserved word unexpectedly accepted as an identifier: {reserved}"
+            );
+        }
+
+        for valid in ["amount", "_value", "token2", "my_function"] {
+            assert!(
+                valid_identifier(valid),
+                "valid identifier unexpectedly rejected: {valid}"
+            );
+        }
+    }
+
 }
