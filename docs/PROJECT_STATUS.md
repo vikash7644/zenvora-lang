@@ -72,6 +72,8 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 - Main CI passed on `ee833344bbb4a327532b8b2cceee9c283fcba841` (run [39933749386](https://github.com/vikash7644/zenvora-lang/actions/runs/39933749386)).
 - The bounded Bytecode v2 fuzz workflow for that same SHA is still in progress (run [39933749441](https://github.com/vikash7644/zenvora-lang/actions/runs/39933749441)); do not mark the fuzz gate green until its conclusion is successful.
 
+- Browser playground map handling was hardened so keys such as `__proto__` and `constructor` are stored as ordinary map keys and inherited object properties are not mistaken for user keys. Regression coverage added in commit `c4434455c810e99e44f23eeb99f37c2c51db218b`; playground CI passed on that commit (run [39934086610](https://github.com/vikash7644/zenvora-lang/actions/runs/39934086610)). This remains a browser syntax demo, not the real Rust compiler backend.
+
 ## Required CI evidence before calling the current milestone complete
 
 1. Main workflow is green on the latest `main` SHA, including `cargo check --locked --all-targets`, Clippy, all tests, optimized release build, `cargo package --locked`, examples, CLI checks, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor metadata/regex validation.
