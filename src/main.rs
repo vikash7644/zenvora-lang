@@ -1171,7 +1171,7 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
                     return Err("type error: input_step wall coordinates must be strings like \"3,2\"".into());
                 };
                 let Some((wall_x, wall_y)) = coordinate.split_once(',') else {
-                    return Err("input_step wall coordinates must use the \"x,y\" format".into());
+                    return Err("input_step wall coordinates must use the x,y format".into());
                 };
                 let (Ok(wall_x), Ok(wall_y)) = (wall_x.parse::<i64>(), wall_y.parse::<i64>()) else {
                     return Err("input_step wall coordinates must contain integers".into());
@@ -1244,7 +1244,7 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
                     return Err("type error: grid_step wall coordinates must be strings like \"3,2\"".into());
                 };
                 let Some((wall_x, wall_y)) = coordinate.split_once(',') else {
-                    return Err("grid_step wall coordinates must use the \"x,y\" format".into());
+                    return Err("grid_step wall coordinates must use the x,y format".into());
                 };
                 let (Ok(wall_x), Ok(wall_y)) = (wall_x.parse::<i64>(), wall_y.parse::<i64>()) else {
                     return Err("grid_step wall coordinates must contain integers".into());
