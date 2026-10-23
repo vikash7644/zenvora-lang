@@ -158,6 +158,9 @@ fn prepare_source(
             let (name, initial) = rest.split_once(":=")
                 .ok_or_else(|| format!("invalid state declaration: {line}"))?;
             let name = name.trim();
+            if state_vars.iter().any(|(existing, _): &(String, String)| existing == name) {
+                return Err(format!("duplicate contract state variable '{name}'"));
+            }
             let initial = initial.trim().trim_end_matches(';').trim();
             let stored = overlay.get(state, name)?.map(|bytes| {
                 std::str::from_utf8(bytes).map(str::to_owned)
@@ -291,6 +294,15 @@ mod tests {
         let error = replay_block(COUNTER, "counter", &calls, &mut state, [0; 32]).unwrap_err();
         assert!(error.contains("contract call 2 failed during replay"), "{error}");
         assert_eq!(state.state_root(), before, "failed replay must not publish the first call's state");
+    }
+
+    #[test]
+    fn duplicate_state_declarations_are_rejected_without_mutating_storage() {
+        let source = "contract Counter {\\nstate count := 0\\nstate count := 9\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let mut state = ContractState::new();
+        let error = execute(&source, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap_err();
+        assert!(error.contains("duplicate contract state variable 'count'"), "{error}");
+        assert!(state.is_empty());
     }
 
     #[test]
