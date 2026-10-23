@@ -1,6 +1,6 @@
 # Zenvora Lang — Mission Status and Completion Gate
 
-Last audited: 2026-10-20  
+Last audited: 2026-10-23  
 Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
@@ -65,10 +65,17 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 - VS Code editor source is in `editors/vscode/`; the extension is not yet published to the Marketplace, and GitHub Linguist recognition remains an upstream task.
 - Bounded Bytecode v2 fuzz passed on compiler-source SHA `38a3afe778aeb3e68693813b448a4b2d52375473` (run [39368477353](https://github.com/vikash7644/zenvora-lang/actions/runs/39368477353)). CI caught and helped fix a contract artifact test-fixture newline bug and an incorrect persistent CLI expected value. Stable v1 remains blocked by signed contract transactions/fees, chain replay integration, real-compiler playground, production ABI/deployment, and independent security review.
 
+## Latest verification (2026-10-23)
+
+- Commit `fc3ea24e7b96ed7b62a5c44b29b7b986a37de173` added a reserved-parameter-identifier regression test but its first CI run failed because the test referenced the private helper without the `super::` module path.
+- Fixed the test scope in commit `ee833344bbb4a327532b8b2cceee9c283fcba841`.
+- Main CI passed on `ee833344bbb4a327532b8b2cceee9c283fcba841` (run [39933749386](https://github.com/vikash7644/zenvora-lang/actions/runs/39933749386)).
+- The bounded Bytecode v2 fuzz workflow for that same SHA is still in progress (run [39933749441](https://github.com/vikash7644/zenvora-lang/actions/runs/39933749441)); do not mark the fuzz gate green until its conclusion is successful.
+
 ## Required CI evidence before calling the current milestone complete
 
 1. Main workflow is green on the latest `main` SHA, including `cargo check --locked --all-targets`, Clippy, all tests, optimized release build, `cargo package --locked`, examples, CLI checks, bytecode v1/v2 smoke tests, compiler API smoke tests, and editor metadata/regex validation.
-2. Bytecode v2 fuzz workflow is green on that same SHA (or its explicitly documented matching source SHA). Historical run passed on `d61a4a37d71e8a2d3fde8dc0b7fb5e33b93fa95b`; current source SHA `def75b956aa4f52188119fc09d5c9edb2bc9423f` is still pending.
+2. Bytecode v2 fuzz workflow is green on that same SHA (or its explicitly documented matching source SHA). Historical run passed on `d61a4a37d71e8a2d3fde8dc0b7fb5e33b93fa95b`; current source SHA `ee833344bbb4a327532b8b2cceee9c283fcba841` is still pending.
 3. Any red check has a root cause, a committed fix, and a rerun showing green.
 4. No claim of production readiness based only on unit tests or a queued workflow.
 
