@@ -70,11 +70,13 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 - Commit `fc3ea24e7b96ed7b62a5c44b29b7b986a37de173` added a reserved-parameter-identifier regression test but its first CI run failed because the test referenced the private helper without the `super::` module path.
 - Fixed the test scope in commit `ee833344bbb4a327532b8b2cceee9c283fcba841`.
 - Main CI passed on `ee833344bbb4a327532b8b2cceee9c283fcba841` (run [39933749386](https://github.com/vikash7644/zenvora-lang/actions/runs/39933749386)).
-- The bounded Bytecode v2 fuzz workflow for that same SHA is still in progress (run [39933749441](https://github.com/vikash7644/zenvora-lang/actions/runs/39933749441)); do not mark the fuzz gate green until its conclusion is successful.
+- The bounded Bytecode v2 fuzz workflow later completed successfully on compiler-source SHA `ee833344bbb4a327532b8b2cceee9c283fcba841` (run [39933749441](https://github.com/vikash7644/zenvora-lang/actions/runs/39933749441)). This is a successful fuzz result for that source SHA, not for every later commit.
 
 - Browser playground map handling was hardened so keys such as `__proto__` and `constructor` are stored as ordinary map keys and inherited object properties are not mistaken for user keys. Regression coverage added in commit `c4434455c810e99e44f23eeb99f37c2c51db218b`; playground CI passed on that commit (run [39934086610](https://github.com/vikash7644/zenvora-lang/actions/runs/39934086610)). This remains a browser syntax demo, not the real Rust compiler backend.
 
 - Added a contract replay regression test proving that if a later call fails, earlier candidate writes are not published; commit `c5a909b578b11cf0ba5e0e504aecb4493d3a1344`. CI for this new commit is pending, so this test is not yet recorded as passing.
+
+- Latest verification update: main CI passed on `525ad60fcd492a84d0dbdacb61c79831a4a0aa21` (run [39935401105](https://github.com/vikash7644/zenvora-lang/actions/runs/39935401105)). This includes the duplicate contract state declaration regression test; duplicate declarations are rejected and the test asserts storage remains unchanged. The earlier CI for the immediate implementation commit was cancelled by the subsequent fixture correction, so use the successful run on `525ad60f...` as evidence.
 
 ## Required CI evidence before calling the current milestone complete
 
