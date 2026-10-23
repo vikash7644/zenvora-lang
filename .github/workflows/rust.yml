@@ -2,7 +2,7 @@ name: Zenvora Lang CI
 
 on:
   push:
-    branches: [main, chain-lang-integration]
+    branches: [main, chain-lang-integration, self-hosted-compiler-foundation]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -63,6 +63,102 @@ jobs:
 
       - name: Run Zenvora Lang language tour
         run: cargo run --locked -- examples/zenvora-language-tour.zv
+
+      - name: Export Zenvora-authored game level through the VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./target/release/zv examples/game-2d-level.zv > /tmp/zenvora-game-level-vm.txt
+          grep -Fx 'ZENVORA_GAME_LEVEL_V1' /tmp/zenvora-game-level-vm.txt
+          python scripts/export_game_level.py examples/game-2d-level.zv /tmp/zenvora-game-scene.json --zv ./target/release/zv
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          scene = json.loads(Path('/tmp/zenvora-game-scene.json').read_text())
+          assert scene['format'] == 'ZENVORA_GAME_SCENE_V1'
+          assert scene['world'] == {'width': 10, 'height': 8}
+          assert scene['spawn'] == {'x': 1, 'y': 1}
+          assert scene['goal'] == {'x': 8, 'y': 6}
+          assert len(scene['walls']) == 9
+          print('Zenvora VM -> validated game scene JSON: PASS')
+          PY
+
+      - name: Execute Zenvora-authored game script through the VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./target/release/zv examples/game-2d-scripted.zv > /tmp/zenvora-game-source-output.txt
+          ./target/release/zv --emit-bytecode-v2 examples/game-2d-scripted.zv /tmp/zenvora-game-script.zv2b
+          ./target/release/zv --run-bytecode /tmp/zenvora-game-script.zv2b > /tmp/zenvora-game-bytecode-output.txt
+          diff -u /tmp/zenvora-game-source-output.txt /tmp/zenvora-game-bytecode-output.txt
+          python scripts/export_game_level.py examples/game-2d-scripted.zv /tmp/zenvora-scripted-scene.json --zv ./target/release/zv
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          scene = json.loads(Path('/tmp/zenvora-scripted-scene.json').read_text())
+          assert scene['format'] == 'ZENVORA_GAME_SCENE_V1'
+          assert len(scene['script']) == 12, scene['script']
+          assert scene['script'][:3] == ['down'] * 3
+          assert scene['script'][3:10] == ['right'] * 7
+          assert scene['script'][10:] == ['down'] * 2
+          assert len(scene['trace']) == len(scene['script']) == 12
+          x, y = scene['spawn']['x'], scene['spawn']['y']
+          for direction, state in zip(scene['script'], scene['trace']):
+              x += {'left': -1, 'right': 1}.get(direction, 0)
+              y += {'up': -1, 'down': 1}.get(direction, 0)
+              assert state == {'x': x, 'y': y}, (direction, state, x, y)
+          assert scene['trace'][-1] == scene['goal']
+          print('Zenvora source -> grid_step VM builtin -> per-frame state trace -> validated Canvas scene: PASS')
+          PY
+
+      - name: Run 2D grid game smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-2d-grid.zv > /tmp/zenvora-2d-grid-game.txt
+          grep -Fx 'ZENVORA 2D GRID QUEST' /tmp/zenvora-2d-grid-game.txt
+          grep -Fx 'LEVEL COMPLETE' /tmp/zenvora-2d-grid-game.txt
+          cat /tmp/zenvora-2d-grid-game.txt
+
+      - name: Run 3D wireframe smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-3d-wireframe.zv > /tmp/zenvora-3d-wireframe.txt
+          grep -Fx 'ZENVORA 3D WIREFRAME' /tmp/zenvora-3d-wireframe.txt
+          grep -Fx '3D SCENE COMPLETE' /tmp/zenvora-3d-wireframe.txt
+          cat /tmp/zenvora-3d-wireframe.txt
+
+      - name: Verify VM game input snapshots and bytecode v2 parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-2d-input.zv > /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'right+down (horizontal priority)' /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'right into wall' /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'left+right (cancelled)' /tmp/zenvora-2d-input-source.txt
+          grep -Fx 'up+down (cancelled)' /tmp/zenvora-2d-input-source.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 examples/game-2d-input.zv /tmp/zenvora-2d-input.zv2b
+          cargo run --locked --quiet -- --run-bytecode /tmp/zenvora-2d-input.zv2b > /tmp/zenvora-2d-input-bytecode.txt
+          diff -u /tmp/zenvora-2d-input-source.txt /tmp/zenvora-2d-input-bytecode.txt
+
+      - name: Verify 2D game source and bytecode v2 output parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-2d-grid.zv > /tmp/zenvora-2d-source.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 examples/game-2d-grid.zv /tmp/zenvora-2d-grid.zv2b
+          cargo run --locked --quiet -- --run-bytecode /tmp/zenvora-2d-grid.zv2b > /tmp/zenvora-2d-bytecode.txt
+          diff -u /tmp/zenvora-2d-source.txt /tmp/zenvora-2d-bytecode.txt
+
+      - name: Verify 3D wireframe source and bytecode v2 output parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- examples/game-3d-wireframe.zv > /tmp/zenvora-3d-source.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 examples/game-3d-wireframe.zv /tmp/zenvora-3d-wireframe.zv2b
+          cargo run --locked --quiet -- --run-bytecode /tmp/zenvora-3d-wireframe.zv2b > /tmp/zenvora-3d-bytecode.txt
+          diff -u /tmp/zenvora-3d-source.txt /tmp/zenvora-3d-bytecode.txt
 
       - name: Run loop-control example
         run: cargo run --locked -- examples/loops.zv
@@ -197,6 +293,9 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22"
+
+      - name: Validate graphical browser game and JavaScript syntax
+        run: python scripts/check_game_page.py
 
       - name: Package installable VS Code extension
         working-directory: editors/vscode

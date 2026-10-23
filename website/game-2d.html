@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b12">
+<meta name="description" content="Play a small graphical Zenvora 2D grid game with keyboard or touch controls.">
+<title>Zenvora 2D Game Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#080b12;--panel:#111a29;--line:#29364a;--text:#f3f6fc;--muted:#9aa9bc;--orange:#ff9e57;--red:#ff5c65;--green:#8de3b0;--blue:#8da9ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% 0%,#192748 0,transparent 42%),var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(920px,calc(100% - 28px));margin:auto}.nav{height:68px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ffffff12}.brand{font-weight:850;letter-spacing:.06em}.nav a{color:#c3d0e4;text-decoration:none;font-size:14px}.hero{padding:36px 0 18px}.tag{color:var(--orange);font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase}.hero h1{font-size:clamp(32px,6vw,52px);letter-spacing:-.05em;line-height:1.08;margin:9px 0}.hero p{color:var(--muted);max-width:680px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;align-items:start}.panel{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:linear-gradient(145deg,#111a29,#0d121d)}.panelhead{padding:12px 15px;display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);font-size:13px;color:#cbd6e8;font-weight:750}.pill{border:1px solid #3a4961;border-radius:7px;padding:3px 7px;font-size:11px;color:#b9c8df}canvas{display:block;width:100%;height:auto;aspect-ratio:5/4;background:#090e17;touch-action:manipulation} .below{padding:12px 15px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}.actions{display:flex;gap:8px;flex-wrap:wrap}button{font:inherit;cursor:pointer;color:var(--text);background:#ffffff08;border:1px solid #3a4961;border-radius:10px;padding:9px 12px}button:hover,button:focus-visible{border-color:var(--blue);outline:none}.primary{background:linear-gradient(110deg,var(--red),var(--orange));border-color:transparent;color:#15131a;font-weight:800}.side{padding:16px}.side h2{font-size:15px;margin:0 0 8px}.side p,.side li{font-size:13px;color:var(--muted)}.side ul{padding-left:18px;margin:8px 0}.status{color:var(--green);font-weight:750;min-height:24px}.dpad{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}.dpad button{padding:12px 0;font-size:18px;touch-action:manipulation}.dpad .empty{visibility:hidden}.footer{padding:24px 0 36px;color:#8290a6;font-size:12px}.footer a{color:#c3d0e4}@media(max-width:700px){.layout{grid-template-columns:1fr}.side{order:2}.dpad{max-width:260px;margin-inline:auto}.hero{padding-top:26px}}
+</style>
+</head>
+<body>
+<header class="wrap nav"><div class="brand">◈ ZENVORA <span style="color:#9aa9bc;font-weight:500">/ GAME LAB</span></div><a href="./playground.html">← Language playground</a></header>
+<main class="wrap">
+<section class="hero"><div class="tag">Playable browser prototype · 2D</div><h1>Grid Quest</h1><p>Move the glowing player to the green goal. Avoid the red blocks. The level can be edited in Zenvora syntax and previewed here. For the compiler-backed path, run `python scripts/export_game_level.py examples/game-2d-level.zv game-scene.json --zv ./target/release/zv` in the repository, then import `game-scene.json` below. That export executes the `.zv` program through the real Zenvora VM and validates a versioned scene descriptor. The browser handles input, collision, and Canvas drawing; arbitrary Zenvora game functions are not yet run by the graphical runtime.</p></section>
+<section class="panel" style="padding:16px;margin:0 0 16px">
+<h2 style="font-size:16px;margin:0 0 6px">Zenvora source → game runtime</h2>
+<p style="color:var(--muted);font-size:13px;margin:0 0 10px">Edit the supported level declarations below and press Build level. The Zenvora source controls the level dimensions, spawn, goal, and wall coordinates; the browser runtime handles input, collision, and canvas rendering. This is a level-source bridge, not yet execution of arbitrary Zenvora functions inside the graphical VM.</p>
+<textarea id="zv-source" spellcheck="false" autocapitalize="off" autocomplete="off" style="display:block;width:100%;min-height:250px;resize:vertical;background:#090e17;color:#dce6fa;border:1px solid var(--line);border-radius:10px;padding:12px;font:13px/1.7 ui-monospace,monospace"># Zenvora 2D Grid Quest level definition.
+define game_width := 10
+define game_height := 8
+define player_start_x := 1
+define player_start_y := 1
+define goal_x := 8
+define goal_y := 6
+define wall_1 := "3,1"
+define wall_2 := "3,2"
+define wall_3 := "3,3"
+define wall_4 := "5,3"
+define wall_5 := "6,3"
+define wall_6 := "7,3"
+define wall_7 := "5,5"
+define wall_8 := "2,5"
+define wall_9 := "2,6"</textarea>
+<div class="actions" style="padding:12px 0 0;background:transparent;border:0;align-items:center">
+<button id="build-level" class="primary">Build level from source</button>
+<button id="play-vm-script" disabled>Play Zenvora VM script</button>
+<label style="font-size:12px;color:var(--muted)">Load VM-exported scene JSON <input id="scene-file" type="file" accept="application/json,.json" style="max-width:210px;font-size:12px"></label>
+<span id="source-status" class="status" aria-live="polite">LEVEL SOURCE READY</span>
+</div>
+</section>
+<section class="layout">
+<div class="panel">
+<div class="panelhead"><span>GAME VIEWPORT</span><span class="pill" id="frame">FRAME 0</span></div>
+<canvas id="game" width="600" height="480" role="img" aria-label="Grid game. Use arrow keys or WASD to move the blue player to the green goal."></canvas>
+<div class="below"><span id="status" class="status" aria-live="polite">Find the goal.</span><div class="actions"><button id="reset" class="primary">Restart game</button></div></div>
+</div>
+<aside class="panel side"><h2>Controls</h2><p>Keyboard: Arrow keys or WASD. On mobile, use the buttons below.</p><ul><li>One tile per press</li><li>Walls and obstacles block movement</li><li>Reach the green goal to win</li></ul><div class="dpad" aria-label="Touch controls"><button class="empty" tabindex="-1" aria-hidden="true">·</button><button data-dir="up" aria-label="Move up">↑</button><button class="empty" tabindex="-1" aria-hidden="true">·</button><button data-dir="left" aria-label="Move left">←</button><button data-dir="down" aria-label="Move down">↓</button><button data-dir="right" aria-label="Move right">→</button></div><p>Move count: <strong id="moves">0</strong></p></aside>
+</section>
+</main>
+<footer class="wrap footer">Zenvora Lang project · Experimental game prototype · <a href="https://github.com/vikash7644/zenvora-lang">Source repository</a></footer>
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const status = document.getElementById("status");
+  const frameLabel = document.getElementById("frame");
+  const movesLabel = document.getElementById("moves");
+  let cols = 10, rows = 8, tile = 60;
+  let start = {x:1,y:1}, goal = {x:8,y:6};
+  let walls = new Set(["3,1","3,2","3,3","5,3","6,3","7,3","5,5","2,5","2,6"]);
+  const sourceStatus = document.getElementById("source-status");
+  function parseLevel(source) {
+    const values = new Map();
+    for (const rawLine of source.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const match = line.match(/^define\s+([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(-?\d+|"[^"\n]*")\s*;?$/);
+      if (!match) throw new Error("Unsupported level declaration: " + line);
+      if (values.has(match[1])) throw new Error("Duplicate declaration: " + match[1]);
+      values.set(match[1], match[2].startsWith('"') ? match[2].slice(1,-1) : Number(match[2]));
+    }
+    const number = (key, fallback) => {
+      const value = values.has(key) ? values.get(key) : fallback;
+      if (!Number.isSafeInteger(value)) throw new Error(key + " must be an integer");
+      return value;
+    };
+    const nextCols=number("game_width",10), nextRows=number("game_height",8);
+    const nextStart={x:number("player_start_x",1),y:number("player_start_y",1)};
+    const nextGoal={x:number("goal_x",8),y:number("goal_y",6)};
+    if(nextCols<4||nextRows<4||nextCols>20||nextRows>16) throw new Error("World size must be 4–20 columns and 4–16 rows");
+    const inside=p=>p.x>=0&&p.y>=0&&p.x<nextCols&&p.y<nextRows;
+    if(!inside(nextStart)||!inside(nextGoal)) throw new Error("Spawn and goal must be inside the world");
+    const nextWalls=new Set();
+    for(const [key,value] of values) {
+      if(!/^wall_[A-Za-z0-9_]+$/.test(key)) continue;
+      if(typeof value!=="string"||!/^\d+,\d+$/.test(value)) throw new Error(key+' must be a string like "3,2"');
+      const [x,y]=value.split(",").map(Number), point={x,y};
+      if(!inside(point)) throw new Error(key+" is outside the world");
+      if((x===nextStart.x&&y===nextStart.y)||(x===nextGoal.x&&y===nextGoal.y)) throw new Error(key+" overlaps spawn or goal");
+      nextWalls.add(x+","+y);
+    }
+    cols=nextCols; rows=nextRows; tile=canvas.width/cols; canvas.height=rows*tile;
+    start=nextStart; goal=nextGoal; walls=nextWalls; reset();
+  }
+  let player = {...start}, frame = 0, moves = 0, won = false;
+  let vmScript = [], vmTrace = [], scriptRunId = 0;
+  const playScriptButton = document.getElementById("play-vm-script");
+  function draw() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "#090e17"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) {
+      ctx.fillStyle = ((x+y)%2===0) ? "#111a29" : "#0e1724";
+      ctx.fillRect(x*tile,y*tile,tile,tile);
+      ctx.strokeStyle = "#26364a"; ctx.lineWidth = 1;
+      ctx.strokeRect(x*tile+.5,y*tile+.5,tile-1,tile-1);
+      if(walls.has(x+","+y)) {
+        ctx.fillStyle="#ff5c65"; ctx.fillRect(x*tile+7,y*tile+7,tile-14,tile-14);
+        ctx.fillStyle="#ffb0a9"; ctx.fillRect(x*tile+13,y*tile+13,tile-26,tile-26);
+      }
+    }
+    ctx.fillStyle="#8de3b0"; ctx.beginPath(); ctx.roundRect(goal.x*tile+8,goal.y*tile+8,tile-16,tile-16,12); ctx.fill();
+    ctx.fillStyle="#123b32"; ctx.font="bold 28px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("★",goal.x*tile+30,goal.y*tile+30);
+    ctx.shadowColor="#8da9ff"; ctx.shadowBlur=18; ctx.fillStyle="#8da9ff";
+    ctx.beginPath(); ctx.roundRect(player.x*tile+8,player.y*tile+8,tile-16,tile-16,12); ctx.fill(); ctx.shadowBlur=0;
+    ctx.fillStyle="#111a29"; ctx.beginPath(); ctx.arc(player.x*tile+22,player.y*tile+25,3,0,Math.PI*2); ctx.arc(player.x*tile+38,player.y*tile+25,3,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle="#111a29"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(player.x*tile+30,player.y*tile+31,7,.15,Math.PI-.15); ctx.stroke();
+    frameLabel.textContent="FRAME "+frame; movesLabel.textContent=String(moves);
+  }
+  function step(direction) {
+    if(won) return;
+    const delta = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[direction];
+    if(!delta) return;
+    frame++;
+    const x=player.x+delta[0], y=player.y+delta[1];
+    if(x<0||y<0||x>=cols||y>=rows||walls.has(x+","+y)) {
+      status.textContent="Blocked — try another route.";
+    } else {
+      player={x,y}; moves++;
+      status.textContent="Moving…";
+      if(player.x===goal.x&&player.y===goal.y) {
+        won=true; status.textContent="LEVEL COMPLETE — you made it!";
+      }
+    }
+    draw();
+  }
+  function reset(){scriptRunId++;if(vmScript.length)playScriptButton.disabled=false;player={...start};frame=0;moves=0;won=false;status.textContent="Find the goal.";draw();}
+  const keyMap={ArrowUp:"up",w:"up",W:"up",ArrowDown:"down",s:"down",S:"down",ArrowLeft:"left",a:"left",A:"left",ArrowRight:"right",d:"right",D:"right"};
+  window.addEventListener("keydown",event=>{const dir=keyMap[event.key];if(dir){event.preventDefault();step(dir)}});
+  document.querySelectorAll("[data-dir]").forEach(button=>{
+    button.addEventListener("click",()=>step(button.dataset.dir));
+  });
+  document.getElementById("reset").addEventListener("click",reset);
+  document.getElementById("scene-file").addEventListener("change",async event=>{
+    const file=event.target.files&&event.target.files[0];
+    if(!file) return;
+    try {
+      const scene=JSON.parse(await file.text());
+      if(scene.format!=="ZENVORA_GAME_SCENE_V1"||!scene.world||!scene.spawn||!scene.goal||!Array.isArray(scene.walls)) throw new Error("Unsupported scene JSON format");
+      const isIntegerPoint=point=>point&&Number.isSafeInteger(point.x)&&Number.isSafeInteger(point.y);
+      const incomingCols=scene.world.width, incomingRows=scene.world.height;
+      if(!Number.isSafeInteger(incomingCols)||!Number.isSafeInteger(incomingRows)||incomingCols<4||incomingCols>20||incomingRows<4||incomingRows>16) throw new Error("Invalid scene world dimensions");
+      const insidePoint=point=>isIntegerPoint(point)&&point.x>=0&&point.y>=0&&point.x<incomingCols&&point.y<incomingRows;
+      if(!insidePoint(scene.spawn)||!insidePoint(scene.goal)) throw new Error("Scene spawn and goal must be integer coordinates inside the world");
+      if(scene.walls.length>300||scene.walls.some(wall=>!insidePoint(wall))) throw new Error("Scene walls must be valid integer coordinates inside the world (maximum 300)");
+      const wallKeys=scene.walls.map(wall=>wall.x+","+wall.y);
+      if(new Set(wallKeys).size!==wallKeys.length) throw new Error("Scene contains duplicate walls");
+      if(wallKeys.includes(scene.spawn.x+","+scene.spawn.y)||wallKeys.includes(scene.goal.x+","+scene.goal.y)) throw new Error("Scene wall overlaps spawn or goal");
+      const incomingScript=scene.script===undefined?[]:scene.script;
+      const incomingTrace=scene.trace===undefined?[]:scene.trace;
+      if(!Array.isArray(incomingScript)||incomingScript.length>10000||incomingScript.some(direction=>!["up","down","left","right"].includes(direction))) throw new Error("Invalid VM script: expected up/down/left/right commands (maximum 10000)");
+      if(!Array.isArray(incomingTrace)||incomingTrace.length!==incomingScript.length||incomingTrace.some(point=>!insidePoint(point))) throw new Error("Invalid VM state trace: expected one in-world integer coordinate per move");
+      const declarations=[
+        "# Imported scene exported by the Zenvora VM",
+        "define game_width := "+scene.world.width,
+        "define game_height := "+scene.world.height,
+        "define player_start_x := "+scene.spawn.x,
+        "define player_start_y := "+scene.spawn.y,
+        "define goal_x := "+scene.goal.x,
+        "define goal_y := "+scene.goal.y,
+        ...scene.walls.map((wall,index)=>'define wall_'+(index+1)+' := "'+wall.x+','+wall.y+'"')
+      ];
+      document.getElementById("zv-source").value=declarations.join("\n");
+      parseLevel(document.getElementById("zv-source").value);
+      vmScript=incomingScript.slice(); vmTrace=incomingTrace.map(point=>({x:point.x,y:point.y}));
+      playScriptButton.disabled=vmScript.length===0;
+      sourceStatus.textContent=vmScript.length?"VM SCENE + SCRIPT + STATE TRACE LOADED":"VM SCENE LOADED (NO SCRIPT)"; sourceStatus.style.color="#8de3b0";
+    } catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
+    event.target.value="";
+  });
+  document.getElementById("build-level").addEventListener("click",()=>{
+    try { parseLevel(document.getElementById("zv-source").value); vmScript=[]; vmTrace=[]; playScriptButton.disabled=true; sourceStatus.textContent="LEVEL BUILT"; sourceStatus.style.color="#8de3b0"; }
+    catch(error) { sourceStatus.textContent=error.message; sourceStatus.style.color="#ff858b"; }
+  });
+  playScriptButton.addEventListener("click",async()=>{
+    if(!vmScript.length||playScriptButton.disabled) return;
+    reset();
+    const runId=scriptRunId;
+    playScriptButton.disabled=true;
+    sourceStatus.textContent="RUNNING ZENVORA VM SCRIPT"; sourceStatus.style.color="#ff9e57";
+    for(let index=0;index<vmScript.length;index++){
+      if(runId!==scriptRunId) return;
+      step(vmScript[index]);
+      const expected=vmTrace[index];
+      if(!expected||player.x!==expected.x||player.y!==expected.y){
+        status.textContent="VM/runtime state mismatch at move "+(index+1);
+        sourceStatus.textContent="VM STATE TRACE MISMATCH"; sourceStatus.style.color="#ff858b";
+        playScriptButton.disabled=false;
+        return;
+      }
+      if(won) break;
+      await new Promise(resolve=>setTimeout(resolve,180));
+    }
+    if(runId===scriptRunId){
+      sourceStatus.textContent=won?"VM SCRIPT PASSED — GOAL REACHED":"VM SCRIPT FINISHED";
+      sourceStatus.style.color=won?"#8de3b0":"#ff858b";
+      playScriptButton.disabled=false;
+    }
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

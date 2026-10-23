@@ -1,0 +1,89 @@
+# Zenvora-authored game logic. grid_step executes inside the Zenvora VM.
+# The exporter consumes the VM's movement commands and per-step coordinates.
+define game_width := 10
+define game_height := 8
+define player_start_x := 1
+define player_start_y := 1
+define goal_x := 8
+define goal_y := 6
+define wall_1 := "3,1"
+define wall_2 := "3,2"
+define wall_3 := "3,3"
+define wall_4 := "5,3"
+define wall_5 := "6,3"
+define wall_6 := "7,3"
+define wall_7 := "5,5"
+define wall_8 := "2,5"
+define wall_9 := "2,6"
+define walls := array(wall_1, wall_2, wall_3, wall_4, wall_5, wall_6, wall_7, wall_8, wall_9)
+define player_x := player_start_x
+define player_y := player_start_y
+define step_state := grid_step(player_x, player_y, "right", game_width, game_height, walls)
+
+show "ZENVORA_GAME_LEVEL_V1"
+show "size"
+show game_width
+show game_height
+show "spawn"
+show player_start_x
+show player_start_y
+show "goal"
+show goal_x
+show goal_y
+show "wall"
+show wall_1
+show "wall"
+show wall_2
+show "wall"
+show wall_3
+show "wall"
+show wall_4
+show "wall"
+show wall_5
+show "wall"
+show wall_6
+show "wall"
+show wall_7
+show "wall"
+show wall_8
+show "wall"
+show wall_9
+show "script"
+
+# Move down three cells, right seven cells, then down twice to the goal.
+define step := 0
+repeat step < 3 {
+    show "move"
+    show "down"
+    step_state := grid_step(player_x, player_y, "down", game_width, game_height, walls)
+    player_x := step_state["x"]
+    player_y := step_state["y"]
+    show "state"
+    show player_x
+    show player_y
+    step := step + 1
+}
+define across := 0
+repeat across < 7 {
+    show "move"
+    show "right"
+    step_state := grid_step(player_x, player_y, "right", game_width, game_height, walls)
+    player_x := step_state["x"]
+    player_y := step_state["y"]
+    show "state"
+    show player_x
+    show player_y
+    across := across + 1
+}
+define finish := 0
+repeat finish < 2 {
+    show "move"
+    show "down"
+    step_state := grid_step(player_x, player_y, "down", game_width, game_height, walls)
+    player_x := step_state["x"]
+    player_y := step_state["y"]
+    show "state"
+    show player_x
+    show player_y
+    finish := finish + 1
+}

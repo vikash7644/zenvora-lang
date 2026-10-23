@@ -1,0 +1,29 @@
+# Deterministic input snapshots processed by the Zenvora VM.
+# Horizontal input wins over vertical input; opposing inputs cancel.
+define walls := array("2,1")
+define player_x := 1
+define player_y := 1
+
+define right_input := input_step(player_x, player_y, false, true, false, true, 5, 4, walls)
+show "right+down (horizontal priority)"
+show right_input["x"]
+show right_input["y"]
+show right_input["moved"]
+
+define wall_input := input_step(1, 1, false, true, false, false, 5, 4, walls)
+show "right into wall"
+show wall_input["x"]
+show wall_input["y"]
+show wall_input["moved"]
+
+define opposing_input := input_step(1, 1, true, true, false, false, 5, 4, walls)
+show "left+right (cancelled)"
+show opposing_input["x"]
+show opposing_input["y"]
+show opposing_input["moved"]
+
+define opposing_vertical := input_step(1, 1, false, false, true, true, 5, 4, walls)
+show "up+down (cancelled)"
+show opposing_vertical["x"]
+show opposing_vertical["y"]
+show opposing_vertical["moved"]

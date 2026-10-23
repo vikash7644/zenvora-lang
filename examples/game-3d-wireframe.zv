@@ -1,0 +1,43 @@
+# Zenvora Lang 3D wireframe smoke test.
+# ASCII prototype for testing functions, branching, loops, and bytecode parity.
+# This is not yet a graphical/GPU 3D renderer.
+
+show "ZENVORA 3D WIREFRAME"
+call draw_cube()
+show "3D SCENE COMPLETE"
+
+fn draw_cube() {
+    define row := 0
+    repeat row < 7 {
+        show cube_row(row)
+        row := row + 1
+    }
+}
+
+fn cube_row(y) {
+    if y == 0 {
+        return "   +-----+"
+    } otherwise {
+        if y == 1 {
+            return "  /     /|"
+        } otherwise {
+            if y == 2 {
+                return " +-----+ |"
+            } otherwise {
+                if y == 3 {
+                    return " |     | |"
+                } otherwise {
+                    if y == 4 {
+                        return " |     | +"
+                    } otherwise {
+                        if y == 5 {
+                            return " |     |/"
+                        } otherwise {
+                            return " +-----+"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

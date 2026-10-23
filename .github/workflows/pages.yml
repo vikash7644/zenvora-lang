@@ -33,8 +33,14 @@ jobs:
         run: |
           test -s website/index.html
           test -s website/playground.html
+          test -s website/game-2d.html
           grep -q '<title>' website/index.html
           grep -q 'playground.html' website/index.html
+          grep -q 'game-2d.html' website/playground.html
+          grep -q 'id="game"' website/game-2d.html
+          grep -q 'keydown' website/game-2d.html
+          grep -q 'data-dir' website/game-2d.html
+          grep -q 'LEVEL COMPLETE' website/game-2d.html
 
       - name: Generate Google-compatible raster favicons
         run: |

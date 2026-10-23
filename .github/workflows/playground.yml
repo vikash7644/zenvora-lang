@@ -40,6 +40,9 @@ jobs:
           test -s website/playground.html
           grep -q 'BROWSER DEMO' website/playground.html
           grep -q 'not the Rust compiler' website/playground.html
+          grep -q 'id="terminal-command"' website/playground.html
+          grep -q 'LOCAL SANDBOX' website/playground.html
+          grep -q 'Zenvora Helper (offline)' website/playground.html
 
       - name: Test browser runner behavior
         run: node scripts/test_playground.cjs

@@ -1,0 +1,193 @@
+name: Zenvora self-hosted frontend smoke
+
+on:
+  pull_request:
+    paths:
+      - "compiler/token_stream.zv"
+      - "compiler/parser.zv"
+      - ".github/workflows/self-hosted-frontend.yml"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "docs/getting-started.md"
+  push:
+    branches:
+      - main
+      - self-hosted-compiler-foundation
+    paths:
+      - "compiler/token_stream.zv"
+      - "compiler/parser.zv"
+      - ".github/workflows/self-hosted-frontend.yml"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "docs/getting-started.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  normalized-token-stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Validate documented installation guidance
+        run: |
+          grep -F "GitHub Releases page" docs/getting-started.md
+          grep -F "Rust-independent self-hosted installation is not complete yet" docs/getting-started.md
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Compile Zenvora reference runtime
+        run: cargo test --locked
+      - name: Execute Zenvora-written token component
+        run: |
+          cargo run --locked --quiet -- compiler/token_stream.zv > frontend-output.txt
+          cat frontend-output.txt
+          grep -F 'keyword' frontend-output.txt
+          grep -F 'operator' frontend-output.txt
+          grep -F 'identifier' frontend-output.txt
+          grep -F 'string' frontend-output.txt
+          grep -F 'number' frontend-output.txt
+          grep -F 'boolean' frontend-output.txt
+          grep -F 'punctuation' frontend-output.txt
+          grep -F 'error' frontend-output.txt
+      - name: Execute Zenvora-written parser foundation
+        run: |
+          cargo run --locked --quiet -- compiler/parser.zv > parser-output.txt
+          cat parser-output.txt
+          grep -F 'binary' parser-output.txt
+          grep -F 'and' parser-output.txt
+          grep -F 'or' parser-output.txt
+          grep -F 'unary' parser-output.txt
+          grep -F 'call' parser-output.txt
+          grep -F 'index' parser-output.txt
+          grep -F 'define' parser-output.txt
+          grep -F 'show' parser-output.txt
+          grep -F 'assign' parser-output.txt
+          grep -F 'return' parser-output.txt
+          grep -F 'ZENVORA_VM' parser-output.txt
+          grep -F 'ZENVORA_VM_ASSERTIONS_PASS' parser-output.txt
+          grep -F 'ZENVORA_VM_BUILTIN_ASSERTIONS_PASS' parser-output.txt
+          grep -F 'ZENVORA_VM_BUILTIN_PARITY_PASS' parser-output.txt
+          grep -F 'ZENVORA_VM_EXTENDED_BUILTIN_PARITY_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_VM_EXTENDED_BUILTIN_PARITY_FAIL' parser-output.txt
+          grep -F 'ZENVORA_BRACE_STRING_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_BRACE_STRING_FAIL' parser-output.txt
+          grep -F 'function call depth limit exceeded' parser-output.txt
+          grep -F 'instruction limit exceeded' parser-output.txt
+          ! grep -F 'ZENVORA_VM_ASSERTIONS_FAIL' parser-output.txt
+          grep -F '14' parser-output.txt
+          grep -F 'ZENVORA_BYTECODE_PLAN' parser-output.txt
+          grep -F 'push_const' parser-output.txt
+          grep -F 'jump_if_false' parser-output.txt
+          grep -F 'target' parser-output.txt
+          grep -F 'parameters' parser-output.txt
+          ! grep -F 'compile_error' parser-output.txt
+          grep -F 'ZENVORA_SEMANTICS' parser-output.txt
+          grep -F 'ZENVORA_BUILTIN_CALL_PASS' parser-output.txt
+          grep -F 'char_at' parser-output.txt
+          grep -F 'nested function declarations are not supported' parser-output.txt
+          grep -F 'unsupported bytecode opcode: nested_function' parser-output.txt
+          ! grep -F 'ZENVORA_BUILTIN_CALL_FAIL' parser-output.txt
+          grep -F 'undefined function: missing' parser-output.txt
+          grep -F 'undefined variable: missing_value' parser-output.txt
+          grep -F 'assignment to undefined variable: ghost' parser-output.txt
+          grep -F 'function argument count mismatch: one' parser-output.txt
+          grep -F 'built-in argument count mismatch: len' parser-output.txt
+          grep -F 'built-in argument count mismatch: sum' parser-output.txt
+          grep -F 'break outside loop' parser-output.txt
+          grep -F 'return outside function' parser-output.txt
+          grep -F 'ZENVORA_BYTECODE_VERIFY' parser-output.txt
+          grep -F '"ok": true' parser-output.txt
+          ! grep -F 'invalid jump target' parser-output.txt
+          ! grep -F 'unsupported bytecode opcode' parser-output.txt
+          grep -F '"ok": true' parser-output.txt
+          grep -F 'break' parser-output.txt
+          grep -F 'continue' parser-output.txt
+          grep -F 'if' parser-output.txt
+          grep -F 'repeat' parser-output.txt
+          grep -F 'function' parser-output.txt
+          grep -F 'error' parser-output.txt
+          grep -F 'expected expression' parser-output.txt
+          grep -F 'expected literal, name, or parenthesized expression' parser-output.txt
+          grep -F 'expected closing bracket after index' parser-output.txt
+          grep -F 'expected closing parenthesis' parser-output.txt
+          grep -F 'expected function parameter name' parser-output.txt
+          grep -F 'expected closing brace' parser-output.txt
+          grep -F 'ZENVORA_IR' parser-output.txt
+          grep -F 'declare' parser-output.txt
+          grep -F 'branch' parser-output.txt
+          grep -F 'loop' parser-output.txt
+          grep -F 'function' parser-output.txt
+          grep -F 'binary' parser-output.txt
+          grep -F 'call' parser-output.txt
+          grep -F 'return' parser-output.txt
+      - name: Compile and execute the actual Zenvora-generated bytecode plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output.txt > self-hosted-plan.json
+          test -s self-hosted-plan.json
+          python3 -m json.tool self-hosted-plan.json >/dev/null
+          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-plan.zv2b
+          grep -F 'ZENVORA_BYTECODE 2' self-hosted-plan.zv2b
+          cargo run --locked --quiet -- --run-bytecode self-hosted-plan.zv2b > self-hosted-bytecode-output.txt
+          grep -Fx 'ZENVORA_VM_ASSERTIONS_PASS' parser-output.txt
+          cat > expected-bytecode-output.txt <<'EXPECTED'
+          14
+          42
+          7
+          7
+          120
+          7
+          3
+          v
+          true
+          ZV
+          2
+          3
+          true
+          42
+          2
+          xv
+          2
+          5
+          2
+          42
+          3
+          720
+          55
+          256
+          6
+          25
+          21
+          18
+          228
+          29
+          EXPECTED
+          diff -u expected-bytecode-output.txt self-hosted-bytecode-output.txt
+
+      - name: Check deterministic frontend plan and executable artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- compiler/token_stream.zv > token-output-repeat.txt
+          cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
+          diff -u frontend-output.txt token-output-repeat.txt
+          awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
+          test -s self-hosted-plan-repeat.json
+          python3 -m json.tool self-hosted-plan-repeat.json >/dev/null
+          diff -u self-hosted-plan.json self-hosted-plan-repeat.json
+          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-plan-repeat.zv2b
+          cmp self-hosted-plan.zv2b self-hosted-plan-repeat.zv2b
+          cargo run --locked --quiet -- --run-bytecode self-hosted-plan-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
+          diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
