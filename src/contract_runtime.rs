@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn duplicate_state_declarations_are_rejected_without_mutating_storage() {
-        let source = "contract Counter {\\nstate count := 0\\nstate count := 9\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let source = "contract Counter {\nstate count := 0\nstate count := 9\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
         let mut state = ContractState::new();
         let error = execute(&source, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap_err();
         assert!(error.contains("duplicate contract state variable 'count'"), "{error}");
