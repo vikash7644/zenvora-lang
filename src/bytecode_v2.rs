@@ -1166,14 +1166,14 @@ JUMP 2
             "fn", "use", "contract", "state", "action", "view",
         ] {
             assert!(
-                !valid_identifier(reserved),
+                !super::valid_identifier(reserved),
                 "reserved word unexpectedly accepted as an identifier: {reserved}"
             );
         }
 
         for valid in ["amount", "_value", "token2", "my_function"] {
             assert!(
-                valid_identifier(valid),
+                super::valid_identifier(valid),
                 "valid identifier unexpectedly rejected: {valid}"
             );
         }
