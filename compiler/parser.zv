@@ -1140,6 +1140,136 @@ fn validate_call_statements(ast, functions) {
   return ""
 }
 
+# Collect declarations visible to a frame. The current runtime uses one frame-wide
+# environment for declarations inside if/repeat blocks, so collect those too.
+# Function bodies are handled as separate frames below.
+fn collect_scope_names(ast, names) {
+  define pos := 0
+  repeat pos < len(ast) {
+    define statement := get(ast, pos)
+    define kind := get(statement, "kind")
+    if kind == "define" {
+      define name := get(statement, "value")
+      if not contains(names, name) {
+        names := push(names, name)
+      }
+    } otherwise {
+      if kind == "if" {
+        define branches := get(statement, "right")
+        names := collect_scope_names(get(branches, "then"), names)
+        names := collect_scope_names(get(branches, "otherwise"), names)
+      } otherwise {
+        if kind == "repeat" {
+          names := collect_scope_names(get(statement, "right"), names)
+        }
+      }
+    }
+    pos := pos + 1
+  }
+  return names
+}
+
+fn validate_variable_expression(ast, names) {
+  define kind := get(ast, "kind")
+  if kind == "name" {
+    define name := get(ast, "value")
+    if contains(names, name) {
+      return ""
+    }
+    return "undefined variable: " + name
+  } otherwise {
+    if kind == "number" or kind == "string" or kind == "boolean" {
+      return ""
+    } otherwise {
+      if kind == "unary" {
+        return validate_variable_expression(get(ast, "left"), names)
+      } otherwise {
+        if kind == "binary" or kind == "index" {
+          define left_error := validate_variable_expression(get(ast, "left"), names)
+          if left_error != "" {
+            return left_error
+          }
+          return validate_variable_expression(get(ast, "right"), names)
+        } otherwise {
+          if kind == "call" {
+            define args := get(ast, "right")
+            define pos := 0
+            repeat pos < len(args) {
+              define arg_error := validate_variable_expression(get(args, pos), names)
+              if arg_error != "" {
+                return arg_error
+              }
+              pos := pos + 1
+            }
+            return ""
+          }
+        }
+      }
+    }
+  }
+  return ""
+}
+
+fn validate_variable_statements(ast, names) {
+  define pos := 0
+  repeat pos < len(ast) {
+    define statement := get(ast, pos)
+    define kind := get(statement, "kind")
+    define err := ""
+    if kind == "define" or kind == "show" or kind == "return" {
+      err := validate_variable_expression(get(statement, "left"), names)
+    } otherwise {
+      if kind == "assign" {
+        err := validate_variable_expression(get(statement, "left"), names)
+        if err == "" {
+          define target := get(statement, "value")
+          if not contains(names, target) {
+            err := "assignment to undefined variable: " + target
+          }
+        }
+      } otherwise {
+        if kind == "if" {
+          err := validate_variable_expression(get(statement, "left"), names)
+          if err == "" {
+            define branches := get(statement, "right")
+            err := validate_variable_statements(get(branches, "then"), names)
+            if err == "" {
+              err := validate_variable_statements(get(branches, "otherwise"), names)
+            }
+          }
+        } otherwise {
+          if kind == "repeat" {
+            err := validate_variable_expression(get(statement, "left"), names)
+            if err == "" {
+              err := validate_variable_statements(get(statement, "right"), names)
+            }
+          } otherwise {
+            if kind == "function" {
+              define local_names := names
+              define params := get(statement, "left")
+              define param_pos := 0
+              repeat param_pos < len(params) {
+                define param := get(params, param_pos)
+                if not contains(local_names, param) {
+                  local_names := push(local_names, param)
+                }
+                param_pos := param_pos + 1
+              }
+              local_names := collect_scope_names(get(statement, "right"), local_names)
+              err := validate_variable_statements(get(statement, "right"), local_names)
+            }
+          }
+        }
+      }
+    }
+    if err != "" {
+      return err
+    }
+    pos := pos + 1
+  }
+  return ""
+}
+
 fn validate_program(ast) {
   define seen_functions := array()
   define function_signatures := array()
@@ -1161,6 +1291,10 @@ fn validate_program(ast) {
     return map("ok", false, "error", call_error)
   }
   define error := validate_statements(ast, 0, 0)
+  if error == "" {
+    define visible_names := collect_scope_names(ast, array())
+    error := validate_variable_statements(ast, visible_names)
+  }
   return map("ok", error == "", "error", error)
 }
 
