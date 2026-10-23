@@ -125,6 +125,19 @@ fn parse_invocation(invocation: &str) -> Result<(&str, &str), String> {
     Ok((kind, name))
 }
 
+fn valid_contract_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    let syntax_ok = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    syntax_ok && !matches!(
+        name,
+        "true" | "false" | "and" | "or" | "not" |
+        "define" | "show" | "print" | "if" | "otherwise" | "repeat" |
+        "break" | "continue" | "return" | "call" | "fn" | "use" |
+        "contract" | "state" | "action" | "view"
+    )
+}
+
 fn prepare_source(
     source: &str,
     state: &ContractState,
@@ -158,6 +171,9 @@ fn prepare_source(
             let (name, initial) = rest.split_once(":=")
                 .ok_or_else(|| format!("invalid state declaration: {line}"))?;
             let name = name.trim();
+            if !valid_contract_identifier(name) {
+                return Err(format!("invalid contract state variable name '{name}'"));
+            }
             if state_vars.iter().any(|(existing, _): &(String, String)| existing == name) {
                 return Err(format!("duplicate contract state variable '{name}'"));
             }
@@ -294,6 +310,17 @@ mod tests {
         let error = replay_block(COUNTER, "counter", &calls, &mut state, [0; 32]).unwrap_err();
         assert!(error.contains("contract call 2 failed during replay"), "{error}");
         assert_eq!(state.state_root(), before, "failed replay must not publish the first call's state");
+    }
+
+    #[test]
+    fn invalid_or_reserved_state_names_are_rejected() {
+        for state_decl in ["state true := 0", "state bad-name := 0", "state 9count := 0"] {
+            let source = format!("contract Counter {{\\n{state_decl}\\naction increment(amount) {{\\nreturn amount\\n}}\\n}}\\n");
+            let mut state = ContractState::new();
+            let error = execute(&source, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap_err();
+            assert!(error.contains("invalid contract state variable name"), "declaration {state_decl}: {error}");
+            assert!(state.is_empty());
+        }
     }
 
     #[test]
