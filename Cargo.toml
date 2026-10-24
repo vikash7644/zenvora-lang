@@ -2,7 +2,7 @@
 name = "zenvora"
 version = "0.8.0"
 edition = "2021"
-description = "Zenvora Lang compiler and bytecode virtual machine"
+description = "QORVYNT Lang compiler and bytecode virtual machine"
 license = "MIT"
 homepage = "https://vikash7644.github.io/zenvora-lang/"
 repository = "https://github.com/vikash7644/zenvora-lang"
