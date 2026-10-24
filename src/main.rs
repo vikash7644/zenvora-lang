@@ -5278,13 +5278,31 @@ mod game_builtin_tests {
     }
 
     #[test]
-    fn self_hosted_compiler_compiles_arbitrary_source_to_verified_bytecode_v2() {
+    fn self_hosted_compiler_compiles_arithmetic_to_verified_bytecode_v2() {
         let bytecode = super::compile_self_hosted_source("define answer := 40 + 2\nshow answer\n").unwrap();
         assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\n"));
         let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn self_hosted_compiler_handles_string_source_and_is_deterministic() {
+        let source = "define message := \"Zenvora\"\nshow message\n";
+        let first = super::compile_self_hosted_source(source).unwrap();
+        let second = super::compile_self_hosted_source(source).unwrap();
+        assert_eq!(first, second, "same source must emit byte-for-byte identical v2 bytecode");
+        let loaded = super::deserialize_bytecode_v2(&first).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["Zenvora"]);
+    }
+
+    #[test]
+    fn self_hosted_compiler_rejects_undefined_variable() {
+        let error = super::compile_self_hosted_source("show missing_name\n").unwrap_err();
+        assert!(error.contains("undefined") || error.contains("name"), "unexpected diagnostic: {error}");
     }
 
 }
