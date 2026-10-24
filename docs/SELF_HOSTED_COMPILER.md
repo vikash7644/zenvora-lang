@@ -34,7 +34,7 @@ Target: Zenvora Lang v0.9 compiler/VM foundation. This document does not claim s
 
 The frontend smoke workflow is not, by itself, a self-hosting proof: `compiler/parser.zv` currently runs a fixed regression harness and emits a plan for a hard-coded `runnable_source`. The native Rust CLI still parses and executes that `.zv` file. Converting the emitted sample plan to Bytecode v2 proves the plan adapter/VM path, not that the Zenvora compiler compiled itself.
 
-A self-hosting release must add a generic compiler-driver entry point written in Zenvora that accepts a source path or source text, emits a complete executable artifact for arbitrary supported programs, and reports diagnostics without the Rust frontend. CI must then:
+A reusable `compile_source(source)` entry point now exists in `compiler/parser.zv`. It lexes, parses, validates, lowers, emits a bytecode plan, and runs the plan verifier for caller-provided source text; CI asserts two distinct source programs produce executable output and malformed source fails during parsing. This is an incremental generic source-to-plan function, **not yet** a standalone CLI/compiler artifact: the parser file still contains a regression harness, the reference Rust runtime executes that file, and the emitted plan still requires the Rust CLI to serialize and execute canonical Bytecode v2. A self-hosting release must turn this function into a standalone compiler driver that accepts source/path input, emits a complete executable artifact for arbitrary supported programs, and reports diagnostics without the Rust frontend. CI must then:
 
 1. Build the reference `zv` once and use it only for bootstrap stage 1.
 2. Use stage 1 to compile the Zenvora-written compiler driver into a runnable artifact.
