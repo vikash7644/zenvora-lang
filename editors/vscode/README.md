@@ -1,10 +1,10 @@
-# Zenvora Lang editor support
+# QORVYNT Lang editor support
 
-This folder contains a small Visual Studio Code language extension for Zenvora Lang source files (`.zv`).
+This folder contains a small Visual Studio Code language extension for QORVYNT Lang source files (`.zv`).
 
 ## Included
 
-- Registers the **Zenvora Lang** language ID for `.zv` files.
+- Registers the **QORVYNT Lang** language ID for `.zv` files.
 - TextMate syntax highlighting for the current draft syntax: declarations, control flow, functions, strings and escapes, comments, booleans, integers, operators, punctuation, and common built-ins.
 - Basic bracket matching, quote pairing, and `#` line comments.
 
@@ -19,7 +19,7 @@ This is editor syntax support, not a compiler or language server. Diagnostics, a
 
 ## Install a packaged VSIX
 
-The main GitHub Actions workflow builds an installable `.vsix` artifact after validating the extension. Open the latest successful [Zenvora Lang CI run](https://github.com/vikash7644/zenvora-lang/actions/workflows/rust.yml), download the `zenvora-vscode-extension` artifact, extract it, then install it on desktop VS Code:
+The main GitHub Actions workflow builds an installable `.vsix` artifact after validating the extension. Open the latest successful [QORVYNT Lang CI run](https://github.com/vikash7644/zenvora-lang/actions/workflows/rust.yml), download the `zenvora-vscode-extension` artifact, extract it, then install it on desktop VS Code:
 
 ```sh
 code --install-extension zenvora-lang.vsix
@@ -29,4 +29,4 @@ The workflow artifact is temporary (7-day retention). The extension is **not yet
 
 ## GitHub language recognition
 
-VS Code registration does **not** by itself change GitHub's repository language statistics. GitHub's Linguist language catalogue needs to recognize Zenvora Lang before the repository can display it as a separate language in the language bar. Until then, Rust remains the primary language because the compiler/VM implementation is written in Rust.
+VS Code registration does **not** by itself change GitHub's repository language statistics. GitHub's Linguist language catalogue needs to recognize QORVYNT Lang before the repository can display it as a separate language in the language bar. Until then, Rust remains the primary language because the compiler/VM implementation is written in Rust.
