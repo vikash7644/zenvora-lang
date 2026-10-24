@@ -1,7 +1,7 @@
-# QORVYNT Lang — Mission Status and Completion Gate
+# Zenvora Lang — Mission Status and Completion Gate
 
 Last audited: 2026-10-20  
-Historical audit scope: `vikash7644/zenvora-lang` on `main`. Branding/package migration updates are being staged on [PR #45](https://github.com/vikash7644/zenvora-lang/pull/45); they are not live on `main` until that PR is reviewed and merged. This ledger is a working checklist, not a claim that the project is complete.
+Historical audit scope: `vikash7644/zenvora-lang` on `main`. The QORVYNT self-hosted compiler is an internal compiler codename; the language name remains Zenvora Lang. This ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
 
