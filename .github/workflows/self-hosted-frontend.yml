@@ -84,6 +84,8 @@ jobs:
           grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_FAIL' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
+          grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_VM_EXTENDED_BUILTIN_PARITY_FAIL' parser-output.txt
           grep -F 'ZENVORA_BRACE_STRING_PASS' parser-output.txt
