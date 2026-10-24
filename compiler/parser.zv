@@ -2240,3 +2240,44 @@ define runaway_ir := lower_program(get(runaway_ast, "ast"))
 define runaway_plan := emit_bytecode_plan(runaway_ir)
 define runaway_result := execute_bytecode_plan(runaway_plan)
 show get(runaway_result, "error")
+
+
+# Generic source-to-plan driver. This is the reusable pipeline entry point for
+# supported source text; it does not claim standalone bootstrap/self-hosting.
+fn compile_source(source) {
+  define lexed := lex(source)
+  if get(lexed, "error") != "" {
+    return map("ok", false, "stage", "lex", "error", get(lexed, "error"), "plan", "")
+  }
+  define parsed := parse_program(get(lexed, "tokens"))
+  if get(parsed, "error") != "" {
+    return map("ok", false, "stage", "parse", "error", get(parsed, "error"), "plan", "")
+  }
+  define semantic := validate_program(get(parsed, "ast"))
+  if not get(semantic, "ok") {
+    return map("ok", false, "stage", "validate", "error", get(semantic, "error"), "plan", "")
+  }
+  define ir := lower_program(get(parsed, "ast"))
+  define plan := emit_bytecode_plan(ir)
+  define verified := verify_bytecode_plan(plan)
+  if not get(verified, "ok") {
+    return map("ok", false, "stage", "verify", "error", get(verified, "error"), "plan", "")
+  }
+  return map("ok", true, "stage", "complete", "error", "", "plan", plan)
+}
+
+# Regression: the same entry point compiles distinct caller-provided programs,
+# and malformed source fails at the correct stage rather than emitting a plan.
+define generic_driver_a := compile_source("define answer := 40 + 2\nshow answer\n")
+define generic_driver_b := compile_source("fn double(n) {\nreturn n * 2\n}\nshow double(21)\n")
+define generic_driver_bad := compile_source("show (1 +\n")
+define generic_driver_run_a := execute_bytecode_plan(get(generic_driver_a, "plan"))
+define generic_driver_run_b := execute_bytecode_plan(get(generic_driver_b, "plan"))
+if get(generic_driver_a, "ok") and get(generic_driver_b, "ok") and not get(generic_driver_bad, "ok") and get(generic_driver_bad, "stage") == "parse" and get(get(generic_driver_run_a, "output"), 0) == "42" and get(get(generic_driver_run_b, "output"), 0) == "42" {
+  show "ZENVORA_GENERIC_COMPILER_DRIVER_PASS"
+} otherwise {
+  show "ZENVORA_GENERIC_COMPILER_DRIVER_FAIL"
+  show generic_driver_a
+  show generic_driver_b
+  show generic_driver_bad
+}
