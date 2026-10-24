@@ -1,24 +1,24 @@
-# QORVYNT Lang
+# Zenvora Lang
 
 ## Official website
 
-- **QORVYNT website:** https://vikash7644.github.io/zenvora-lang/
+- **Zenvora Lang website:** https://vikash7644.github.io/zenvora-lang/
 - **Browser playground:** https://vikash7644.github.io/zenvora-lang/playground.html
 - **Source repository:** https://github.com/vikash7644/zenvora-lang
 
 The static site is in `website/` and is deployed by the GitHub Pages workflow when website files change on `main`. If the links do not open yet, check the latest [Pages deployment workflow](https://github.com/vikash7644/zenvora-lang/actions/workflows/pages.yml).
 
-QORVYNT Lang is an actively developed programming-language implementation for the QORVYNT language project. This repository contains a working Rust compiler/interpreter, a stack-based bytecode virtual machine, a command-line tool, executable language examples, regression tests, and CI workflows. The current development version is v0.8.0. It is real runnable software—not only a blueprint—but it is not yet a stable v1.0 language or a production smart-contract toolchain. Experimental areas and remaining release gates are listed in [the project status checklist](docs/PROJECT_STATUS.md).
+Zenvora Lang is an actively developed programming-language implementation. The self-hosted compiler is currently codenamed QORVYNT. This repository contains a working Rust compiler/interpreter, a stack-based bytecode virtual machine, a command-line tool, executable language examples, regression tests, and CI workflows. The current development version is v0.8.0. It is real runnable software—not only a blueprint—but it is not yet a stable v1.0 language or a production smart-contract toolchain. Experimental areas and remaining release gates are listed in [the project status checklist](docs/PROJECT_STATUS.md).
 
 ## Legacy blockchain material — migration pending
 
-A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the QORVYNT Lang release scope** and must be moved to the separate BHYVORIX Chain repository only after that destination and its tests are verified.
+A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the Zenvora Lang release scope** and must be moved to the separate BHYVORIX Chain repository only after that destination and its tests are verified.
 
 - [Legacy chain technical specification draft](docs/zenvora-technical-spec-v1.md)
 - [Legacy chain protocol specification draft](docs/chain-protocol-specification-draft.md)
 - [Legacy chain implementation roadmap](docs/chain-implementation-roadmap.md)
 
-These files describe proposals and a local-development prototype, not a production network, mainnet, wallet, or native coin. The programming-language branding and Cargo package metadata are being migrated to QORVYNT on PR #45; the repository URL and deployed Pages site remain unchanged until the PR is merged and Pages is redeployed. Blockchain branding remains a separate project and must not be inferred from this language rename.
+These files describe proposals and a local-development prototype, not a production network, mainnet, wallet, or native coin. The Zenvora Lang's name is intentionally unchanged. QORVYNT is an internal name for the self-hosted compiler work, not a rename of the language. Blockchain branding remains a separate project.
 
 ## Project status and completion checklist
 
@@ -30,7 +30,7 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `CHANGELOG.md` — v0.8.0 release notes and current feature status.
 - `docs/language-grammar.md` — current parser grammar draft and unresolved v1.0 semantics.
 - `src/main.rs` — language lexer/parser, compiler, stack VM, CLI, and regression tests; legacy chain CLI entrypoints are still present pending migration.
-- `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the QORVYNT Lang release scope.
+- `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the Zenvora Lang release scope.
 - `examples/hello.zv` — arithmetic and variable example.
 - `examples/zenvora-language-tour.zv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.zv` — loop condition, `break`, and `continue` example.
@@ -51,12 +51,12 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `examples/token.zvl` — illustrative smart-contract DSL draft; not executable by the current compiler.
 - `website/` — static responsive ecosystem landing page.
 
-## See QORVYNT Lang code in action
+## See Zenvora Lang code in action
 
-The `.zv` files in [`examples/`](examples/) are programs written in **QORVYNT Lang**. Start with the [executable language tour](examples/zenvora-language-tour.zv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
+The `.zv` files in [`examples/`](examples/) are programs written in **Zenvora Lang**. Start with the [executable language tour](examples/zenvora-language-tour.zv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
 
 ```zv
-define name := "QORVYNT"
+define name := "Zenvora"
 define answer := multiply(6, 7)
 show "Hello, " + name
 show answer
@@ -66,17 +66,17 @@ fn multiply(left, right) {
 }
 ```
 
-GitHub's repository language meter may still show **Rust** because the compiler and virtual machine are implemented in Rust; that meter does not mean the `.zv` programs are Rust. QORVYNT Lang is currently a custom language and GitHub does not automatically provide its own syntax-highlighting grammar from a file extension alone.
+GitHub's repository language meter may still show **Rust** because the compiler and virtual machine are implemented in Rust; that meter does not mean the `.zv` programs are Rust. Zenvora Lang is currently a custom language and GitHub does not automatically provide its own syntax-highlighting grammar from a file extension alone.
 
 ## Editor support
 
-A starter VS Code language extension is available in [`editors/vscode/`](editors/vscode/). It registers `.zv` files as **QORVYNT Lang**, provides TextMate syntax highlighting, and configures basic brackets and `#` comments. Its metadata and grammar regexes are checked by the main CI workflow.
+A starter VS Code language extension is available in [`editors/vscode/`](editors/vscode/). It registers `.zv` files as **Zenvora Lang**, provides TextMate syntax highlighting, and configures basic brackets and `#` comments. Its metadata and grammar regexes are checked by the main CI workflow.
 
 This is syntax highlighting only—not a language server, compiler, debugger, or VS Code Marketplace release. See the [editor support guide](editors/vscode/README.md) for setup. GitHub's language bar still requires upstream Linguist recognition; adding an editor grammar does not change that.
 
 ## Latest prototype release
 
-The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
+The latest cross-platform CLI build is published as a **pre-release**: [Zenvora Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
 
 - Linux x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-linux-x86_64.tar.gz)
 - macOS Intel x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-macos-x86_64.tar.gz)
@@ -204,7 +204,7 @@ zv --chain-p2p-serve-pool dev.zvb 71 pending.zvp 0.0.0.0 9000
 zv --chain-p2p-gossip node-b.zvb 71 pending-b.zvp 192.168.1.10:9000
 ```
 
-The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the QORVYNT Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
+The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
 
 **Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; the TCP peer prototype supports block sync and manual transaction gossip but has no peer authentication, automatic discovery/gossip, automated voting, full BFT consensus/finality, or production wallet/security review. Quorum signatures alone do not provide decentralized consensus. Never expose it to the public internet. Do not use real funds or treat the local file as a decentralized blockchain.
 
