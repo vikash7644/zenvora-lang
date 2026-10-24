@@ -229,27 +229,27 @@ fn run_lines(lines: &[String], vars: &mut HashMap<String, Value>, depth: usize) 
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
-        eprintln!("Zenvora Lang MVP\nUsage: zenvora <file.zv>");
+        eprintln!("QORVYNT Lang MVP\nUsage: zenvora <file.zv>");
         std::process::exit(2);
     }
     let source = match fs::read_to_string(&args[1]) {
         Ok(s) => s,
-        Err(e) => { eprintln!("Zenvora error: cannot read '{}': {e}", args[1]); std::process::exit(1); }
+        Err(e) => { eprintln!("QORVYNT error: cannot read '{}': {e}", args[1]); std::process::exit(1); }
     };
     let lines: Vec<String> = source.lines().map(str::to_string).collect();
     let mut vars = HashMap::new();
     match run_lines(&lines, &mut vars, 0) {
         Ok(Flow::Normal) => {}
         Ok(Flow::Break) => {
-            eprintln!("Zenvora error: 'break' used outside a repeat loop");
+            eprintln!("QORVYNT error: 'break' used outside a repeat loop");
             std::process::exit(1);
         }
         Ok(Flow::Continue) => {
-            eprintln!("Zenvora error: 'continue' used outside a repeat loop");
+            eprintln!("QORVYNT error: 'continue' used outside a repeat loop");
             std::process::exit(1);
         }
         Err(e) => {
-            eprintln!("Zenvora error: {e}");
+            eprintln!("QORVYNT error: {e}");
             std::process::exit(1);
         }
     }
