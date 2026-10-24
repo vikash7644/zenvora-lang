@@ -2309,5 +2309,6 @@ if get(generic_driver_loop, "ok") and get(generic_driver_loop_run, "ok") and get
 } otherwise {
   show "ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_FAIL"
   show generic_driver_loop
+  show generic_driver_loop_run
   show generic_driver_bad_verify
 }
