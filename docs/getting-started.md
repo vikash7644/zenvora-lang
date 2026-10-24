@@ -1,6 +1,6 @@
 # QORVYNT Lang — Developer Getting Started
 
-QORVYNT Lang is a small, independent programming language for the QORVYNT ecosystem. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.zv` extension and run through the `zv` command.
+QORVYNT Lang is a small, independent programming language for the QORVYNT language. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.zv` extension and run through the `zv` command.
 
 > **Prototype status:** this is an early developer preview. The contract DSL is not a persistent smart-contract runtime, the local chain code is not a public testnet, and Bytecode v2 is experimental. Do not use it for real funds or production contracts.
 
