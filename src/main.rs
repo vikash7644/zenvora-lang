@@ -3509,9 +3509,10 @@ fn quote_qorvynt_string(value: &str) -> Result<String, String> {
 /// The Rust VM here is the bootstrap host; parsing, semantic validation, lowering,
 /// and bytecode-plan verification are performed by compiler/parser.zv itself.
 fn compile_self_hosted_source(source: &str) -> Result<String, String> {
-    let compiler_path = Path::new("compiler").join("parser.zv");
-    let compiler_source = fs::read_to_string(&compiler_path)
-        .map_err(|error| format!("cannot load QORVYNT compiler at {}: {error}", compiler_path.display()))?;
+    // Embed the compiler at build time so the installed CLI does not depend on
+    // the caller's working directory or a separately copied compiler/ folder.
+    const COMPILER_SOURCE: &str = include_str!("../compiler/parser.zv");
+    let compiler_source = COMPILER_SOURCE;
     let source_literal = quote_qorvynt_string(source)?;
     let invocation = format!(
         "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
