@@ -18,7 +18,7 @@ A prior integration effort left chain-specific code, workflows, and design draft
 - [Legacy chain protocol specification draft](docs/chain-protocol-specification-draft.md)
 - [Legacy chain implementation roadmap](docs/chain-implementation-roadmap.md)
 
-These files describe proposals and a local-development prototype, not a production network, mainnet, wallet, or native coin. The programming-language branding is being migrated to QORVYNT. Blockchain branding remains a separate project and must not be inferred from this language rename.
+These files describe proposals and a local-development prototype, not a production network, mainnet, wallet, or native coin. The programming-language branding and Cargo package metadata are being migrated to QORVYNT on PR #45; the repository URL and deployed Pages site remain unchanged until the PR is merged and Pages is redeployed. Blockchain branding remains a separate project and must not be inferred from this language rename.
 
 ## Project status and completion checklist
 

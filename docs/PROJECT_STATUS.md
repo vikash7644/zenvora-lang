@@ -1,7 +1,7 @@
-# Zenvora Lang — Mission Status and Completion Gate
+# QORVYNT Lang — Mission Status and Completion Gate
 
 Last audited: 2026-10-20  
-Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, not a claim that the project is complete.
+Historical audit scope: `vikash7644/zenvora-lang` on `main`. Branding/package migration updates are being staged on [PR #45](https://github.com/vikash7644/zenvora-lang/pull/45); they are not live on `main` until that PR is reviewed and merged. This ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
 
@@ -80,7 +80,7 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 4. Replace the demo-only playground execution path with a secure real-compiler integration and test parity.
 5. Implement and independently test contract state persistence, atomic rollback, authorization, deterministic gas, ABI, and deployment before describing contracts as production-ready.
 6. Finish editor/LSP and release packaging, then complete the release checklist.
-7. Only after Zenvora Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Do not mix chain branding into the Zenvora Lang name.
+7. Only after QORVYNT Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Keep blockchain branding separate from QORVYNT Lang.
 
 ## Continuity note
 

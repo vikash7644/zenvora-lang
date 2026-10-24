@@ -1,6 +1,6 @@
 # QORVYNT Lang — Developer Getting Started
 
-QORVYNT Lang is a small, independent programming language for the QORVYNT language. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.zv` extension and run through the `zv` command.
+QORVYNT Lang is a small, independent programming language. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.zv` extension and run through the `zv` command.
 
 > **Prototype status:** this is an early developer preview. The contract DSL is not a persistent smart-contract runtime, the local chain code is not a public testnet, and Bytecode v2 is experimental. Do not use it for real funds or production contracts.
 
@@ -11,6 +11,7 @@ Install a current stable Rust toolchain and Cargo from the official Rust install
 ```sh
 git clone https://github.com/vikash7644/zenvora-lang.git
 cd zenvora-lang
+# The repository URL and directory name remain legacy until the rename is approved.
 cargo check --all-targets
 cargo test --all-targets
 ```
