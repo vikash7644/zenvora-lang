@@ -1,6 +1,6 @@
-# Zenvora Lang — Developer Getting Started
+# QORVYNT Lang — Developer Getting Started
 
-Zenvora Lang is a small, independent programming language for the Zenvora ecosystem. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.zv` extension and run through the `zv` command.
+QORVYNT Lang is a small, independent programming language for the QORVYNT ecosystem. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.zv` extension and run through the `zv` command.
 
 > **Prototype status:** this is an early developer preview. The contract DSL is not a persistent smart-contract runtime, the local chain code is not a public testnet, and Bytecode v2 is experimental. Do not use it for real funds or production contracts.
 
@@ -22,7 +22,7 @@ To run the compiler directly from the repository, prefix commands with `cargo ru
 Create `hello.zv` with this source:
 
 ```zv
-define name := "Zenvora"
+define name := "QORVYNT"
 define answer := multiply(6, 7)
 
 show "Hello, " + name
@@ -43,7 +43,7 @@ cargo run -- --check hello.zv
 Expected output from the first command:
 
 ```text
-Hello, Zenvora
+Hello, QORVYNT
 42
 ```
 
