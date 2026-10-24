@@ -899,7 +899,7 @@ fn json_encode(value) {
 }
 
 fn emit_bytecode_plan(ir) {
-  define main := array()
+  define main_ir := array()
   define functions := array()
   define pos := 0
   repeat pos < len(ir) {
@@ -908,10 +908,14 @@ fn emit_bytecode_plan(ir) {
       define function_code := emit_statements(get(item, "body"))
       functions := push(functions, map("name", get(item, "name"), "parameters", get(item, "parameters"), "code", function_code, "line", get(item, "line")))
     } otherwise {
-      main := append_instructions(main, emit_statements(array(item)))
+      main_ir := push(main_ir, item)
     }
     pos := pos + 1
   }
+  # Emit the complete main program in one pass so jump targets are absolute
+  # within the main instruction stream, rather than restarting at zero for
+  # every top-level statement.
+  define main := emit_statements(main_ir)
   return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
 }
 
