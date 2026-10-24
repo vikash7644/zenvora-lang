@@ -2316,3 +2316,17 @@ if get(generic_driver_loop, "ok") and get(generic_driver_loop_run, "ok") and get
   show generic_driver_loop_run
   show generic_driver_bad_verify
 }
+
+# Regression: jump targets from separate top-level control-flow statements
+# must share one main instruction stream. This catches per-statement offset resets.
+define generic_driver_multi_control := compile_source("if false {\nshow 99\n} otherwise {\nshow 1\n}\ndefine loop_i := 0\nrepeat loop_i < 2 {\nloop_i := loop_i + 1\nshow loop_i\n}\nshow 42\n")
+define generic_driver_multi_run := execute_bytecode_plan(get(generic_driver_multi_control, "plan"))
+define generic_driver_multi_output := get(generic_driver_multi_run, "output")
+if get(generic_driver_multi_control, "ok") and get(generic_driver_multi_run, "ok") and len(generic_driver_multi_output) == 4 and get(generic_driver_multi_output, 0) == "1" and get(generic_driver_multi_output, 1) == "1" and get(generic_driver_multi_output, 2) == "2" and get(generic_driver_multi_output, 3) == "42" {
+  show "ZENVORA_MULTI_CONTROL_FLOW_PLAN_PASS"
+} otherwise {
+  show "ZENVORA_MULTI_CONTROL_FLOW_PLAN_FAIL"
+  show generic_driver_multi_control
+  show generic_driver_multi_run
+}
+
