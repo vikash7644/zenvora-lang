@@ -1,7 +1,7 @@
 # Zenvora Master Roadmap
 
 **Status date:** 2026-10-19  
-**Current milestone:** Zenvora Lang v0.8.0 prototype (experimental; not production-ready)  
+**Current milestone:** QORVYNT Lang v0.8.0 prototype (experimental; not production-ready)  
 **Principle:** Build, test, and document each layer before depending on it. This roadmap is a plan, not a claim that future milestones are already complete.
 
 ## The long-term vision
@@ -31,7 +31,7 @@ This section records checks observed on the current main branch. It does not cer
 1. Finish the stable language reference and semantics for values, errors, functions, and control flow.
 2. Obtain independent security review before freezing bytecode v2.
 3. Keep contract persistence, authorization, gas, and replay claims gated on implementation and tests.
-4. Complete the Zenvora Lang / BHYVORIX Chain repository boundary migration with both repositories green.
+4. Complete the QORVYNT Lang / BHYVORIX Chain repository boundary migration with both repositories green.
 
 ## Roadmap phases
 

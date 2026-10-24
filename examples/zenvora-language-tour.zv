@@ -1,7 +1,7 @@
-# Zenvora Lang language tour
+# QORVYNT Lang language tour
 # This file is executable with: zv examples/zenvora-language-tour.zv
 
-define project := "Zenvora Lang"
+define project := "QORVYNT Lang"
 define version := 8
 define features := array("variables", "functions", "loops")
 

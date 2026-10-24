@@ -27,6 +27,6 @@ The `Zenvora self-hosted frontend smoke` workflow runs both components and check
 
 ## Architecture boundary
 
-Zenvora Lang remains separate from BHYVORIX Chain. The language repository owns compiler, VM interface, ABI/artifact tooling, and deterministic local contract tests. Chain consensus, signed transactions, native BVRX fee settlement, wallet, explorer, P2P network, and testnet operations belong in the separate BHYVORIX Chain repository.
+QORVYNT Lang remains separate from BHYVORIX Chain. The language repository owns compiler, VM interface, ABI/artifact tooling, and deterministic local contract tests. Chain consensus, signed transactions, native BVRX fee settlement, wallet, explorer, P2P network, and testnet operations belong in the separate BHYVORIX Chain repository.
 
 Do not declare v0.9.0 release-ready or claim self-hosting until the stages above are implemented and verified on a single reproducible commit.

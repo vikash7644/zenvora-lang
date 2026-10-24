@@ -1,6 +1,6 @@
-# Zenvora Lang v0.8.0 — implementation status
+# QORVYNT Lang v0.8.0 — implementation status
 
-Zenvora Lang is an independent programming-language project for the Zenvora ecosystem. This branch contains a Rust source compiler, stack-based bytecode VM, versioned bytecode loader, relative source-module loader, standard-library helpers, an experimental contract DSL, and a local Zenvora Chain execution/persistence prototype. It is still an early prototype, not a production smart-contract language.
+QORVYNT Lang is an independent programming-language project for the Zenvora ecosystem. This branch contains a Rust source compiler, stack-based bytecode VM, versioned bytecode loader, relative source-module loader, standard-library helpers, an experimental contract DSL, and a local Zenvora Chain execution/persistence prototype. It is still an early prototype, not a production smart-contract language.
 
 ## Build, test, and run
 

@@ -1,6 +1,6 @@
-# Contributing to Zenvora Lang
+# Contributing to QORVYNT Lang
 
-Thanks for helping improve Zenvora Lang. The project is an early programming-language prototype; small, tested, clearly scoped changes are preferred over large unverified rewrites.
+Thanks for helping improve QORVYNT Lang. The project is an early programming-language prototype; small, tested, clearly scoped changes are preferred over large unverified rewrites.
 
 ## Before opening a change
 
@@ -41,7 +41,7 @@ If you cannot run Rust locally, you can still submit a focused change and clearl
 
 ## Documentation and examples
 
-- Use `.zv` for executable Zenvora Lang programs.
+- Use `.zv` for executable QORVYNT Lang programs.
 - Keep examples minimal and runnable; avoid documenting syntax that the compiler does not accept.
 - State clearly when behavior is experimental, local-only, or a design proposal.
 - Update the README or `docs/language-v0.1.md` when the public feature inventory changes.

@@ -13,7 +13,7 @@ CONFIG = EXT / "language-configuration.json"
 
 
 def fail(message: str) -> None:
-    print(f"Zenvora editor validation failed: {message}", file=sys.stderr)
+    print(f"QORVYNT editor validation failed: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -69,4 +69,4 @@ def check_patterns(value, location="grammar"):
 check_patterns(grammar)
 if not isinstance(config.get("comments"), dict) or config["comments"].get("lineComment") != "#":
     fail("language configuration must define # line comments")
-print(f"Zenvora VS Code extension validated: JSON metadata valid; {checked} TextMate regexes compile; .zv language registration and scope match.")
+print(f"QORVYNT VS Code extension validated: JSON metadata valid; {checked} TextMate regexes compile; .zv language registration and scope match.")

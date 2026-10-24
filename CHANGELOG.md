@@ -1,8 +1,10 @@
 # Changelog
 
-Notable changes to Zenvora Lang are recorded here.
+Notable changes to QORVYNT Lang are recorded here.
 
 ## Unreleased
+
+- Started the QORVYNT Lang branding migration in documentation, website, Playground and editor metadata. The `zenvora-lang` repository URL, `zv` CLI, bytecode headers and legacy internal identifiers remain unchanged for compatibility during this staged migration.
 
 - Fixed the browser playground's same-line `} otherwise {` parsing and function-call executor scope; added regression coverage for nested branches and recursive functions.
 - Main CI now packages the VS Code syntax-highlighting extension as a `.vsix` artifact and uploads it for manual installation; Marketplace publishing remains separate.

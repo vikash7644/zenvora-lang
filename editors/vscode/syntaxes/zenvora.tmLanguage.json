@@ -1,6 +1,6 @@
 {
   "scopeName": "source.zenvora",
-  "name": "Zenvora Lang",
+  "name": "QORVYNT Lang",
   "patterns": [
     {
       "include": "#comments"
