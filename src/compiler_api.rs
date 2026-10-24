@@ -98,11 +98,11 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     Ok(code) => {
                         let mut lines = Vec::new();
                         match super::run_with_output(&code, &mut |line| lines.push(line)) {
-                            Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":"zenvora-rust-v0.8"}),
-                            Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":"zenvora-rust-v0.8"}),
+                            Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))}),
+                            Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))}),
                         }
                     }
-                    Err(error) => json!({"ok":false,"error":error,"phase":"compile","compiler":"zenvora-rust-v0.8"}),
+                    Err(error) => json!({"ok":false,"error":error,"phase":"compile","compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))}),
                 };
                 return respond(stream, "200 OK", &result);
             }
@@ -141,6 +141,25 @@ mod tests {
         client.read_to_string(&mut response).unwrap();
         worker.join().unwrap().unwrap();
         response
+    }
+
+    #[test]
+    fn compile_run_returns_package_version_and_output() {
+        let body = r#"{"source":"show 1 + 1"}"#;
+        let request = format!(
+            "POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let response = response_for(request.as_bytes());
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        let response_body = response.split("\r\n\r\n").nth(1).unwrap();
+        let value: Value = serde_json::from_str(response_body).unwrap();
+        assert_eq!(
+            value["compiler"],
+            format!("zenvora-rust-v{}", env!("CARGO_PKG_VERSION"))
+        );
+        assert_eq!(value["output"], "2");
     }
 
     #[test]
