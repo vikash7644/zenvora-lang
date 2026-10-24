@@ -3482,6 +3482,77 @@ fn run_contract_command(
     Ok(receipt)
 }
 
+
+/// Quote source text for the QORVYNT string-literal syntax (which intentionally
+/// supports a smaller escape set than JSON).
+fn quote_qorvynt_string(value: &str) -> Result<String, String> {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            ch if ch.is_control() => {
+                return Err("source contains a control character unsupported by QORVYNT string literals".into());
+            }
+            ch => quoted.push(ch),
+        }
+    }
+    quoted.push('"');
+    Ok(quoted)
+}
+
+/// Runs the QORVYNT-written compiler entry point against arbitrary caller source.
+/// The Rust VM here is the bootstrap host; parsing, semantic validation, lowering,
+/// and bytecode-plan verification are performed by compiler/parser.zv itself.
+fn compile_self_hosted_source(source: &str) -> Result<String, String> {
+    let compiler_path = Path::new("compiler").join("parser.zv");
+    let compiler_source = fs::read_to_string(&compiler_path)
+        .map_err(|error| format!("cannot load QORVYNT compiler at {}: {error}", compiler_path.display()))?;
+    let source_literal = quote_qorvynt_string(source)?;
+    let invocation = format!(
+        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
+         show \"QORVYNT_CLI_PLAN_JSON\"\n\
+         show json_encode(get(qorvynt_cli_result, \"plan\"))\n\
+         show get(qorvynt_cli_result, \"ok\")\n\
+         show get(qorvynt_cli_result, \"stage\")\n\
+         show get(qorvynt_cli_result, \"error\")\n"
+    );
+    let program = format!("{compiler_source}\n{invocation}");
+    let code = compile(&program)
+        .map_err(|error| format!("bootstrap host could not compile QORVYNT compiler source: {error}"))?;
+    let mut output = Vec::new();
+    run_with_output(&code, &mut |line| output.push(line))
+        .map_err(|error| format!("QORVYNT compiler bootstrap execution failed: {error}"))?;
+    let marker = output.iter().rposition(|line| line == "QORVYNT_CLI_PLAN_JSON")
+        .ok_or_else(|| "QORVYNT compiler did not emit its plan marker".to_string())?;
+    let plan_text = output.get(marker + 1)
+        .ok_or_else(|| "QORVYNT compiler emitted no bytecode plan".to_string())?;
+    let ok = output.get(marker + 2).map(String::as_str).unwrap_or("false");
+    let stage = output.get(marker + 3).map(String::as_str).unwrap_or("unknown");
+    let error = output.get(marker + 4).map(String::as_str).unwrap_or("compiler returned no diagnostic");
+    if ok != "true" {
+        return Err(format!("QORVYNT compile {stage} error: {error}"));
+    }
+    serialize_bytecode_plan_v2(plan_text)
+        .map_err(|error| format!("QORVYNT bytecode-plan adapter rejected output: {error}"))
+}
+
+fn write_self_hosted_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String> {
+    let source = read_program(source_path)?;
+    let bytecode = compile_self_hosted_source(&source)?;
+    let temp_path = format!("{output_path}.tmp");
+    fs::write(&temp_path, bytecode)
+        .map_err(|error| format!("cannot write temporary bytecode: {error}"))?;
+    fs::rename(&temp_path, output_path).map_err(|error| {
+        let _ = fs::remove_file(&temp_path);
+        format!("cannot install bytecode at {output_path}: {error}")
+    })
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
@@ -3489,7 +3560,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --emit-self-hosted-bytecode-v2 <file.zv> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
@@ -3538,6 +3609,7 @@ fn main() {
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
+        [_, mode, source, output] if mode == "--emit-self-hosted-bytecode-v2" => write_self_hosted_bytecode_v2(source, output),
         [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_bytecode_plan_v2(plan, output),
         [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
@@ -3549,7 +3621,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --emit-self-hosted-bytecode-v2 <file.zv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
@@ -5203,4 +5275,15 @@ mod game_builtin_tests {
         assert!(execute("show grid_step(2, 0, \"right\", 2, 2, array())").unwrap_err().contains("outside the world"));
         assert!(execute("show grid_step(0, 0, \"right\", 2000, 2000, array())").unwrap_err().contains("1000000 cells"));
     }
+
+    #[test]
+    fn self_hosted_compiler_compiles_arbitrary_source_to_verified_bytecode_v2() {
+        let bytecode = super::compile_self_hosted_source("define answer := 40 + 2\nshow answer\n").unwrap();
+        assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\n"));
+        let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
 }
