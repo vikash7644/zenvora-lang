@@ -1,0 +1,63 @@
+# Zenvora Lang 2D game smoke test.
+# This is a deterministic console-grid prototype, not a graphical game engine.
+# P = player, G = goal, # = wall, . = floor.
+
+define player_x := 1
+define player_y := 1
+define goal_x := 6
+define goal_y := 3
+define turn := 0
+
+show "ZENVORA 2D GRID QUEST"
+show "Reach G from P. Each turn moves one tile."
+call draw_frame(player_x, player_y, goal_x, goal_y)
+
+repeat turn < 8 {
+    if player_x < goal_x {
+        player_x := player_x + 1
+    } otherwise {
+        if player_y < goal_y {
+            player_y := player_y + 1
+        }
+    }
+    turn := turn + 1
+    show "TURN"
+    show turn
+    call draw_frame(player_x, player_y, goal_x, goal_y)
+}
+
+if player_x == goal_x and player_y == goal_y {
+    show "LEVEL COMPLETE"
+} otherwise {
+    show "LEVEL FAILED"
+}
+
+fn draw_frame(px, py, gx, gy) {
+    define row := 0
+    repeat row < 5 {
+        show draw_row(row, px, py, gx, gy)
+        row := row + 1
+    }
+}
+
+fn draw_row(y, px, py, gx, gy) {
+    define x := 0
+    define line := ""
+    repeat x < 8 {
+        if x == px and y == py {
+            line := line + "P"
+        } otherwise {
+            if x == gx and y == gy {
+                line := line + "G"
+            } otherwise {
+                if x == 0 or x == 7 or y == 0 or y == 4 {
+                    line := line + "#"
+                } otherwise {
+                    line := line + "."
+                }
+            }
+        }
+        x := x + 1
+    }
+    return line
+}

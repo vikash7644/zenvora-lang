@@ -15,7 +15,7 @@ cargo check --all-targets
 cargo test --all-targets
 ```
 
-To run the compiler directly from the repository, prefix commands with `cargo run --`. You do not need to build on an Android phone: the repository's pre-release page provides CI-built binaries for Linux x86-64, macOS x86-64/ARM64, and Windows x86-64.
+To run the compiler directly from the repository, prefix commands with `cargo run --`. If you do not want to install Rust/Cargo, use a prebuilt CLI asset from the [GitHub Releases page](https://github.com/vikash7644/zenvora-lang/releases) when an asset is available for your operating system and CPU architecture. Download the matching archive, extract it, and run the `zv` executable (on Linux/macOS, you may need to mark it executable with `chmod +x zv`). Do not download source code and expect it to run as a binary. If no matching release asset is published, the source-build path below currently requires Rust/Cargo; Rust-independent self-hosted installation is not complete yet.
 
 ## 2. Run your first program
 

@@ -1,4 +1,4 @@
-# Zenvora Lang — interpreter MVP
+# QORVYNT Lang — interpreter MVP
 
 This folder contains an isolated line-based Rust interpreter used for syntax experiments and regression tests. The canonical bytecode compiler and VM live at the repository root (`src/main.rs`). GitHub Actions tests both implementations separately; no phone-local setup is required.
 
@@ -34,7 +34,7 @@ repeat count <= 5 {
 
 - `break` exits only the nearest enclosing `repeat` loop.
 - `continue` skips the rest of the current loop body and reevaluates that loop's condition.
-- Using either statement outside a loop exits with a clear `Zenvora error`.
+- Using either statement outside a loop exits with a clear `QORVYNT error`.
 - Nested loops are tested to ensure an inner `break` does not terminate the outer loop.
 
 Run the regression suite with:

@@ -19,6 +19,7 @@ mod bytecode_v2;
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
+mod game_math;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -40,7 +41,11 @@ fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), String> {
         let c = chars[i];
         let token_column = i + 1;
         if c.is_whitespace() { i += 1; continue; }
-        if c == '#' { break; }
+        if c == '#' {
+            // Skip this comment only; later source lines must still be tokenized.
+            while i < chars.len() && chars[i] != '\n' { i += 1; }
+            continue;
+        }
         if out.len() >= MAX_SOURCE_TOKENS {
             return Err(format!("column {}: token count exceeds safety limit ({MAX_SOURCE_TOKENS})", token_column));
         }
@@ -1141,6 +1146,124 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let arg_len = args.len();
     let arity = |expected: usize| if arg_len == expected { Ok(()) } else { Err(format!("builtin '{name}' expects {expected} argument(s), got {arg_len}")) };
     match name {
+        "input_step" => {
+            arity(9)?;
+            let (x, y, width, height) = match (&args[0], &args[1], &args[6], &args[7]) {
+                (Value::Int(x), Value::Int(y), Value::Int(width), Value::Int(height)) => (*x, *y, *width, *height),
+                _ => return Err("type error: input_step expects integer x, y, width, height".into()),
+            };
+            let (left, right, up, down) = match (&args[2], &args[3], &args[4], &args[5]) {
+                (Value::Bool(left), Value::Bool(right), Value::Bool(up), Value::Bool(down)) => (*left, *right, *up, *down),
+                _ => return Err("type error: input_step buttons must be booleans".into()),
+            };
+            if width <= 0 || height <= 0 || width > 10_000 || height > 10_000
+                || width.checked_mul(height).is_none_or(|area| area > 1_000_000) {
+                return Err("input_step world dimensions must be positive, at most 10000 per axis, and at most 1000000 cells".into());
+            }
+            if x < 0 || y < 0 || x >= width || y >= height {
+                return Err("input_step player position is outside the world".into());
+            }
+            let Value::Array(walls) = &args[8] else {
+                return Err("type error: input_step walls must be an array of coordinate strings".into());
+            };
+            for wall in walls {
+                let Value::Str(coordinate) = wall else {
+                    return Err("type error: input_step wall coordinates must be strings like \"3,2\"".into());
+                };
+                let Some((wall_x, wall_y)) = coordinate.split_once(',') else {
+                    return Err("input_step wall coordinates must use the x,y format".into());
+                };
+                let (Ok(wall_x), Ok(wall_y)) = (wall_x.parse::<i64>(), wall_y.parse::<i64>()) else {
+                    return Err("input_step wall coordinates must contain integers".into());
+                };
+                if wall_x < 0 || wall_y < 0 || wall_x >= width || wall_y >= height {
+                    return Err("input_step wall coordinates must be inside the world".into());
+                }
+            }
+            let direction = if right != left {
+                if right { Some("right") } else { Some("left") }
+            } else if down != up {
+                if down { Some("down") } else { Some("up") }
+            } else {
+                None
+            };
+            let Some(direction) = direction else {
+                if width <= 0 || height <= 0 || width > 10_000 || height > 10_000
+                    || width.checked_mul(height).is_none_or(|area| area > 1_000_000) {
+                    return Err("input_step world dimensions must be positive, at most 10000 per axis, and at most 1000000 cells".into());
+                }
+                if x < 0 || y < 0 || x >= width || y >= height {
+                    return Err("input_step player position is outside the world".into());
+                }
+                let mut result = std::collections::BTreeMap::new();
+                result.insert("x".to_string(), Value::Int(x));
+                result.insert("y".to_string(), Value::Int(y));
+                result.insert("moved".to_string(), Value::Bool(false));
+                return Ok(Value::Map(result));
+            };
+            builtin_unchecked("grid_step", vec![
+                Value::Int(x), Value::Int(y), Value::Str(direction.to_string()),
+                Value::Int(width), Value::Int(height), args[8].clone(),
+            ])
+        }
+        "grid_step" => {
+            arity(6)?;
+            let (x, y, width, height) = match (&args[0], &args[1], &args[3], &args[4]) {
+                (Value::Int(x), Value::Int(y), Value::Int(width), Value::Int(height)) => (*x, *y, *width, *height),
+                _ => return Err("type error: grid_step expects integer x, y, width, height".into()),
+            };
+            let Value::Str(direction) = &args[2] else {
+                return Err("type error: grid_step direction must be a string".into());
+            };
+            let Value::Array(walls) = &args[5] else {
+                return Err("type error: grid_step walls must be an array of coordinate strings".into());
+            };
+            if width <= 0 || height <= 0 || width > 10_000 || height > 10_000
+                || width.checked_mul(height).is_none_or(|area| area > 1_000_000) {
+                return Err("grid_step world dimensions must be positive, at most 10000 per axis, and at most 1000000 cells".into());
+            }
+            if x < 0 || y < 0 || x >= width || y >= height {
+                return Err("grid_step player position is outside the world".into());
+            }
+            let (dx, dy) = match direction.as_str() {
+                "up" => (0, -1),
+                "down" => (0, 1),
+                "left" => (-1, 0),
+                "right" => (1, 0),
+                _ => return Err("grid_step direction must be up, down, left, or right".into()),
+            };
+            let next_x = x.checked_add(dx).ok_or("grid_step x coordinate overflow")?;
+            let next_y = y.checked_add(dy).ok_or("grid_step y coordinate overflow")?;
+            let candidate_is_inside = next_x >= 0 && next_y >= 0 && next_x < width && next_y < height;
+            let candidate_key = format!("{next_x},{next_y}");
+            let mut blocked_by_wall = false;
+            // Validate the entire wall list, even after finding a blocking wall. Otherwise
+            // malformed trailing entries could be silently accepted by direct VM callers.
+            for wall in walls {
+                let Value::Str(coordinate) = wall else {
+                    return Err("type error: grid_step wall coordinates must be strings like \"3,2\"".into());
+                };
+                let Some((wall_x, wall_y)) = coordinate.split_once(',') else {
+                    return Err("grid_step wall coordinates must use the x,y format".into());
+                };
+                let (Ok(wall_x), Ok(wall_y)) = (wall_x.parse::<i64>(), wall_y.parse::<i64>()) else {
+                    return Err("grid_step wall coordinates must contain integers".into());
+                };
+                if wall_x < 0 || wall_y < 0 || wall_x >= width || wall_y >= height {
+                    return Err("grid_step wall coordinates must be inside the world".into());
+                }
+                if coordinate == &candidate_key {
+                    blocked_by_wall = true;
+                }
+            }
+            let moved = candidate_is_inside && !blocked_by_wall;
+            let (result_x, result_y) = if moved { (next_x, next_y) } else { (x, y) };
+            let mut result = std::collections::BTreeMap::new();
+            result.insert("x".to_string(), Value::Int(result_x));
+            result.insert("y".to_string(), Value::Int(result_y));
+            result.insert("moved".to_string(), Value::Bool(moved));
+            Ok(Value::Map(result))
+        }
         "array" => Ok(Value::Array(args)),
         "map" => {
             if !args.len().is_multiple_of(2) { return Err("builtin 'map' expects alternating string keys and values".into()); }
@@ -1455,6 +1578,21 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 "char_count" => Ok(Value::Int(i64::try_from(value.chars().count()).map_err(|_| "character count overflow")?)),
                 _ => unreachable!(),
             }
+        }
+        "char_at" => {
+            arity(2)?;
+            let Value::Str(value) = &args[0] else {
+                return Err("type error: char_at expects a string as its first argument".into());
+            };
+            let Value::Int(index) = args[1] else {
+                return Err("type error: char_at expects an integer index".into());
+            };
+            if index < 0 {
+                return Err("char_at index must be non-negative".into());
+            }
+            value.chars().nth(index as usize)
+                .map(|ch| Value::Str(ch.to_string()))
+                .ok_or_else(|| "char_at index is out of range".to_string())
         }
         "to_int" => {
             arity(1)?;
@@ -2540,6 +2678,179 @@ fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), S
         })
 }
 
+fn plan_instructions_to_v2(
+    code: &[serde_json::Value],
+    base: usize,
+    function_entries: &HashMap<String, usize>,
+) -> Result<Vec<String>, String> {
+    let mut instructions = Vec::with_capacity(code.len());
+    for (pc, item) in code.iter().enumerate() {
+        let op = item.get("op").and_then(|v| v.as_str())
+            .ok_or_else(|| format!("bytecode plan: instruction {pc} has no op"))?;
+        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let operand = item.get("value").and_then(|v| v.as_str()).unwrap_or("");
+        let line = match op {
+            "push_const" => match item.get("type").and_then(|v| v.as_str()).unwrap_or("") {
+                "number" => {
+                    let number = item.get("value").and_then(|v| v.as_i64())
+                        .or_else(|| operand.parse::<i64>().ok())
+                        .ok_or_else(|| format!("bytecode plan: invalid numeric constant at {pc}"))?;
+                    format!("PUSH {number}")
+                }
+                "string" => format!("PUSH_STRING_HEX {}", hex_encode(operand)),
+                "boolean" => match operand {
+                    "true" => "PUSH_BOOL true".into(),
+                    "false" => "PUSH_BOOL false".into(),
+                    _ => return Err(format!("bytecode plan: invalid boolean constant at {pc}")),
+                },
+                other => return Err(format!("bytecode plan: unsupported constant type '{other}' at {pc}")),
+            },
+            "load" if valid_identifier(name) => format!("LOAD {name}"),
+            "declare" if valid_identifier(name) => format!("DECLARE {name}"),
+            "store" if valid_identifier(name) => format!("STORE {name}"),
+            "print" => "PRINT".into(),
+            "unary" => match item.get("operator").and_then(|v| v.as_str()).unwrap_or("") {
+                "-" => "NEG".into(),
+                "!" | "not" => "NOT".into(),
+                other => return Err(format!("bytecode plan: unsupported unary operator '{other}' at {pc}")),
+            },
+            "binary" => match item.get("operator").and_then(|v| v.as_str()).unwrap_or("") {
+                "+" => "ADD", "-" => "SUB", "*" => "MUL", "/" => "DIV",
+                "==" => "EQ", "!=" => "NE", "<" => "LT", "<=" => "LE",
+                ">" => "GT", ">=" => "GE", "and" => "AND", "or" => "OR",
+                other => return Err(format!("bytecode plan: unsupported binary operator '{other}' at {pc}")),
+            }.to_string(),
+            "index" => "INDEX".into(),
+            "jump" | "jump_if_false" => {
+                let raw_target = item.get("target").and_then(|v| v.as_i64())
+                    .ok_or_else(|| format!("bytecode plan: missing jump target at {pc}"))?;
+                let target = usize::try_from(raw_target)
+                    .map_err(|_| format!("bytecode plan: negative jump target at {pc}"))?;
+                let target = target.checked_add(base)
+                    .ok_or_else(|| format!("bytecode plan: jump target overflow at {pc}"))?;
+                if op == "jump" { format!("JUMP {target}") } else { format!("JUMP_IF_FALSE {target}") }
+            }
+            "call" if valid_identifier(name) => {
+                let argc = item.get("argc").and_then(|v| v.as_u64())
+                    .ok_or_else(|| format!("bytecode plan: invalid call arity at {pc}"))?;
+                if is_builtin(name) {
+                    format!("BUILTIN {name} {argc}")
+                } else if let Some(target) = function_entries.get(name) {
+                    format!("CALL {target} {argc}")
+                } else {
+                    return Err(format!("bytecode plan: call to undefined function '{name}'"));
+                }
+            }
+            "return" => "RETURN_VALUE".into(),
+            "break" | "continue" | "nested_function" | "compile_error" =>
+                return Err(format!("bytecode plan: unresolved control-flow or compile-error instruction '{op}' at {pc}")),
+            other => return Err(format!("bytecode plan: unsupported instruction '{other}' at {pc}")),
+        };
+        instructions.push(line);
+    }
+    Ok(instructions)
+}
+
+fn serialize_bytecode_plan_v2(plan_text: &str) -> Result<String, String> {
+    let plan: serde_json::Value = serde_json::from_str(plan_text)
+        .map_err(|error| format!("bytecode plan: invalid JSON: {error}"))?;
+    if plan.get("format").and_then(|v| v.as_str()) != Some("ZENVORA_BYTECODE_PLAN_1") {
+        return Err("bytecode plan: expected format ZENVORA_BYTECODE_PLAN_1".into());
+    }
+    let main = plan.get("main").and_then(|v| v.as_array())
+        .ok_or_else(|| "bytecode plan: missing main instruction array".to_string())?;
+    let functions = plan.get("functions").and_then(|v| v.as_array())
+        .ok_or_else(|| "bytecode plan: missing functions array".to_string())?;
+
+    let mut function_entries = HashMap::new();
+    let mut function_specs = Vec::with_capacity(functions.len());
+    let main_end = main.len().checked_add(1)
+        .ok_or_else(|| "bytecode plan: main instruction count overflow".to_string())?;
+    let mut next_entry = main_end;
+    for (index, function) in functions.iter().enumerate() {
+        let name = function.get("name").and_then(|v| v.as_str())
+            .ok_or_else(|| format!("bytecode plan: function {index} has no name"))?;
+        if !valid_identifier(name) {
+            return Err(format!("bytecode plan: invalid function name '{name}'"));
+        }
+        let parameters = function.get("parameters").and_then(|v| v.as_array())
+            .ok_or_else(|| format!("bytecode plan: function '{name}' has no parameter array"))?
+            .iter().map(|parameter| {
+                let parameter = parameter.as_str()
+                    .ok_or_else(|| format!("bytecode plan: non-string parameter in '{name}'"))?;
+                if !valid_identifier(parameter) {
+                    return Err(format!("bytecode plan: invalid parameter '{parameter}' in '{name}'"));
+                }
+                Ok(parameter.to_string())
+            }).collect::<Result<Vec<_>, String>>()?;
+        let code = function.get("code").and_then(|v| v.as_array())
+            .ok_or_else(|| format!("bytecode plan: function '{name}' has no code array"))?;
+        if code.is_empty() {
+            return Err(format!("bytecode plan: function '{name}' has an empty body"));
+        }
+        if function_entries.insert(name.to_string(), next_entry).is_some() {
+            return Err(format!("bytecode plan: duplicate function '{name}'"));
+        }
+        let has_value_return = code.iter().any(|item| item.get("op").and_then(|v| v.as_str()) == Some("return"));
+        let has_end_jump = code.iter().any(|item| {
+            item.get("op").and_then(|v| v.as_str()) == Some("jump")
+                && item.get("target").and_then(|v| v.as_i64()) == Some(code.len() as i64)
+        });
+        // Conditional lowering can leave unreachable unconditional jumps to the
+        // local end boundary after a return. Reserve a terminal stub for those edges.
+        let extra = if !has_value_return { 1 } else if has_end_jump { 2 } else { 0 };
+        let region_len = code.len().checked_add(extra)
+            .ok_or_else(|| format!("bytecode plan: function '{name}' size overflow"))?;
+        function_specs.push((name.to_string(), parameters, code, next_entry, has_value_return, has_end_jump));
+        next_entry = next_entry.checked_add(region_len)
+            .ok_or_else(|| "bytecode plan: total instruction count overflow".to_string())?;
+    }
+
+    let mut instructions = plan_instructions_to_v2(main, 0, &function_entries)?;
+    instructions.push(format!("JUMP {main_end}"));
+    let mut regions = Vec::with_capacity(function_specs.len());
+    for (name, parameters, code, entry, has_value_return, has_end_jump) in function_specs {
+        let mut function_code = plan_instructions_to_v2(code, entry, &function_entries)
+            .map_err(|error| format!("function '{name}': {error}"))?;
+        if !has_value_return {
+            function_code.push("RETURN".into());
+        } else if has_end_jump {
+            function_code.push("PUSH 0".into());
+            function_code.push("RETURN_VALUE".into());
+        }
+        let end = entry.checked_add(function_code.len())
+            .ok_or_else(|| format!("bytecode plan: function '{name}' end overflow"))?;
+        regions.push(bytecode_v2::FunctionRegion {
+            entry,
+            end,
+            parameters,
+            return_kind: if has_value_return {
+                bytecode_v2::ReturnKind::Value
+            } else {
+                bytecode_v2::ReturnKind::Void
+            },
+        });
+        instructions.extend(function_code);
+    }
+
+    let layout = bytecode_v2::ProgramLayout {
+        instruction_count: instructions.len(),
+        main_end,
+        functions: regions,
+    };
+    let file = bytecode_v2::ParsedV2File { layout, instructions };
+    bytecode_v2::verify_v2_file(&file)?;
+    bytecode_v2::serialize_v2_file(&file)
+}
+
+fn write_bytecode_plan_v2(plan_path: &str, output_path: &str) -> Result<(), String> {
+    let plan_text = fs::read_to_string(plan_path)
+        .map_err(|error| format!("cannot read bytecode plan {plan_path}: {error}"))?;
+    let serialized = serialize_bytecode_plan_v2(&plan_text)?;
+    fs::write(output_path, serialized)
+        .map_err(|error| format!("cannot write {output_path}: {error}"))
+}
+
 fn write_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String> {
     let source = read_program(source_path)?;
     let (code, layout) = compile_with_layout(&source)?;
@@ -2556,8 +2867,13 @@ fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
 
 fn run_bytecode(path: &str) -> Result<(), String> {
     let serialized = read_bytecode_source(path)?;
-    let code = deserialize_bytecode(&serialized)?;
-    run(&code)
+    if serialized.starts_with("ZENVORA_BYTECODE 2\n") {
+        let code = deserialize_bytecode_v2(&serialized)?;
+        run(&code)
+    } else {
+        let code = deserialize_bytecode(&serialized)?;
+        run(&code)
+    }
 }
 
 fn run_chain_command(args: &[String]) -> Result<(), String> {
@@ -3222,6 +3538,7 @@ fn main() {
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
+        [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_bytecode_plan_v2(plan, output),
         [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
@@ -3232,7 +3549,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
@@ -3244,6 +3561,74 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn self_hosted_plan_adapter_emits_verified_executable_bytecode_v2() {
+        let plan = r#"{
+          "format":"ZENVORA_BYTECODE_PLAN_1",
+          "main":[
+            {"op":"push_const","type":"number","value":"40"},
+            {"op":"push_const","type":"number","value":"2"},
+            {"op":"binary","operator":"+"},
+            {"op":"print"}
+          ],
+          "functions":[]
+        }"#;
+        let bytecode = super::serialize_bytecode_plan_v2(plan).unwrap();
+        assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\n"));
+        let parsed = crate::bytecode_v2::parse_v2_file(&bytecode).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 40", "PUSH 2", "ADD", "PRINT", "JUMP 5"]);
+        let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn self_hosted_plan_adapter_emits_and_executes_chained_user_function_calls() {
+        let plan = r#"{
+          "format":"ZENVORA_BYTECODE_PLAN_1",
+          "main":[
+            {"op":"push_const","type":"number","value":"40"},
+            {"op":"call","name":"add_one","argc":1},
+            {"op":"print"}
+          ],
+          "functions":[
+            {
+              "name":"add_one",
+              "parameters":["value"],
+              "code":[
+                {"op":"load","name":"value"},
+                {"op":"call","name":"increment","argc":1},
+                {"op":"return"}
+              ]
+            },
+            {
+              "name":"increment",
+              "parameters":["value"],
+              "code":[
+                {"op":"load","name":"value"},
+                {"op":"push_const","type":"number","value":"1"},
+                {"op":"binary","operator":"+"},
+                {"op":"return"}
+              ]
+            }
+          ]
+        }"#;
+        let bytecode = super::serialize_bytecode_plan_v2(plan).unwrap();
+        let parsed = crate::bytecode_v2::parse_v2_file(&bytecode).unwrap();
+        assert_eq!(parsed.layout.functions.len(), 2);
+        assert_eq!(parsed.layout.functions[0].parameters, vec!["value"]);
+        assert_eq!(parsed.layout.functions[1].parameters, vec!["value"]);
+        assert_eq!(parsed.instructions, vec![
+            "PUSH 40", "CALL 4 1", "PRINT", "JUMP 4",
+            "LOAD value", "CALL 7 1", "RETURN_VALUE",
+            "LOAD value", "PUSH 1", "ADD", "RETURN_VALUE",
+        ]);
+        let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["41"]);
+    }
     use super::{compile, compile_core, lex, read_chain_key, run_chain_command, run_with_output, Op};
     use ed25519_dalek::Signer;
 
@@ -3474,6 +3859,14 @@ mod tests {
         assert!(execute("show pow_int(9223372036854775807, 2)\n").unwrap_err().contains("integer overflow"));
         assert!(execute("show speed(10, 0)\n").unwrap_err().contains("denominator must be positive"));
         assert!(execute("show bmi_x10(70, 0)\n").unwrap_err().contains("must be positive"));
+    }
+
+
+    #[test]
+    fn compiler_executes_nested_functions_conditionals_loops_and_expression_precedence() {
+        let source = "define answer := 0\nfn add_or_fallback(a, b) {\nif a > 0 {\nreturn a + b\n} otherwise {\nreturn b\n}\n}\nshow add_or_fallback(2, 3)\nshow add_or_fallback(0, 7)\nrepeat answer < 3 {\nanswer := answer + 1\n}\nshow answer\nshow true or false and false\nshow array(10, 20)[1]\n";
+        let output = execute(source).unwrap();
+        assert_eq!(output, vec!["5", "7", "3", "true", "20"]);
     }
 
     #[test]
@@ -3782,6 +4175,33 @@ mod tests {
         assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\nPUSH_STRING_HEX {}", "61".repeat(super::MAX_BYTECODE_STRING_BYTES + 1))).unwrap_err().contains("string exceeds safety limit"));
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nBUILTIN array 1025\n").unwrap_err().contains("argument count exceeds safety limit"));
         assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", " ".repeat(super::MAX_BYTECODE_BYTES))).unwrap_err().contains("file exceeds safety limit"));
+    }
+
+    #[test]
+    fn every_verifier_accepted_builtin_has_a_runtime_implementation() {
+        // Keep the Bytecode v2 verifier's accepted builtin surface in lockstep
+        // with the runtime dispatch. Zero arguments are intentional: builtins
+        // requiring arguments may report arity/type errors, but must never be
+        // rejected as an unknown runtime builtin.
+        let names = [
+            "array", "map", "get", "len", "contains", "push", "put", "keys",
+            "values", "type_of", "to_string", "abs", "min", "max", "range",
+            "assert", "sum", "starts_with", "ends_with", "split", "join",
+            "replace", "char_at", "first", "last", "reverse", "is_empty",
+            "clamp", "trim", "lower", "upper", "char_count", "to_int",
+            "index_of", "unique", "assert_eq", "gcd", "lcm", "factorial",
+            "is_prime", "fibonacci", "pow_int", "mean", "speed", "density",
+            "molarity", "force", "kinetic_energy", "bmi_x10", "molar_mass",
+            "dna_complement", "gc_content_percent",
+        ];
+        for name in names {
+            assert!(super::bytecode_v2::is_supported_builtin(name), "verifier rejected runtime builtin {name}");
+            let result = super::builtin_unchecked(name, Vec::new());
+            assert!(
+                !matches!(result, Err(ref error) if error.starts_with("unknown builtin")),
+                "verifier accepts {name}, but runtime dispatch does not implement it"
+            );
+        }
     }
 
     #[test]
@@ -4297,6 +4717,52 @@ show index_of(array(7, "x", true), false)
     }
 
     #[test]
+    fn bytecode_v2_executes_standard_library_builtin_parity_end_to_end() {
+        let source = r#"show starts_with("zenvora", "zen")
+show ends_with("zenvora", "ora")
+show trim("  zv  ")
+show lower("ZV")
+show upper("zv")
+show char_count("hé🙂")
+show index_of("zenvora", "v")
+show contains(array(1, 2, 3), 2)
+define profile := map("answer", 42)
+show get(profile, "answer")
+show len(push(array(1), 2))
+show keys(profile)
+show values(profile)
+show replace("zv", "z", "x")
+show split("a,b", ",")
+show join(array("a", "b"), "-")
+show clamp(9, 0, 5)
+show unique(array(1, 1, 2))
+show to_int("42")
+show range(0, 3)
+show sum(array(3, 4))
+"#;
+        let expected = execute(source).unwrap();
+        let stem = format!("zenvora-bytecode-v2-builtins-{}", std::process::id());
+        let source_path = std::env::temp_dir().join(format!("{stem}.zv"));
+        let bytecode_path = std::env::temp_dir().join(format!("{stem}.zv2b"));
+        std::fs::write(&source_path, source).unwrap();
+        super::write_bytecode_v2(source_path.to_str().unwrap(), bytecode_path.to_str().unwrap()).unwrap();
+        let encoded = std::fs::read_to_string(&bytecode_path).unwrap();
+        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        std::fs::remove_file(source_path).unwrap();
+        std::fs::remove_file(bytecode_path).unwrap();
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec![
+            "true", "true", "zv", "zv", "ZV", "3", "3", "true", "42", "2",
+            "[answer]", "[42]", "xv", "[a, b]", "a-b", "5", "[1, 2]", "42",
+            "[0, 1, 2]", "7",
+        ]);
+    }
+
+    #[test]
     fn bytecode_v2_loader_rejects_invalid_code_before_execution() {
         let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n";
         assert!(super::deserialize_bytecode(source).unwrap_err().contains("stack underflow"));
@@ -4553,5 +5019,148 @@ fn factorial(n) {
         assert!(output.is_empty(), "out-of-gas execution must not print a partial result");
         assert_eq!(meter.used(), super::contract_gas::BASE_EXECUTION_GAS + 1);
     }
+    #[test]
+    fn comments_do_not_discard_following_source_lines() {
+        let output = execute("show 1\n# comment between statements\nshow 2\n").unwrap();
+        assert_eq!(output, vec!["1", "2"]);
+    }
 
+
+    #[test]
+    fn two_dimensional_grid_game_runs_and_reaches_goal() {
+        let source = include_str!("../examples/game-2d-grid.zv");
+        let expected = execute(source).expect("2D grid game must execute");
+        assert!(expected.iter().any(|line| line == "ZENVORA 2D GRID QUEST"));
+        assert!(expected.iter().any(|line| line == "LEVEL COMPLETE"));
+        assert!(!expected.iter().any(|line| line == "LEVEL FAILED"));
+
+        // Ensure the same game survives compile -> bytecode-v2 encode/decode -> VM execution.
+        let (code, layout) = super::compile_with_layout(source).expect("2D game must compile");
+        let encoded = super::serialize_bytecode_v2(&code, &layout)
+            .expect("2D game bytecode must serialize");
+        let decoded = super::deserialize_bytecode_v2(&encoded)
+            .expect("2D game bytecode must deserialize");
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line))
+            .expect("2D game bytecode must execute");
+        assert_eq!(actual, expected);
+    }
+
+
+    #[test]
+    fn three_dimensional_wireframe_runs_and_matches_bytecode() {
+        let source = include_str!("../examples/game-3d-wireframe.zv");
+        let expected = execute(source).expect("3D wireframe example must execute");
+        assert!(expected.iter().any(|line| line == "ZENVORA 3D WIREFRAME"));
+        assert!(expected.iter().any(|line| line == "3D SCENE COMPLETE"));
+        assert!(!expected.iter().any(|line| line.contains("FAILED")));
+
+        let (code, layout) =
+            super::compile_with_layout(source).expect("3D wireframe must compile");
+        let encoded = super::serialize_bytecode_v2(&code, &layout)
+            .expect("3D wireframe bytecode must serialize");
+        let decoded = super::deserialize_bytecode_v2(&encoded)
+            .expect("3D wireframe bytecode must deserialize");
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line))
+            .expect("3D wireframe bytecode must execute");
+        assert_eq!(actual, expected);
+    }
+
+
+    #[test]
+    fn headless_2d_simulation_is_deterministic_in_source_and_bytecode() {
+        let source = include_str!("../examples/game-2d-headless-sim.zv");
+        let expected = execute(source).expect("headless simulation must execute");
+        assert!(expected.iter().any(|line| line == "ZENVORA HEADLESS 2D SIMULATION"));
+        assert!(expected.iter().any(|line| line == "COLLISION AVOIDED"));
+        assert!(expected.iter().any(|line| line == "HEADLESS SIM COMPLETE"));
+        assert!(!expected.iter().any(|line| line == "HEADLESS SIM FAILED"));
+
+        let (code, layout) = super::compile_with_layout(source)
+            .expect("headless simulation must compile");
+        let encoded = super::serialize_bytecode_v2(&code, &layout)
+            .expect("headless simulation bytecode must serialize");
+        let decoded = super::deserialize_bytecode_v2(&encoded)
+            .expect("headless simulation bytecode must deserialize");
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line))
+            .expect("headless simulation bytecode must execute");
+        assert_eq!(actual, expected);
+    }
+
+}
+
+
+#[cfg(test)]
+mod game_builtin_tests {
+    use super::{compile, run_with_output};
+
+    fn execute(source: &str) -> Result<Vec<String>, String> {
+        let code = compile(source)?;
+        let mut output = Vec::new();
+        run_with_output(&code, &mut |line| output.push(line))?;
+        Ok(output)
+    }
+
+    #[test]
+    fn grid_step_moves_blocks_walls_and_respects_world_bounds() {
+        let output = execute(concat!(
+            "define walls := array(\"3,1\", \"2,2\")\n",
+            "define moved := grid_step(1, 1, \"right\", 10, 8, walls)\n",
+            "show moved[\"x\"]\nshow moved[\"y\"]\nshow moved[\"moved\"]\n",
+            "define wall_hit := grid_step(2, 1, \"right\", 10, 8, walls)\n",
+            "show wall_hit[\"x\"]\nshow wall_hit[\"moved\"]\n",
+            "define edge_hit := grid_step(0, 0, \"left\", 10, 8, walls)\n",
+            "show edge_hit[\"x\"]\nshow edge_hit[\"y\"]\nshow edge_hit[\"moved\"]\n",
+        )).unwrap();
+        assert_eq!(output, vec!["2", "1", "true", "2", "false", "0", "0", "false"]);
+    }
+
+    #[test]
+    fn input_step_consumes_button_snapshot_and_matches_bytecode() {
+        let source = concat!(
+            "define walls := array(\"2,1\")\n",
+            "define a := input_step(1, 1, false, true, false, true, 5, 4, walls)\n",
+            "show a[\"x\"]\nshow a[\"y\"]\nshow a[\"moved\"]\n",
+            "define b := input_step(1, 1, true, false, false, false, 5, 4, walls)\n",
+            "show b[\"x\"]\nshow b[\"y\"]\nshow b[\"moved\"]\n",
+            "define c := input_step(1, 1, false, false, true, true, 5, 4, walls)\n",
+            "show c[\"x\"]\nshow c[\"y\"]\nshow c[\"moved\"]\n",
+            "define d := input_step(1, 1, true, true, false, false, 5, 4, walls)\n",
+            "show d[\"x\"]\nshow d[\"y\"]\nshow d[\"moved\"]\n",
+        );
+        let expected = execute(source).unwrap();
+        assert_eq!(expected, vec!["1", "1", "false", "0", "1", "true", "1", "1", "false", "1", "1", "false"]);
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn input_step_rejects_non_boolean_button_snapshots() {
+        assert!(execute("show input_step(0, 0, 1, false, false, false, 2, 2, array())").unwrap_err().contains("buttons must be booleans"));
+        assert!(execute("show input_step(0, 0, false, false, false, false, 2, 2, array(\"bad\"))").unwrap_err().contains("x,y format"));
+    }
+
+    #[test]
+    fn grid_step_validates_all_wall_coordinates_even_after_a_hit() {
+        assert!(execute("show grid_step(1, 1, \"right\", 4, 4, array(\"2,1\", \"bad\"))")
+            .unwrap_err().contains("x,y format"));
+        assert!(execute("show grid_step(1, 1, \"right\", 4, 4, array(\"2,1\", \"9,9\"))")
+            .unwrap_err().contains("inside the world"));
+        assert!(execute("show grid_step(1, 1, \"right\", 4, 4, array(\"2,q\"))")
+            .unwrap_err().contains("must contain integers"));
+    }
+
+    #[test]
+    fn grid_step_rejects_invalid_directions_and_worlds() {
+        assert!(execute("show grid_step(0, 0, \"north\", 2, 2, array())").unwrap_err().contains("direction must be up, down, left, or right"));
+        assert!(execute("show grid_step(0, 0, \"right\", 0, 2, array())").unwrap_err().contains("world dimensions"));
+        assert!(execute("show grid_step(2, 0, \"right\", 2, 2, array())").unwrap_err().contains("outside the world"));
+        assert!(execute("show grid_step(0, 0, \"right\", 2000, 2000, array())").unwrap_err().contains("1000000 cells"));
+    }
 }

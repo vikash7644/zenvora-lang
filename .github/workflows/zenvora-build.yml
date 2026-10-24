@@ -1,0 +1,45 @@
+name: Zenvora Build CLI
+on:
+  pull_request:
+    paths:
+      - "src/bin/zvbuild.rs"
+      - "docs/ZENVORA_BUILD.md"
+      - ".github/workflows/zenvora-build.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  push:
+    branches: [main, self-hosted-compiler-foundation]
+    paths:
+      - "src/bin/zvbuild.rs"
+      - "docs/ZENVORA_BUILD.md"
+      - ".github/workflows/zenvora-build.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-tool-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build compiler and Zenvora Build
+        run: cargo build --locked --bins
+      - name: Run build tool unit tests
+        run: cargo test --locked --bin zvbuild
+      - name: Initialize, compile, run and clean a project
+        shell: bash
+        run: |
+          set -euo pipefail
+          target/debug/zvbuild init build-tool-smoke
+          ZENVORA_COMPILER="$PWD/target/debug/zv" target/debug/zvbuild build build-tool-smoke
+          ZENVORA_COMPILER="$PWD/target/debug/zv" target/debug/zvbuild run build-tool-smoke > build-output.txt
+          grep -F 'Hello from Zenvora Build!' build-output.txt
+          grep -F '42' build-output.txt
+          ZENVORA_COMPILER="$PWD/target/debug/zv" target/debug/zvbuild clean build-tool-smoke
+          test ! -e build-tool-smoke/build/main.zvb
