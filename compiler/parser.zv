@@ -2297,3 +2297,17 @@ if get(generic_driver_if, "ok") and get(generic_driver_if_run, "ok") and get(get
   show generic_driver_lex_bad
   show generic_driver_semantic_bad
 }
+
+
+# Additional generic-driver coverage for collections and loop lowering.
+define generic_driver_loop := compile_source("define total := 0\ndefine items := array(2, 3, 4)\ndefine i := 0\nrepeat i < len(items) {\ntotal := total + get(items, i)\ni := i + 1\n}\nshow total\n")
+define generic_driver_loop_run := execute_bytecode_plan(get(generic_driver_loop, "plan"))
+define generic_driver_bad_plan := map("format", "ZENVORA_BYTECODE_PLAN_1", "main", array(map("op", "unknown_opcode", "line", 1)), "functions", array())
+define generic_driver_bad_verify := verify_bytecode_plan(generic_driver_bad_plan)
+if get(generic_driver_loop, "ok") and get(generic_driver_loop_run, "ok") and get(get(generic_driver_loop_run, "output"), 0) == "9" and not get(generic_driver_bad_verify, "ok") and contains(get(generic_driver_bad_verify, "error"), "unsupported bytecode opcode") {
+  show "ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS"
+} otherwise {
+  show "ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_FAIL"
+  show generic_driver_loop
+  show generic_driver_bad_verify
+}
