@@ -2281,3 +2281,19 @@ if get(generic_driver_a, "ok") and get(generic_driver_b, "ok") and not get(gener
   show generic_driver_b
   show generic_driver_bad
 }
+
+
+# Broader generic-driver regressions: lexical errors, semantic errors, and control flow
+# must be handled by the same caller-source pipeline (not by the fixed demo harness).
+define generic_driver_if := compile_source("if 1 < 2 {\nshow 9\n} otherwise {\nshow 0\n}\n")
+define generic_driver_lex_bad := compile_source("show @\n")
+define generic_driver_semantic_bad := compile_source("show missing_value\n")
+define generic_driver_if_run := execute_bytecode_plan(get(generic_driver_if, "plan"))
+if get(generic_driver_if, "ok") and get(generic_driver_if_run, "ok") and get(get(generic_driver_if_run, "output"), 0) == "9" and not get(generic_driver_lex_bad, "ok") and get(generic_driver_lex_bad, "stage") == "lex" and not get(generic_driver_semantic_bad, "ok") and get(generic_driver_semantic_bad, "stage") == "validate" {
+  show "ZENVORA_GENERIC_COMPILER_STAGES_PASS"
+} otherwise {
+  show "ZENVORA_GENERIC_COMPILER_STAGES_FAIL"
+  show generic_driver_if
+  show generic_driver_lex_bad
+  show generic_driver_semantic_bad
+}
