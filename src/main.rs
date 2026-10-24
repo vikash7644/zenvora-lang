@@ -3584,6 +3584,46 @@ mod tests {
     }
 
     #[test]
+    fn self_hosted_plan_adapter_preserves_jumps_across_if_and_repeat_blocks() {
+        let plan = r#"{
+          "format":"ZENVORA_BYTECODE_PLAN_1",
+          "main":[
+            {"op":"push_const","type":"boolean","value":"false"},
+            {"op":"jump_if_false","target":4},
+            {"op":"push_const","type":"number","value":"99"},
+            {"op":"print"},
+            {"op":"push_const","type":"number","value":"1"},
+            {"op":"print"},
+            {"op":"push_const","type":"number","value":"0"},
+            {"op":"declare","name":"i"},
+            {"op":"load","name":"i"},
+            {"op":"push_const","type":"number","value":"2"},
+            {"op":"binary","operator":"<"},
+            {"op":"jump_if_false","target":19},
+            {"op":"load","name":"i"},
+            {"op":"push_const","type":"number","value":"1"},
+            {"op":"binary","operator":"+"},
+            {"op":"store","name":"i"},
+            {"op":"load","name":"i"},
+            {"op":"print"},
+            {"op":"jump","target":8},
+            {"op":"push_const","type":"number","value":"42"},
+            {"op":"print"}
+          ],
+          "functions":[]
+        }"#;
+        let bytecode = super::serialize_bytecode_plan_v2(plan).unwrap();
+        let parsed = crate::bytecode_v2::parse_v2_file(&bytecode).unwrap();
+        assert_eq!(parsed.instructions[1], "JUMP_IF_FALSE 4");
+        assert_eq!(parsed.instructions[11], "JUMP_IF_FALSE 19");
+        assert_eq!(parsed.instructions[18], "JUMP 8");
+        let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["1", "1", "2", "42"]);
+    }
+
+    #[test]
     fn self_hosted_plan_adapter_emits_and_executes_chained_user_function_calls() {
         let plan = r#"{
           "format":"ZENVORA_BYTECODE_PLAN_1",
