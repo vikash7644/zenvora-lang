@@ -1,7 +1,7 @@
 {
   "name": "zenvora-lang",
-  "displayName": "Zenvora Lang",
-  "description": "Syntax highlighting and language configuration for Zenvora Lang (.zv).",
+  "displayName": "QORVYNT Lang",
+  "description": "Syntax highlighting and language configuration for QORVYNT Lang (.zv).",
   "version": "0.1.0",
   "publisher": "zenvora",
   "license": "MIT",
@@ -16,8 +16,8 @@
       {
         "id": "zenvora",
         "aliases": [
-          "Zenvora Lang",
-          "zenvora"
+          "QORVYNT Lang",
+          "qorvynt"
         ],
         "extensions": [
           ".zv"
