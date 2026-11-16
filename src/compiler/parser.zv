@@ -2409,6 +2409,15 @@ if get(generic_driver_v2_result, "ok") and contains(get(generic_driver_v2_result
   show generic_driver_v2_result
 }
 
+
+define generic_driver_v2_flow := compile_source("define i := 0\\nrepeat i < 2 {\\ni := i + 1\\n}\\nif i == 2 {\\nshow 42\\n} otherwise {\\nshow 0\\n}\\n")
+define generic_driver_v2_flow_artifact := get(get(generic_driver_v2_flow, "bytecode"), "artifact")
+if get(generic_driver_v2_flow, "ok") and contains(generic_driver_v2_flow_artifact, "JUMP_IF_FALSE") and contains(generic_driver_v2_flow_artifact, "JUMP ") and contains(generic_driver_v2_flow_artifact, "ZENVORA_BYTECODE 2") {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_PASS"
+} otherwise {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_FAIL"
+  show get(generic_driver_v2_flow, "bytecode")
+}
 define generic_driver_a := compile_source("define answer := 40 + 2\nshow answer\n")
 define generic_driver_b := compile_source("fn double(n) {\nreturn n * 2\n}\nshow double(21)\n")
 define generic_driver_bad := compile_source("show (1 +\n")
