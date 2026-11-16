@@ -67,13 +67,18 @@ jobs:
           cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
           grep -F 'ZENVORA_BYTECODE 2' self-hosted-compiler.zv2b
           cargo run --locked --quiet -- --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
-          grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_PASS' self-hosted-bytecode-output.txt
-          grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_PASS' self-hosted-bytecode-output.txt
-          grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS' self-hosted-bytecode-output.txt
-          grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_PASS' self-hosted-bytecode-output.txt
-          grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' self-hosted-bytecode-output.txt
-          grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' self-hosted-bytecode-output.txt
-          grep -F 'ZENVORA_VM_BUILTIN_PARITY_PASS' self-hosted-bytecode-output.txt
+          python3 - <<'PY'
+          expected = [
+              "14", "42", "7", "7", "120", "7", "3", "v", "true", "ZV",
+              "2", "3", "true", "42", "2", "xv", "2", "5", "2", "42",
+              "3", "720", "55", "256", "6", "25", "21", "18", "228", "29",
+          ]
+          with open("self-hosted-bytecode-output.txt", encoding="utf-8") as artifact:
+              actual = artifact.read().splitlines()
+          if actual != expected:
+              raise SystemExit(f"direct Bytecode v2 execution mismatch:\nexpected={expected!r}\nactual={actual!r}")
+          print("QORVYNT_PLAN_TO_BYTECODE_V2_EXECUTION_PASS")
+          PY
       - name: Verify deterministic plan translation and Bytecode v2 artifact
         shell: bash
         run: |
