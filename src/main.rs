@@ -2867,8 +2867,19 @@ fn run_qorvynt_compiler_and_write(
         println!("{line}");
     }
     let marker = "ZENVORA_INPUT_BYTECODE_V2_JSON";
-    let marker_index = output.iter().position(|line| line == marker)
-        .ok_or_else(|| "QORVYNT compiler did not emit its input bytecode marker".to_string())?;
+    let marker_index = match output.iter().position(|line| line == marker) {
+        Some(index) => index,
+        None => {
+            if let Some(failure_index) = output.iter().position(|line| line == "ZENVORA_INPUT_BYTECODE_V2_FAIL") {
+                let detail = output.get(failure_index + 1).cloned().unwrap_or_else(|| "no compiler diagnostic was emitted".into());
+                return Err(format!("QORVYNT compiler rejected its input: {detail}"));
+            }
+            return Err(format!(
+                "QORVYNT compiler did not emit its input bytecode marker; captured output: {}",
+                output.join("\\n")
+            ));
+        }
+    };
     let json_line = output.get(marker_index + 1)
         .ok_or_else(|| "QORVYNT compiler emitted no bytecode JSON payload".to_string())?;
     let bytecode: String = serde_json::from_str(json_line)
