@@ -93,6 +93,7 @@ jobs:
           ! grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_FAIL' parser-output.txt
           grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_BUILTIN_PASS' parser-output.txt
           ! grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_BUILTIN_FAIL' parser-output.txt
+          grep -A4 -B1 'ZENVORA_VM_TRUTHINESS_FAIL' parser-output.txt || true
           grep -F 'ZENVORA_VM_TRUTHINESS_PASS' parser-output.txt
           ! grep -F 'ZENVORA_VM_TRUTHINESS_FAIL' parser-output.txt
           grep -F 'ZENVORA_INDIRECT_CALL_REJECTED_PASS' parser-output.txt
