@@ -767,7 +767,11 @@ fn emit_expression(code_ir) {
               if op == "call" {
                 out := push(out, map("op", "call", "name", get(item, "name"), "argc", get(item, "argc"), "line", get(item, "line")))
               } otherwise {
-                out := push(out, map("op", "compile_error", "message", "unsupported expression IR", "kind", op, "line", get(item, "line")))
+                if op == "call_indirect" {
+                  out := push(out, map("op", "compile_error", "message", "indirect calls are not supported by the bytecode-plan VM", "kind", op, "line", get(item, "line")))
+                } otherwise {
+                  out := push(out, map("op", "compile_error", "message", "unsupported expression IR", "kind", op, "line", get(item, "line")))
+                }
               }
             }
           }
@@ -1481,7 +1485,19 @@ fn pop_stack(stack) {
   return map("stack", rest, "value", last, "error", "")
 }
 fn vm_truthy(value) {
-  return value == true
+  if type_of(value) == "boolean" {
+    return value
+  } otherwise {
+    if type_of(value) == "number" {
+      return value != 0
+    } otherwise {
+      if type_of(value) == "string" {
+        return char_count(value) > 0
+      } otherwise {
+        return true
+      }
+    }
+  }
 }
 fn vm_binary(operator, left, right) {
   if operator == "+" {
@@ -2371,4 +2387,36 @@ if get(generic_driver_recursive, "ok") and get(generic_driver_recursive_run, "ok
   show generic_driver_undefined_local
   show generic_driver_duplicate_params
   show generic_driver_wrong_arity
+}
+
+
+# Truthiness follows language value categories: false, zero, and empty strings are false.
+define generic_driver_truthy := compile_source("if 1 {\nshow 1\n} otherwise {\nshow 0\n}\nif 0 {\nshow 0\n} otherwise {\nshow 2\n}\nif \"hello\" {\nshow 3\n} otherwise {\nshow 0\n}\nif \"\" {\nshow 0\n} otherwise {\nshow 4\n}\n")
+define generic_driver_truthy_run := execute_bytecode_plan(get(generic_driver_truthy, "plan"))
+if get(generic_driver_truthy, "ok") and get(generic_driver_truthy_run, "ok") and len(get(generic_driver_truthy_run, "output")) == 4 and get(get(generic_driver_truthy_run, "output"), 0) == "1" and get(get(generic_driver_truthy_run, "output"), 1) == "2" and get(get(generic_driver_truthy_run, "output"), 2) == "3" and get(get(generic_driver_truthy_run, "output"), 3) == "4" {
+  show "ZENVORA_VM_TRUTHINESS_PASS"
+} otherwise {
+  show "ZENVORA_VM_TRUTHINESS_FAIL"
+  show generic_driver_truthy
+  show generic_driver_truthy_run
+}
+
+# Explicitly report indirect-call IR as unsupported instead of silently falling through.
+define indirect_call_emission := emit_expression(array(map("op", "call_indirect", "argc", 1, "line", 1)))
+if len(indirect_call_emission) == 1 and get(get(indirect_call_emission, 0), "op") == "compile_error" and get(get(indirect_call_emission, 0), "message") == "indirect calls are not supported by the bytecode-plan VM" {
+  show "ZENVORA_INDIRECT_CALL_REJECTED_PASS"
+} otherwise {
+  show "ZENVORA_INDIRECT_CALL_REJECTED_FAIL"
+  show indirect_call_emission
+}
+
+# A function body followed by a new top-level statement must parse and execute.
+define multiline_function_driver := compile_source("fn add(a, b) {\nreturn a + b\n}\nshow add(20, 22)\n")
+define multiline_function_run := execute_bytecode_plan(get(multiline_function_driver, "plan"))
+if get(multiline_function_driver, "ok") and get(multiline_function_run, "ok") and get(get(multiline_function_run, "output"), 0) == "42" {
+  show "ZENVORA_MULTILINE_FUNCTION_BOUNDARY_PASS"
+} otherwise {
+  show "ZENVORA_MULTILINE_FUNCTION_BOUNDARY_FAIL"
+  show multiline_function_driver
+  show multiline_function_run
 }
