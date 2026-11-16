@@ -2225,6 +2225,7 @@ define runnable_lexed := lex(runnable_source)
 define runnable_ast_result := parse_program(get(runnable_lexed, "tokens"))
 define runnable_ir := lower_program(get(runnable_ast_result, "ast"))
 define runnable_plan := emit_bytecode_plan(runnable_ir)
+# Machine-readable PLAN_1 output is consumed directly by zv --emit-plan-bytecode-v2.
 show "ZENVORA_BYTECODE_PLAN_JSON"
 show json_encode(runnable_plan)
 define runnable_result := execute_bytecode_plan(runnable_plan)
