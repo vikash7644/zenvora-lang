@@ -2712,7 +2712,7 @@ fn compile_plan_json_to_bytecode_v2(source: &str) -> Result<String, String> {
             }
         }
         let implicit_return = plan_function_needs_implicit_return(code)?;
-        let size = code.len() + usize::from(implicit_return);
+        let size = code.len() + if implicit_return { 1 } else { 0 };
         function_entries.insert(name.to_string(), next_entry);
         function_sizes.push((next_entry, size, implicit_return));
         next_entry = next_entry.checked_add(size)
@@ -2731,7 +2731,6 @@ fn compile_plan_json_to_bytecode_v2(source: &str) -> Result<String, String> {
 
     let mut regions = Vec::with_capacity(functions.len());
     for (index, function) in functions.iter().enumerate() {
-        let name = plan_required_string(function, "name")?;
         let params = function.get("parameters").and_then(serde_json::Value::as_array).unwrap();
         let code = function.get("code").and_then(serde_json::Value::as_array).unwrap();
         let (entry, size, implicit_return) = function_sizes[index];
@@ -2752,7 +2751,6 @@ fn compile_plan_json_to_bytecode_v2(source: &str) -> Result<String, String> {
             entry, end, parameters,
             return_kind: if has_value_return { bytecode_v2::ReturnKind::Value } else { bytecode_v2::ReturnKind::Void },
         });
-        let _ = name;
     }
     let layout = bytecode_v2::ProgramLayout {
         instruction_count: instructions.len(),
