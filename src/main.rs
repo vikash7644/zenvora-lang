@@ -1420,6 +1420,16 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
             }
             Ok(Value::Array(items))
         }
+        "hex_encode" => {
+            arity(1)?;
+            let Value::Str(value) = &args[0] else {
+                return Err("type error: hex_encode expects a string".into());
+            };
+            if value.len() > MAX_BYTECODE_STRING_BYTES {
+                return Err("hex_encode input exceeds string safety limit".into());
+            }
+            Ok(Value::Str(hex_encode(value)))
+        }
         "char_at" => {
             arity(2)?;
             let (Value::Str(value), Value::Int(index)) = (&args[0], &args[1]) else {
