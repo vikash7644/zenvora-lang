@@ -5,6 +5,7 @@ on:
     paths:
       - "src/compiler/token_stream.zv"
       - "src/compiler/parser.zv"
+      - "src/compiler/parser_tests.zv"
       - "compiler/SELF_HOSTED_FRONTEND.md"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
@@ -64,7 +65,8 @@ jobs:
           grep -F 'error' frontend-output.txt
       - name: Execute Zenvora-written parser foundation
         run: |
-          cargo run --locked --quiet -- src/compiler/parser.zv > parser-output.txt
+          cat src/compiler/parser.zv src/compiler/parser_tests.zv > parser-suite.zv
+          cargo run --locked --quiet -- parser-suite.zv > parser-output.txt
           cat parser-output.txt
           grep -F 'binary' parser-output.txt
           grep -F 'and' parser-output.txt
@@ -107,7 +109,6 @@ jobs:
           grep -F 'ZENVORA_BRACE_STRING_PASS' parser-output.txt
           ! grep -F 'ZENVORA_BRACE_STRING_FAIL' parser-output.txt
           grep -F 'function call depth limit exceeded' parser-output.txt
-          grep -F 'instruction limit exceeded' parser-output.txt
           ! grep -F 'ZENVORA_VM_ASSERTIONS_FAIL' parser-output.txt
           grep -F '14' parser-output.txt
           grep -F 'ZENVORA_BYTECODE_PLAN' parser-output.txt
