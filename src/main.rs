@@ -2647,25 +2647,39 @@ fn plan_instruction_to_v2(
 }
 
 fn plan_function_needs_implicit_return(code: &[serde_json::Value]) -> Result<bool, String> {
-    let mut jumps_to_end = false;
-    for instruction in code {
-        let op = plan_required_string(instruction, "op")?;
-        if matches!(op, "jump" | "jump_if_false") {
-            let target = instruction.get("target").and_then(serde_json::Value::as_i64)
-                .ok_or_else(|| "bytecode plan: jump target must be an integer".to_string())?;
-            if target < 0 || target as u128 > code.len() as u128 {
-                return Err("bytecode plan: jump target is outside its function".into());
+    let mut pending = vec![0usize];
+    let mut visited = HashSet::new();
+    while let Some(pc) = pending.pop() {
+        if pc == code.len() {
+            return Ok(true);
+        }
+        if pc > code.len() || !visited.insert(pc) {
+            continue;
+        }
+        let instruction = &code[pc];
+        match plan_required_string(instruction, "op")? {
+            "return" => {}
+            "jump" => {
+                let target = instruction.get("target").and_then(serde_json::Value::as_i64)
+                    .ok_or_else(|| "bytecode plan: jump target must be an integer".to_string())?;
+                if target < 0 || target as u128 > code.len() as u128 {
+                    return Err("bytecode plan: jump target is outside its function".into());
+                }
+                pending.push(target as usize);
             }
-            if target as usize == code.len() {
-                jumps_to_end = true;
+            "jump_if_false" => {
+                let target = instruction.get("target").and_then(serde_json::Value::as_i64)
+                    .ok_or_else(|| "bytecode plan: jump target must be an integer".to_string())?;
+                if target < 0 || target as u128 > code.len() as u128 {
+                    return Err("bytecode plan: jump target is outside its function".into());
+                }
+                pending.push(target as usize);
+                pending.push(pc + 1);
             }
+            _ => pending.push(pc + 1),
         }
     }
-    if jumps_to_end {
-        return Ok(true);
-    }
-    let Some(last) = code.last() else { return Ok(true); };
-    Ok(!matches!(plan_required_string(last, "op")?, "return" | "jump"))
+    Ok(false)
 }
 
 /// Converts the QORVYNT-authored, verified PLAN_1 JSON directly to canonical
