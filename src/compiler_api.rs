@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn v1_self_hosted_endpoint_emits_executable_bytecode_v2() {
-        let body = r#"{"source":"show 40 + 2\\n"}"#;
+        let body = r#"{"source":"show 40 + 2\n"}"#;
         let request = format!(
             "POST /v1/compile-bytecode-v2 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
             body.len(), body
