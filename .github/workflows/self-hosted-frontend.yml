@@ -57,14 +57,14 @@ jobs:
           ! grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_FAIL' parser-output.txt
           ! grep -F 'compile_error' parser-output.txt
-      - name: Validate plan JSON and compile the self-hosted frontend to canonical Bytecode v2
+      - name: Translate QORVYNT plan JSON directly to canonical Bytecode v2
         shell: bash
         run: |
           set -euo pipefail
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output.txt > self-hosted-plan.json
           test -s self-hosted-plan.json
           python3 -m json.tool self-hosted-plan.json >/dev/null
-          cargo run --locked --quiet -- --emit-bytecode-v2 compiler/parser.zv self-hosted-compiler.zv2b
+          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
           grep -F 'ZENVORA_BYTECODE 2' self-hosted-compiler.zv2b
           cargo run --locked --quiet -- --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_PASS' self-hosted-bytecode-output.txt
@@ -74,14 +74,14 @@ jobs:
           grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' self-hosted-bytecode-output.txt
           grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' self-hosted-bytecode-output.txt
           grep -F 'ZENVORA_VM_BUILTIN_PARITY_PASS' self-hosted-bytecode-output.txt
-      - name: Verify deterministic compiler output and Bytecode v2 artifact
+      - name: Verify deterministic plan translation and Bytecode v2 artifact
         shell: bash
         run: |
           set -euo pipefail
           cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json
-          cargo run --locked --quiet -- --emit-bytecode-v2 compiler/parser.zv self-hosted-compiler-repeat.zv2b
+          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
           cmp self-hosted-compiler.zv2b self-hosted-compiler-repeat.zv2b
           cargo run --locked --quiet -- --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
