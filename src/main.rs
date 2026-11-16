@@ -2570,7 +2570,7 @@ fn run_bytecode(path: &str) -> Result<(), String> {
     let serialized = read_bytecode_source(path)?;
     // Accept both supported bytecode generations through the same CLI entry point.
     // The v2 decoder performs framing, layout, opcode, and control-flow verification.
-    let code = if serialized.starts_with("ZENVORA_BYTECODE 2\\n") {
+    let code = if serialized.starts_with("ZENVORA_BYTECODE 2\n") {
         deserialize_bytecode_v2(&serialized)?
     } else {
         deserialize_bytecode(&serialized)?
