@@ -779,6 +779,23 @@ fn emit_expression(code_ir) {
   return out
 }
 
+fn statements_terminate(ir) {
+  if len(ir) == 0 {
+    return false
+  }
+  define last := get(ir, len(ir) - 1)
+  define op := get(last, "op")
+  if op == "return" {
+    return true
+  }
+  if op == "branch" {
+    define then_code := get(last, "then")
+    define otherwise_code := get(last, "otherwise")
+    return len(otherwise_code) > 0 and statements_terminate(then_code) and statements_terminate(otherwise_code)
+  }
+  return false
+}
+
 fn emit_statements(ir) {
   define out := array()
   define pos := 0
@@ -809,11 +826,16 @@ fn emit_statements(ir) {
         out := append_instructions(out, emit_statements(get(item, "then")))
         define otherwise_code := get(item, "otherwise")
         if len(otherwise_code) > 0 {
-          define end_jump := len(out)
-          out := push(out, map("op", "jump", "target", -1, "line", line))
-          out := patch_jump(out, false_jump, len(out))
-          out := append_instructions(out, emit_statements(otherwise_code))
-          out := patch_jump(out, end_jump, len(out))
+          if statements_terminate(get(item, "then")) {
+            out := patch_jump(out, false_jump, len(out))
+            out := append_instructions(out, emit_statements(otherwise_code))
+          } otherwise {
+            define end_jump := len(out)
+            out := push(out, map("op", "jump", "target", -1, "line", line))
+            out := patch_jump(out, false_jump, len(out))
+            out := append_instructions(out, emit_statements(otherwise_code))
+            out := patch_jump(out, end_jump, len(out))
+          }
         } otherwise {
           out := patch_jump(out, false_jump, len(out))
         }
