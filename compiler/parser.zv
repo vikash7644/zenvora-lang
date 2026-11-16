@@ -2609,6 +2609,23 @@ if get(generic_driver_recursive, "ok") and get(generic_driver_recursive_run, "ok
   show generic_driver_wrong_arity
 }
 
+# Compiler driver entry point. The host injects source_text; all parsing, validation,
+# plan construction, and canonical Bytecode v2 serialization happen in QORVYNT.
+define input_compile_result := compile_source(source_text)
+if get(input_compile_result, "ok") {
+  define input_native_v2 := emit_bytecode_v2(get(input_compile_result, "plan"))
+  if get(input_native_v2, "ok") {
+    show "ZENVORA_INPUT_BYTECODE_V2_JSON"
+    show json_encode(get(input_native_v2, "bytecode"))
+  } otherwise {
+    show "ZENVORA_INPUT_BYTECODE_V2_FAIL"
+    show get(input_native_v2, "error")
+  }
+} otherwise {
+  show "ZENVORA_INPUT_BYTECODE_V2_FAIL"
+  show input_compile_result
+}
+
 
 # Verifier hardening: reject malformed instruction records and non-integer branch targets.
 define malformed_instruction_plan := map("format", "ZENVORA_BYTECODE_PLAN_1", "main", array("jump"), "functions", array())
