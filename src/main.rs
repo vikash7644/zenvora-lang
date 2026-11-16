@@ -4241,6 +4241,19 @@ show char_at("hé🙂", 2)
     }
 
     #[test]
+    fn bytecode_v2_executes_char_at_with_unicode_scalar_indices() {
+        let source = "show char_at(\"QORVYNT\", 0)\\nshow char_at(\"hé🙂\", 1)\\nshow char_at(\"hé🙂\", 2)\\n";
+        let expected = execute(source).unwrap();
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(actual, vec!["Q", "é", "🙂"]);
+    }
+
+    #[test]
     fn index_of_supports_unicode_strings_and_arrays() {
         let output = execute(r#"show index_of("héllo🙂", "🙂")
 show index_of("zenvora", "nope")
