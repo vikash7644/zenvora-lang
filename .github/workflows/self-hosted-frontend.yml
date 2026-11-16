@@ -116,11 +116,11 @@ jobs:
           cargo run --locked --quiet -- --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
           cmp self-hosted-compiler-from-driver.zv2b self-hosted-compiler-from-driver-repeat.zv2b
-          cargo run --locked --quiet -- --emit-bytecode-v2 compiler/parser.zv self-hosted-stage1-compiler.zv2b
-          cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage1-compiler.zv2b compiler/parser.zv self-hosted-stage2-compiler.zv2b > self-hosted-stage2-output.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 compiler/bootstrap.zv self-hosted-stage1-compiler.zv2b
+          cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage1-compiler.zv2b compiler/bootstrap.zv self-hosted-stage2-compiler.zv2b > self-hosted-stage2-output.txt
           grep -F 'ZENVORA_INPUT_BYTECODE_V2_JSON' self-hosted-stage2-output.txt
           ! grep -F 'ZENVORA_INPUT_BYTECODE_V2_FAIL' self-hosted-stage2-output.txt
-          cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/parser.zv self-hosted-stage3-compiler.zv2b > self-hosted-stage3-output.txt
+          cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/bootstrap.zv self-hosted-stage3-compiler.zv2b > self-hosted-stage3-output.txt
           cmp self-hosted-stage2-compiler.zv2b self-hosted-stage3-compiler.zv2b
           cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/fixtures/runnable_sample.zv self-hosted-stage2-sample.zv2b > self-hosted-stage2-sample-output.txt
           cmp self-hosted-stage2-sample.zv2b self-hosted-native-v2.zv2b
