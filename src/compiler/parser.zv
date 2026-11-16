@@ -946,6 +946,121 @@ fn emit_bytecode_plan(ir) {
   return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
 }
 
+# Zenvora-written Bytecode v2 backend for main-program scalar and control-flow code.
+# Strings and user functions deliberately fail closed until their encoders/layouts land.
+fn emit_v2_main_instruction(item) {
+  define op := get(item, "op")
+  if op == "push_const" {
+    define kind := get(item, "type")
+    define value := get(item, "value")
+    if kind == "number" {
+      return "PUSH " + to_string(value)
+    }
+    if kind == "boolean" {
+      return "PUSH_BOOL " + to_string(value)
+    }
+    return "UNSUPPORTED string literal: UTF-8 hex encoding is not implemented"
+  }
+  if op == "load" {
+    return "LOAD " + get(item, "name")
+  }
+  if op == "declare" {
+    return "DECLARE " + get(item, "name")
+  }
+  if op == "store" {
+    return "STORE " + get(item, "name")
+  }
+  if op == "print" {
+    return "PRINT"
+  }
+  if op == "index" {
+    return "INDEX"
+  }
+  if op == "unary" {
+    if get(item, "operator") == "-" {
+      return "NEG"
+    }
+    if get(item, "operator") == "!" or get(item, "operator") == "not" {
+      return "NOT"
+    }
+  }
+  if op == "binary" {
+    define operator := get(item, "operator")
+    if operator == "+" {
+      return "ADD"
+    }
+    if operator == "-" {
+      return "SUB"
+    }
+    if operator == "*" {
+      return "MUL"
+    }
+    if operator == "/" {
+      return "DIV"
+    }
+    if operator == "==" {
+      return "EQ"
+    }
+    if operator == "!=" {
+      return "NE"
+    }
+    if operator == "<" {
+      return "LT"
+    }
+    if operator == "<=" {
+      return "LE"
+    }
+    if operator == ">" {
+      return "GT"
+    }
+    if operator == ">=" {
+      return "GE"
+    }
+    if operator == "and" {
+      return "AND"
+    }
+    if operator == "or" {
+      return "OR"
+    }
+  }
+  if op == "jump" {
+    return "JUMP " + to_string(get(item, "target"))
+  }
+  if op == "jump_if_false" {
+    return "JUMP_IF_FALSE " + to_string(get(item, "target"))
+  }
+  return "UNSUPPORTED opcode: " + op
+}
+
+fn emit_v2_main_code(code) {
+  define lines := array()
+  define pos := 0
+  repeat pos < len(code) {
+    define line := emit_v2_main_instruction(get(code, pos))
+    if starts_with(line, "UNSUPPORTED ") {
+      return map("ok", false, "error", line, "artifact", "")
+    }
+    lines := push(lines, line)
+    pos := pos + 1
+  }
+  return map("ok", true, "error", "", "lines", lines)
+}
+
+fn emit_bytecode_v2_main(plan) {
+  define functions := get(plan, "functions")
+  if len(functions) > 0 {
+    return map("ok", false, "error", "function metadata and CALL emission are not implemented", "artifact", "")
+  }
+  define code := get(plan, "main")
+  define emitted := emit_v2_main_code(code)
+  if not get(emitted, "ok") {
+    return emitted
+  }
+  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(len(code)), "CODE")
+  lines := append_instructions(lines, get(emitted, "lines"))
+  return map("ok", true, "error", "", "artifact", join(lines, "\n") + "\n")
+}
+
 # Zenvora-written semantic checks for statement placement and supported AST shapes.
 fn validate_expression(ast) {
   define kind := get(ast, "kind")
@@ -2319,7 +2434,30 @@ fn compile_source(source) {
   if not get(verified, "ok") {
     return map("ok", false, "stage", "verify", "error", get(verified, "error"), "plan", "")
   }
-  return map("ok", true, "stage", "complete", "error", "", "plan", plan)
+  define bytecode := emit_bytecode_v2_main(plan)
+  return map("ok", true, "stage", "complete", "error", "", "plan", plan, "bytecode", bytecode)
+}
+
+
+# Direct Bytecode v2 artifact regression for the Zenvora-written backend.
+define generic_driver_v2 := compile_source("define answer := 40 + 2\\nshow answer\\n")
+define generic_driver_v2_result := get(generic_driver_v2, "bytecode")
+if get(generic_driver_v2, "ok") and get(generic_driver_v2_result, "ok") and index_of(get(generic_driver_v2_result, "artifact"), "ZENVORA_BYTECODE 2") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "PUSH 40") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "ADD") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "PRINT") >= 0 {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_MAIN_PASS"
+} otherwise {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_MAIN_FAIL"
+  show generic_driver_v2
+  show generic_driver_v2_result
+}
+
+define generic_driver_v2_flow := compile_source("define i := 0\\nrepeat i < 2 {\\ni := i + 1\\n}\\nif i == 2 {\\nshow 42\\n} otherwise {\\nshow 0\\n}\\n")
+define generic_driver_v2_flow_result := get(generic_driver_v2_flow, "bytecode")
+if get(generic_driver_v2_flow, "ok") and get(generic_driver_v2_flow_result, "ok") and index_of(get(generic_driver_v2_flow_result, "artifact"), "JUMP_IF_FALSE") >= 0 and index_of(get(generic_driver_v2_flow_result, "artifact"), "JUMP ") >= 0 {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_PASS"
+} otherwise {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_FAIL"
+  show generic_driver_v2_flow
+  show generic_driver_v2_flow_result
 }
 
 # Regression: the same entry point compiles distinct caller-provided programs,
