@@ -2424,7 +2424,7 @@ fn compile_source(source) {
 
 # Regression: the same entry point compiles distinct caller-provided programs,
 # and malformed source fails at the correct stage rather than emitting a plan.
-define generic_driver_v2 := compile_source("define answer := 40 + 2\\nshow answer\\n")
+define generic_driver_v2 := compile_source("define answer := 40 + 2\nshow answer\n")
 define generic_driver_v2_result := get(generic_driver_v2, "bytecode")
 if get(generic_driver_v2_result, "ok") and contains(get(generic_driver_v2_result, "artifact"), "ZENVORA_BYTECODE 2") and contains(get(generic_driver_v2_result, "artifact"), "PUSH 40") and contains(get(generic_driver_v2_result, "artifact"), "ADD") and contains(get(generic_driver_v2_result, "artifact"), "PRINT") {
   show "ZENVORA_WRITTEN_BYTECODE_V2_MAIN_PASS"
@@ -2434,7 +2434,7 @@ if get(generic_driver_v2_result, "ok") and contains(get(generic_driver_v2_result
 }
 
 
-define generic_driver_v2_flow := compile_source("define i := 0\\nrepeat i < 2 {\\ni := i + 1\\n}\\nif i == 2 {\\nshow 42\\n} otherwise {\\nshow 0\\n}\\n")
+define generic_driver_v2_flow := compile_source("define i := 0\nrepeat i < 2 {\ni := i + 1\n}\nif i == 2 {\nshow 42\n} otherwise {\nshow 0\n}\n")
 define generic_driver_v2_flow_artifact := get(get(generic_driver_v2_flow, "bytecode"), "artifact")
 if get(generic_driver_v2_flow, "ok") and contains(generic_driver_v2_flow_artifact, "JUMP_IF_FALSE") and contains(generic_driver_v2_flow_artifact, "JUMP ") and contains(generic_driver_v2_flow_artifact, "ZENVORA_BYTECODE 2") {
   show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_PASS"
