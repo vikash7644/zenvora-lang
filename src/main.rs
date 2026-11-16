@@ -5305,4 +5305,37 @@ mod game_builtin_tests {
         assert!(error.contains("undefined") || error.contains("name"), "unexpected diagnostic: {error}");
     }
 
+
+    #[test]
+    fn self_hosted_compiler_compiles_recursive_functions_to_verified_bytecode_v2() {
+        let source = "fn factorial(n) {\nif n <= 1 {\nreturn 1\n} otherwise {\nreturn n * factorial(n - 1)\n}\n}\nshow factorial(5)\n";
+        let bytecode = super::compile_self_hosted_source(source).unwrap();
+        assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\\n"));
+        let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["120"]);
+    }
+
+    #[test]
+    fn self_hosted_compiler_compiles_branches_and_loops_to_verified_bytecode_v2() {
+        let source = "define total := 0\ndefine i := 0\nrepeat i < 4 {\nif i < 3 {\ntotal := total + i\n} otherwise {\ntotal := total + 10\n}\ni := i + 1\n}\nshow total\n";
+        let bytecode = super::compile_self_hosted_source(source).unwrap();
+        let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["13"]);
+    }
+
+    #[test]
+    fn self_hosted_compiler_rejects_wrong_function_arity_before_emitting_bytecode() {
+        let error = super::compile_self_hosted_source(
+            "fn add(a, b) {\nreturn a + b\n}\nshow add(1)\n"
+        ).unwrap_err();
+        assert!(
+            error.contains("expects 2 argument") || error.contains("argument count"),
+            "unexpected diagnostic: {error}"
+        );
+    }
+
 }
