@@ -3515,8 +3515,8 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
     let compiler_source = COMPILER_SOURCE;
     let source_literal = quote_qorvynt_string(source)?;
     let invocation = format!(
-        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\\
-         show \"QORVYNT_CLI_PLAN_JSON\"\n\\
+        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
+         show \"QORVYNT_CLI_PLAN_JSON\"\n\
          show json_encode(qorvynt_cli_result)\n"
     );
     let program = format!("{compiler_source}\n{invocation}");
