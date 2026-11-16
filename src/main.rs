@@ -2570,7 +2570,6 @@ fn plan_instruction_to_v2(
     function_entries: &HashMap<String, usize>,
 ) -> Result<String, String> {
     let op = plan_required_string(item, "op")?;
-    let name = |key: &str| -> Result<&str, String> { plan_required_string(item, key) };
     let count = || plan_required_usize(item, "argc");
     let target = || -> Result<usize, String> {
         let raw = item.get("target").and_then(serde_json::Value::as_i64)
@@ -2584,7 +2583,7 @@ fn plan_instruction_to_v2(
 
     let instruction = match op {
         "push_const" => {
-            match name("type")? {
+            match plan_required_string(item, "type")? {
                 "number" | "integer" => {
                     let value = item.get("value").ok_or_else(|| "bytecode plan: missing constant value".to_string())?;
                     let number = value.as_i64().or_else(|| value.as_str().and_then(|text| text.parse::<i64>().ok()))
@@ -2605,18 +2604,18 @@ fn plan_instruction_to_v2(
             }
         }
         "load" | "declare" | "store" => {
-            let identifier = name("name")?;
+            let identifier = plan_required_string(item, "name")?;
             if !valid_identifier(identifier) {
                 return Err(format!("bytecode plan: invalid identifier '{identifier}'"));
             }
             format!("{} {identifier}", match op { "load" => "LOAD", "declare" => "DECLARE", _ => "STORE" })
         }
-        "unary" => match name("operator")? {
+        "unary" => match plan_required_string(item, "operator")? {
             "-" => "NEG".into(),
             "!" | "not" => "NOT".into(),
             other => return Err(format!("bytecode plan: unsupported unary operator '{other}'")),
         },
-        "binary" => match name("operator")? {
+        "binary" => match plan_required_string(item, "operator")? {
             "+" => "ADD", "-" => "SUB", "*" => "MUL", "/" => "DIV",
             "==" => "EQ", "!=" => "NE", "<" => "LT", "<=" => "LE",
             ">" => "GT", ">=" => "GE", "and" => "AND", "or" => "OR",
@@ -2632,7 +2631,7 @@ fn plan_instruction_to_v2(
         "jump" => format!("JUMP {}", target()?),
         "jump_if_false" => format!("JUMP_IF_FALSE {}", target()?),
         "call" => {
-            let function = name("name")?;
+            let function = plan_required_string(item, "name")?;
             let argc = count()?;
             if bytecode_v2::is_supported_builtin(function) {
                 format!("BUILTIN {function} {argc}")
@@ -2742,6 +2741,9 @@ fn compile_plan_json_to_bytecode_v2(source: &str) -> Result<String, String> {
                 has_value_return = true;
             }
             instructions.push(plan_instruction_to_v2(item, entry, code.len(), &function_entries)?);
+        }
+        if implicit_return && has_value_return {
+            return Err(format!("bytecode plan: function '{}' may fall through without a value", plan_required_string(function, "name")?));
         }
         if implicit_return {
             instructions.push("RETURN".into());
