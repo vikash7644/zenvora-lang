@@ -107,7 +107,7 @@ cargo run -- --compiler-api
 - Legacy aliases: `GET /health` and `POST /compile-run`.
 
 POST requests use JSON: `{"source":"define total := 10\\nshow total * 3"}`.
-The request limit is 64 KiB and the source limit is 48 KiB. Compile/runtime errors use HTTP 422; malformed requests, missing content type, oversized bodies, and unauthorized requests use appropriate 4xx responses.
+The request limit is 64 KiB, source limit is 48 KiB, response output is capped at 1 MiB, and active connections are capped at 32. Compile/runtime errors use HTTP 422; malformed requests, missing content type, oversized bodies, and unauthorized requests use appropriate 4xx responses.
 
 ### Binding and authentication
 
@@ -120,7 +120,7 @@ ZENVORA_API_ALLOWED_ORIGIN='https://your-playground.example' \
 cargo run -- --compiler-api
 ```
 
-When a token is configured, compile routes require `Authorization: Bearer YOUR_TOKEN`. Use a TLS reverse proxy in front of this plain-HTTP server before exposing it outside a trusted network. Keep the token in server-side secrets; never embed it in browser JavaScript. The listener has bounded request/source sizes and per-connection timeouts, but a hosted deployment still needs external rate limiting, monitoring, TLS termination, and operational controls.
+When a token is configured, compile routes require `Authorization: Bearer YOUR_TOKEN`. Use a TLS reverse proxy in front of this plain-HTTP server before exposing it outside a trusted network. Keep the token in server-side secrets; never embed it in browser JavaScript. The listener has bounded request/source/output sizes, at most 32 concurrent connections, and per-connection timeouts, but a hosted deployment still needs external rate limiting, monitoring, TLS termination, and operational controls.
 
 Example:
 
