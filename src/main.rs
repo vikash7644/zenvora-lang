@@ -2839,19 +2839,15 @@ fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
     fs::write(output_path, serialized).map_err(|error| format!("cannot write {output_path}: {error}"))
 }
 
-fn write_qorvynt_compiled_source(
-    compiler_path: &str,
+fn run_qorvynt_compiler_and_write(
+    compiler_code: &[Op],
     input_path: &str,
     output_path: &str,
 ) -> Result<(), String> {
-    let compiler_source = read_program(compiler_path)?;
     let input_source = read_program(input_path)?;
-    let (compiler_code, compiler_layout) = compile_with_layout(&compiler_source)?;
-    let compiler_bytecode = serialize_bytecode_v2(&compiler_code, &compiler_layout)?;
-    let verified_compiler = deserialize_bytecode_v2(&compiler_bytecode)?;
     let bindings = HashMap::from([("source_text".to_string(), Value::Str(input_source))]);
     let mut output = Vec::new();
-    run_with_output_and_bindings(&verified_compiler, &mut |line| output.push(line), bindings)?;
+    run_with_output_and_bindings(compiler_code, &mut |line| output.push(line), bindings)?;
 
     for line in &output {
         println!("{line}");
@@ -2872,6 +2868,28 @@ fn write_qorvynt_compiled_source(
     let _verified_output = deserialize_bytecode_v2(&bytecode)?;
     fs::write(output_path, bytecode)
         .map_err(|error| format!("cannot write {output_path}: {error}"))
+}
+
+fn write_qorvynt_compiled_source(
+    compiler_path: &str,
+    input_path: &str,
+    output_path: &str,
+) -> Result<(), String> {
+    let compiler_source = read_program(compiler_path)?;
+    let (compiler_code, compiler_layout) = compile_with_layout(&compiler_source)?;
+    let compiler_bytecode = serialize_bytecode_v2(&compiler_code, &compiler_layout)?;
+    let verified_compiler = deserialize_bytecode_v2(&compiler_bytecode)?;
+    run_qorvynt_compiler_and_write(&verified_compiler, input_path, output_path)
+}
+
+fn write_bytecode_with_source(
+    compiler_bytecode_path: &str,
+    input_path: &str,
+    output_path: &str,
+) -> Result<(), String> {
+    let serialized = read_bytecode_source(compiler_bytecode_path)?;
+    let verified_compiler = deserialize_bytecode_v2(&serialized)?;
+    run_qorvynt_compiler_and_write(&verified_compiler, input_path, output_path)
 }
 
 fn run_bytecode(path: &str) -> Result<(), String> {
@@ -3499,7 +3517,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --compile-with-qorvynt <compiler.zv> <input.zv> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --compile-with-qorvynt <compiler.zv> <input.zv> <output.zv2b>\n       zv --run-bytecode-with-source <compiler.zv2b> <input.zv> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
@@ -3550,6 +3568,7 @@ fn main() {
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
         [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_plan_bytecode_v2(plan, output),
         [_, mode, compiler, input, output] if mode == "--compile-with-qorvynt" => write_qorvynt_compiled_source(compiler, input, output),
+        [_, mode, compiler, input, output] if mode == "--run-bytecode-with-source" => write_bytecode_with_source(compiler, input, output),
         [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
