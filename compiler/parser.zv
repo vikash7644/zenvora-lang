@@ -928,7 +928,7 @@ fn emit_bytecode_plan(ir) {
     define item := get(ir, pos)
     if get(item, "op") == "function" {
       define function_code := emit_statements(get(item, "body"))
-      functions := push(functions, map("name", get(item, "name"), "parameters", get(item, "parameters"), "code", function_code, "line", get(item, "line")))
+      functions := push(functions, map("name", get(item, "name"), "parameters", get(item, "parameters"), "code", function_code, "falls_through", not statements_terminate(get(item, "body")), "line", get(item, "line")))
     } otherwise {
       main_ir := push(main_ir, item)
     }
