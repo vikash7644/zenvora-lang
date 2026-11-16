@@ -90,6 +90,8 @@ jobs:
           grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_MAIN_PASS' parser-output.txt
           ! grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_MAIN_FAIL' parser-output.txt
           grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_PASS' parser-output.txt
+          grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_FUNCTION_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_FUNCTION_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_FAIL' parser-output.txt
           grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_BUILTIN_PASS' parser-output.txt
           ! grep -F 'ZENVORA_WRITTEN_BYTECODE_V2_BUILTIN_FAIL' parser-output.txt
