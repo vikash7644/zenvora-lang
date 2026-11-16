@@ -2552,6 +2552,225 @@ fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), S
         })
 }
 
+fn plan_required_string<'a>(value: &'a serde_json::Value, key: &str) -> Result<&'a str, String> {
+    value.get(key).and_then(serde_json::Value::as_str)
+        .ok_or_else(|| format!("bytecode plan: '{key}' must be a string"))
+}
+
+fn plan_required_usize(value: &serde_json::Value, key: &str) -> Result<usize, String> {
+    value.get(key).and_then(serde_json::Value::as_u64)
+        .and_then(|number| usize::try_from(number).ok())
+        .ok_or_else(|| format!("bytecode plan: '{key}' must be a non-negative integer"))
+}
+
+fn plan_instruction_to_v2(
+    item: &serde_json::Value,
+    base: usize,
+    local_len: usize,
+    function_entries: &HashMap<String, usize>,
+) -> Result<String, String> {
+    let op = plan_required_string(item, "op")?;
+    let name = |key: &str| -> Result<&str, String> { plan_required_string(item, key) };
+    let count = || plan_required_usize(item, "argc");
+    let target = || -> Result<usize, String> {
+        let raw = item.get("target").and_then(serde_json::Value::as_i64)
+            .ok_or_else(|| "bytecode plan: jump target must be an integer".to_string())?;
+        if raw < 0 || raw as u128 > local_len as u128 {
+            return Err("bytecode plan: jump target is outside its instruction region".into());
+        }
+        base.checked_add(raw as usize)
+            .ok_or_else(|| "bytecode plan: relocated jump target overflow".into())
+    };
+
+    let instruction = match op {
+        "push_const" => {
+            match name("type")? {
+                "number" | "integer" => {
+                    let value = item.get("value").ok_or_else(|| "bytecode plan: missing constant value".to_string())?;
+                    let number = value.as_i64().or_else(|| value.as_str().and_then(|text| text.parse::<i64>().ok()))
+                        .ok_or_else(|| "bytecode plan: integer constant is invalid".to_string())?;
+                    format!("PUSH {number}")
+                }
+                "string" => {
+                    let value = item.get("value").and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| "bytecode plan: string constant must be a string".to_string())?;
+                    format!("PUSH_STRING_HEX {}", hex_encode(value))
+                }
+                "boolean" => {
+                    let value = item.get("value").and_then(serde_json::Value::as_bool)
+                        .ok_or_else(|| "bytecode plan: boolean constant must be boolean".to_string())?;
+                    format!("PUSH_BOOL {value}")
+                }
+                other => return Err(format!("bytecode plan: unsupported constant type '{other}'")),
+            }
+        }
+        "load" | "declare" | "store" => {
+            let identifier = name("name")?;
+            if !valid_identifier(identifier) {
+                return Err(format!("bytecode plan: invalid identifier '{identifier}'"));
+            }
+            format!("{} {identifier}", match op { "load" => "LOAD", "declare" => "DECLARE", _ => "STORE" })
+        }
+        "unary" => match name("operator")? {
+            "-" => "NEG".into(),
+            "!" | "not" => "NOT".into(),
+            other => return Err(format!("bytecode plan: unsupported unary operator '{other}'")),
+        },
+        "binary" => match name("operator")? {
+            "+" => "ADD", "-" => "SUB", "*" => "MUL", "/" => "DIV",
+            "==" => "EQ", "!=" => "NE", "<" => "LT", "<=" => "LE",
+            ">" => "GT", ">=" => "GE", "and" => "AND", "or" => "OR",
+            other => return Err(format!("bytecode plan: unsupported binary operator '{other}'")),
+        }.into(),
+        "index" => "INDEX".into(),
+        "print" => "PRINT".into(),
+        "return" => {
+            let has_value = item.get("has_value").and_then(serde_json::Value::as_bool)
+                .ok_or_else(|| "bytecode plan: return instruction is missing has_value metadata".to_string())?;
+            if has_value { "RETURN_VALUE".into() } else { "RETURN".into() }
+        }
+        "jump" => format!("JUMP {}", target()?),
+        "jump_if_false" => format!("JUMP_IF_FALSE {}", target()?),
+        "call" => {
+            let function = name("name")?;
+            let argc = count()?;
+            if bytecode_v2::is_supported_builtin(function) {
+                format!("BUILTIN {function} {argc}")
+            } else {
+                let entry = function_entries.get(function)
+                    .ok_or_else(|| format!("bytecode plan: call to undefined function '{function}'"))?;
+                format!("CALL {entry} {argc}")
+            }
+        }
+        other => return Err(format!("bytecode plan: unsupported instruction '{other}'")),
+    };
+    Ok(instruction)
+}
+
+fn plan_function_needs_implicit_return(code: &[serde_json::Value]) -> Result<bool, String> {
+    let mut jumps_to_end = false;
+    for instruction in code {
+        let op = plan_required_string(instruction, "op")?;
+        if matches!(op, "jump" | "jump_if_false") {
+            let target = instruction.get("target").and_then(serde_json::Value::as_i64)
+                .ok_or_else(|| "bytecode plan: jump target must be an integer".to_string())?;
+            if target < 0 || target as u128 > code.len() as u128 {
+                return Err("bytecode plan: jump target is outside its function".into());
+            }
+            if target as usize == code.len() {
+                jumps_to_end = true;
+            }
+        }
+    }
+    if jumps_to_end {
+        return Ok(true);
+    }
+    let Some(last) = code.last() else { return Ok(true); };
+    Ok(!matches!(plan_required_string(last, "op")?, "return" | "jump"))
+}
+
+/// Converts the QORVYNT-authored, verified PLAN_1 JSON directly to canonical
+/// executable Bytecode v2. No source recompilation or Rust parser is involved.
+fn compile_plan_json_to_bytecode_v2(source: &str) -> Result<String, String> {
+    if source.len() > bytecode_v2::MAX_V2_FILE_BYTES {
+        return Err("bytecode plan: input exceeds 16 MiB safety limit".into());
+    }
+    let plan: serde_json::Value = serde_json::from_str(source)
+        .map_err(|error| format!("bytecode plan: invalid JSON: {error}"))?;
+    if plan_required_string(&plan, "format")? != "ZENVORA_BYTECODE_PLAN_1" {
+        return Err("bytecode plan: unsupported format".into());
+    }
+    let main = plan.get("main").and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "bytecode plan: main must be an instruction array".to_string())?;
+    let functions = plan.get("functions").and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "bytecode plan: functions must be an array".to_string())?;
+    if main.len() + 1 > bytecode_v2::MAX_V2_INSTRUCTIONS {
+        return Err("bytecode plan: instruction count exceeds safety limit".into());
+    }
+
+    let mut function_entries = HashMap::new();
+    let mut function_sizes = Vec::with_capacity(functions.len());
+    let mut next_entry = main.len() + 1;
+    for function in functions {
+        let name = plan_required_string(function, "name")?;
+        if !valid_identifier(name) || function_entries.contains_key(name) {
+            return Err(format!("bytecode plan: invalid or duplicate function name '{name}'"));
+        }
+        let params = function.get("parameters").and_then(serde_json::Value::as_array)
+            .ok_or_else(|| format!("bytecode plan: parameters for '{name}' must be an array"))?;
+        let code = function.get("code").and_then(serde_json::Value::as_array)
+            .ok_or_else(|| format!("bytecode plan: code for '{name}' must be an array"))?;
+        if params.len() > bytecode_v2::MAX_FUNCTION_PARAMETERS {
+            return Err(format!("bytecode plan: function '{name}' exceeds parameter limit"));
+        }
+        let mut unique_params = HashSet::new();
+        for parameter in params {
+            let parameter = parameter.as_str()
+                .ok_or_else(|| format!("bytecode plan: parameter in '{name}' must be a string"))?;
+            if !valid_identifier(parameter) || !unique_params.insert(parameter) {
+                return Err(format!("bytecode plan: invalid or duplicate parameter in '{name}'"));
+            }
+        }
+        let implicit_return = plan_function_needs_implicit_return(code)?;
+        let size = code.len() + usize::from(implicit_return);
+        function_entries.insert(name.to_string(), next_entry);
+        function_sizes.push((next_entry, size, implicit_return));
+        next_entry = next_entry.checked_add(size)
+            .ok_or_else(|| "bytecode plan: instruction count overflow".to_string())?;
+        if next_entry > bytecode_v2::MAX_V2_INSTRUCTIONS {
+            return Err("bytecode plan: instruction count exceeds safety limit".into());
+        }
+    }
+
+    let main_end = main.len() + 1;
+    let mut instructions = Vec::with_capacity(next_entry);
+    for item in main {
+        instructions.push(plan_instruction_to_v2(item, 0, main.len(), &function_entries)?);
+    }
+    instructions.push(format!("JUMP {main_end}"));
+
+    let mut regions = Vec::with_capacity(functions.len());
+    for (index, function) in functions.iter().enumerate() {
+        let name = plan_required_string(function, "name")?;
+        let params = function.get("parameters").and_then(serde_json::Value::as_array).unwrap();
+        let code = function.get("code").and_then(serde_json::Value::as_array).unwrap();
+        let (entry, size, implicit_return) = function_sizes[index];
+        let end = entry + size;
+        let mut has_value_return = false;
+        for item in code {
+            if plan_required_string(item, "op")? == "return"
+                && item.get("has_value").and_then(serde_json::Value::as_bool) == Some(true) {
+                has_value_return = true;
+            }
+            instructions.push(plan_instruction_to_v2(item, entry, code.len(), &function_entries)?);
+        }
+        if implicit_return {
+            instructions.push("RETURN".into());
+        }
+        let parameters = params.iter().map(|parameter| parameter.as_str().unwrap().to_string()).collect();
+        regions.push(bytecode_v2::FunctionRegion {
+            entry, end, parameters,
+            return_kind: if has_value_return { bytecode_v2::ReturnKind::Value } else { bytecode_v2::ReturnKind::Void },
+        });
+        let _ = name;
+    }
+    let layout = bytecode_v2::ProgramLayout {
+        instruction_count: instructions.len(),
+        main_end,
+        functions: regions,
+    };
+    let file = bytecode_v2::ParsedV2File { layout, instructions };
+    bytecode_v2::verify_v2_file(&file)?;
+    bytecode_v2::serialize_v2_file(&file)
+}
+
+fn write_plan_bytecode_v2(plan_path: &str, output_path: &str) -> Result<(), String> {
+    let source = read_bytecode_source(plan_path)?;
+    let serialized = compile_plan_json_to_bytecode_v2(&source)?;
+    fs::write(output_path, serialized)
+        .map_err(|error| format!("cannot write {output_path}: {error}"))
+}
+
 fn write_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String> {
     let source = read_program(source_path)?;
     let (code, layout) = compile_with_layout(&source)?;
