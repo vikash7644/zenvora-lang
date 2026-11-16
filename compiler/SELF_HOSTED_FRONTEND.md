@@ -4,13 +4,13 @@ Status: **incremental implementation; not yet a complete compiler or self-hostin
 
 ## Zenvora-written stages now present
 
-- `compiler/token_stream.zv`: character-level lexer for identifiers, exact keywords, booleans, decimal integers, compact operators, punctuation, comments, quoted strings/common escapes, and Unicode string content. Tokens carry kind, value, line, and column; malformed input produces an error field.
+- `src/compiler/token_stream.zv`: character-level lexer for identifiers, exact keywords, booleans, decimal integers, compact operators, punctuation, comments, quoted strings/common escapes, and Unicode string content. Tokens carry kind, value, line, and column; malformed input produces an error field.
 - `src/compiler/parser.zv`: recursive-descent expression and statement parser for literals, names, calls, indexing, declarations, assignments, `show`, `return`, functions, nested `if/otherwise`, `repeat`, `break`, and `continue`. It now lowers the parsed AST into a structured Zenvora IR, then emits a Zenvora-authored bytecode *plan* with stack operations, branch/loop jump targets, and separate function records. The IR, plan, and semantic pass are exercised by the self-hosted frontend CI. The pass checks supported AST shapes, duplicate function and parameter names, undefined variables/functions, user-function and built-in call arity, and whether `return`, `break`, and `continue` appear in valid contexts.
 
 ## Verify locally or in CI
 
 ```sh
-cargo run --locked -- compiler/token_stream.zv
+cargo run --locked -- src/compiler/token_stream.zv
 cargo run --locked -- src/compiler/parser.zv
 ```
 
