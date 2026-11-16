@@ -4242,7 +4242,10 @@ show char_at("hé🙂", 2)
 
     #[test]
     fn bytecode_v2_executes_char_at_with_unicode_scalar_indices() {
-        let source = "show char_at(\"QORVYNT\", 0)\\nshow char_at(\"hé🙂\", 1)\\nshow char_at(\"hé🙂\", 2)\\n";
+        let source = r#"show char_at("QORVYNT", 0)
+show char_at("hé🙂", 1)
+show char_at("hé🙂", 2)
+"#;
         let expected = execute(source).unwrap();
         let (code, layout) = super::compile_with_layout(source).unwrap();
         let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
