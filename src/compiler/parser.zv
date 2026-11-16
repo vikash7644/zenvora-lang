@@ -1047,7 +1047,9 @@ fn emit_bytecode_v2(plan) {
       if has_end_jump { extra := 2 }
     }
     define region_size := len(code) + extra
-    functions := push(functions, map("name", get(fn, "name"), "parameters", get(fn, "parameters"), "entry", next_entry, "end", next_entry + region_size, "return_kind", if has_return then "value" else "void"))
+    define return_kind := "void"
+    if has_return { return_kind := "value" }
+    functions := push(functions, map("name", get(fn, "name"), "parameters", get(fn, "parameters"), "entry", next_entry, "end", next_entry + region_size, "return_kind", return_kind))
     next_entry := next_entry + region_size
     pos := pos + 1
   }
@@ -1058,7 +1060,8 @@ fn emit_bytecode_v2(plan) {
   repeat pos < len(functions) {
     define fn := get(functions, pos)
     define params := get(fn, "parameters")
-    define param_text := if len(params) == 0 then "-" else join(params, " ")
+    define param_text := join(params, " ")
+    if len(params) == 0 { param_text := "-" }
     lines := push(lines, "FUNCTION " + to_string(get(fn, "entry")) + " " + to_string(get(fn, "end")) + " " + to_string(len(params)) + " " + get(fn, "return_kind") + " " + param_text)
     pos := pos + 1
   }
