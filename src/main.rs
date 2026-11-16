@@ -3521,13 +3521,13 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
          show get(qorvynt_cli_result, \"ok\")\n\\
          show get(qorvynt_cli_result, \"stage\")\n\\
          show get(qorvynt_cli_result, \"error\")\n\\
-         if get(qorvynt_cli_result, \"ok\") {\n\\
+         if get(qorvynt_cli_result, \"ok\") {{\n\\
            show get(get(qorvynt_cli_result, \"bytecode\"), \"ok\")\n\\
            show json_encode(get(get(qorvynt_cli_result, \"bytecode\"), \"artifact\"))\n\\
-         } otherwise {\n\\
+         }} otherwise {{\n\\
            show false\n\\
            show json_encode(\"\")\n\\
-         }\n"
+         }}\n"
     );
     let program = format!("{compiler_source}\n{invocation}");
     let code = compile(&program)
