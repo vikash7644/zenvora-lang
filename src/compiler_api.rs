@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn v1_bytecode_verify_and_run_endpoints_accept_self_hosted_artifacts() {
-        let bytecode = super::compile_self_hosted_source("show 40 + 2\n").unwrap();
+        let bytecode = crate::compile_self_hosted_source("show 40 + 2\n").unwrap();
         let body = serde_json::json!({"bytecode":bytecode}).to_string();
         let request = format!(
             "POST /v1/run-bytecode-v2 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
