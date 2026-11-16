@@ -3515,19 +3515,9 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
     let compiler_source = COMPILER_SOURCE;
     let source_literal = quote_qorvynt_string(source)?;
     let invocation = format!(
-        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
-         show \"QORVYNT_CLI_PLAN_JSON\"\n\
-         show json_encode(get(qorvynt_cli_result, \"plan\"))\n\
-         show get(qorvynt_cli_result, \"ok\")\n\
-         show get(qorvynt_cli_result, \"stage\")\n\
-         show get(qorvynt_cli_result, \"error\")\n\
-         if get(qorvynt_cli_result, \"ok\") {{\n\
-           show get(get(qorvynt_cli_result, \"bytecode\"), \"ok\")\n\
-           show json_encode(get(get(qorvynt_cli_result, \"bytecode\"), \"artifact\"))\n\
-         }} otherwise {{\n\
-           show false\n\
-           show json_encode(\"\")\n\
-         }}\n"
+        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\\
+         show \"QORVYNT_CLI_PLAN_JSON\"\n\\
+         show json_encode(qorvynt_cli_result)\n"
     );
     let program = format!("{compiler_source}\n{invocation}");
     let code = compile(&program)
@@ -3539,29 +3529,40 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
             format!("QORVYNT compiler bootstrap execution failed after output {tail:?}: {error}")
         })?;
     let marker = output.iter().rposition(|line| line == "QORVYNT_CLI_PLAN_JSON")
-        .ok_or_else(|| "QORVYNT compiler did not emit its plan marker".to_string())?;
-    let plan_text = output.get(marker + 1)
-        .ok_or_else(|| "QORVYNT compiler emitted no bytecode plan".to_string())?;
-    let ok = output.get(marker + 2).map(String::as_str).unwrap_or("false");
-    let stage = output.get(marker + 3).map(String::as_str).unwrap_or("unknown");
-    let error = output.get(marker + 4).map(String::as_str).unwrap_or("compiler returned no diagnostic");
-    if ok != "true" {
+        .ok_or_else(|| "QORVYNT compiler did not emit its result marker".to_string())?;
+    let result_text = output.get(marker + 1)
+        .ok_or_else(|| "QORVYNT compiler emitted no result JSON".to_string())?;
+    let result: serde_json::Value = serde_json::from_str(result_text)
+        .map_err(|error| format!("QORVYNT compiler emitted invalid result JSON: {error}"))?;
+    let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let stage = result.get("stage").and_then(serde_json::Value::as_str).unwrap_or("unknown");
+    let error = result.get("error").and_then(serde_json::Value::as_str).unwrap_or("compiler returned no diagnostic");
+    if !ok {
         return Err(format!("QORVYNT compile {stage} error: {error}"));
     }
-    let direct_ok = output.get(marker + 5).map(String::as_str).unwrap_or("false");
-    if direct_ok == "true" {
-        let artifact_json = output.get(marker + 6)
-            .ok_or_else(|| "Zenvora-written backend emitted no artifact".to_string())?;
-        let artifact: String = serde_json::from_str(artifact_json)
-            .map_err(|error| format!("Zenvora-written backend artifact is not valid JSON: {error}"))?;
-        let parsed = bytecode_v2::parse_v2_file(&artifact)
-            .map_err(|error| format!("Zenvora-written backend emitted invalid Bytecode v2: {error}"))?;
-        bytecode_v2::verify_v2_file(&parsed)
-            .map_err(|error| format!("Zenvora-written backend failed Bytecode v2 verification: {error}"))?;
-        return Ok(artifact);
+    let plan = result.get("plan")
+        .ok_or_else(|| "QORVYNT compiler emitted no bytecode plan".to_string())?;
+    let plan_text = serde_json::to_string(plan)
+        .map_err(|error| format!("QORVYNT bytecode plan could not be encoded: {error}"))?;
+
+    // Prefer the artifact emitted by the Zenvora-written backend whenever its
+    // supported subset can produce one. Parse and verify it before returning;
+    // unsupported constructs continue through the compatibility plan adapter.
+    if let Some(bytecode) = result.get("bytecode") {
+        if bytecode.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+            let artifact = bytecode.get("artifact").and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "Zenvora-written backend emitted no artifact".to_string())?;
+            let parsed = bytecode_v2::parse_v2_file(artifact)
+                .map_err(|error| format!("Zenvora-written backend emitted invalid Bytecode v2: {error}"))?;
+            bytecode_v2::verify_v2_file(&parsed)
+                .map_err(|error| format!("Zenvora-written backend failed Bytecode v2 verification: {error}"))?;
+            return Ok(artifact.to_string());
+        }
     }
-    serialize_bytecode_plan_v2(plan_text)
+
+    serialize_bytecode_plan_v2(&plan_text)
         .map_err(|error| format!("QORVYNT bytecode-plan adapter rejected output: {error}"))
+
 }
 
 fn write_self_hosted_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String> {
