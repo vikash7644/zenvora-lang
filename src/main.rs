@@ -3512,7 +3512,7 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
     // Embed the compiler at build time so the installed CLI does not depend on
     // the caller's working directory or a separately copied compiler/ folder.
     const COMPILER_SOURCE: &str = include_str!("compiler/parser.zv");
-    let compiler_source = COMPILER_SOURCE;
+    let compiler_source = COMPILER_SOURCE.split("# Exercise the Zenvora-written AST-to-IR lowering").next().unwrap_or(COMPILER_SOURCE);
     let source_literal = quote_qorvynt_string(source)?;
     let invocation = format!(
         "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
