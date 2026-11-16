@@ -3474,55 +3474,15 @@ fn run_contract_command(
         contract_state::ContractState::new()
     };
     let verb = if mode == contract_state::AccessMode::Action { "call" } else { "show" };
-    let invocation = format!("{verb} {method_call}");
-    let receipt = contract_runtime::execute(&source, contract_id, &invocation, mode, &mut state, gas_limit)?;
-    if mode == contract_state::AccessMode::Action {
-        state.save_snapshot(snapshot)?;
-    }
-    Ok(receipt)
-}
-
-
-/// Quote source text for the QORVYNT string-literal syntax (which intentionally
-/// supports a smaller escape set than JSON).
-fn quote_qorvynt_string(value: &str) -> Result<String, String> {
-    let mut quoted = String::with_capacity(value.len() + 2);
-    quoted.push('"');
-    for ch in value.chars() {
-        match ch {
-            '"' => quoted.push_str("\\\""),
-            '\\' => quoted.push_str("\\\\"),
-            '\n' => quoted.push_str("\\n"),
-            '\r' => quoted.push_str("\\r"),
-            '\t' => quoted.push_str("\\t"),
-            ch if ch.is_control() => {
-                return Err("source contains a control character unsupported by QORVYNT string literals".into());
-            }
-            ch => quoted.push(ch),
-        }
-    }
-    quoted.push('"');
-    Ok(quoted)
-}
-
-/// Runs the QORVYNT-written compiler entry point against arbitrary caller source.
-/// The Rust VM here is the bootstrap host; parsing, semantic validation, lowering,
-/// and bytecode-plan verification are performed by src/compiler/parser.zv itself.
-fn compile_self_hosted_source(source: &str) -> Result<String, String> {
-    // Embed the compiler at build time so the installed CLI does not depend on
-    // the caller's working directory or a separately copied compiler/ folder.
-    const COMPILER_SOURCE: &str = include_str!("compiler/parser.zv");
-    let compiler_source = COMPILER_SOURCE;
-    let source_literal = quote_qorvynt_string(source)?;
     let invocation = format!(
-        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
-         show \"QORVYNT_CLI_PLAN_JSON\"\n\
-         show json_encode(get(qorvynt_cli_result, \"plan\"))\n\
-         show get(qorvynt_cli_result, \"ok\")\n\\n\
-         show get(get(qorvynt_cli_result, "bytecode"), "ok")\n\
-         show json_encode(get(get(qorvynt_cli_result, "bytecode"), "artifact"))
-         show get(qorvynt_cli_result, \"stage\")\n\
-         show get(qorvynt_cli_result, \"error\")\n"
+        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\\
+         show \"QORVYNT_CLI_PLAN_JSON\"\n\\
+         show json_encode(get(qorvynt_cli_result, \"plan\"))\n\\
+         show get(qorvynt_cli_result, \"ok\")\n\\
+         show get(qorvynt_cli_result, \"stage\")\n\\
+         show get(qorvynt_cli_result, \"error\")\n\\
+         show get(get(qorvynt_cli_result, \"bytecode\"), \"ok\")\n\\
+         show json_encode(get(get(qorvynt_cli_result, \"bytecode\"), \"artifact\"))\n"
     );
     let program = format!("{compiler_source}\n{invocation}");
     let code = compile(&program)
