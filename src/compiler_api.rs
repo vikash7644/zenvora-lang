@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
+const MAX_HEADER_BYTES: usize = 16 * 1024;
 const MAX_SOURCE_BYTES: usize = 48 * 1024;
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const MAX_ACTIVE_CONNECTIONS: usize = 32;
@@ -101,6 +102,9 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
         if buffer.len() > MAX_REQUEST_BYTES {
             return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"request exceeds 2 MiB"}));
         }
+        if header_end.is_none() && buffer.len() > MAX_HEADER_BYTES {
+            return respond(stream, "431 Request Header Fields Too Large", &json!({"ok":false,"error":"HTTP headers exceed 16 KiB"}));
+        }
         if header_end.is_none() {
             if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
                 let headers = match std::str::from_utf8(&buffer[..pos]) {
@@ -156,7 +160,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                             "ok":true,"api_version":"v1",
                             "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-bytecode-v2","POST /v1/verify-bytecode-v2","POST /v1/run-bytecode-v2","POST /v1/compile-run"],
                             "request":{"content_type":"application/json","compile_body":{"source":"string"},"bytecode_body":{"bytecode":"string"}},
-                            "limits":{"request_bytes":MAX_REQUEST_BYTES,"source_bytes":MAX_SOURCE_BYTES,"output_bytes":MAX_OUTPUT_BYTES,"active_connections":MAX_ACTIVE_CONNECTIONS},
+                            "limits":{"request_bytes":MAX_REQUEST_BYTES,"header_bytes":MAX_HEADER_BYTES,"source_bytes":MAX_SOURCE_BYTES,"output_bytes":MAX_OUTPUT_BYTES,"active_connections":MAX_ACTIVE_CONNECTIONS},
                             "features":{"compile":true,"execute":true,"bytecode_artifact":true,"bytecode_v2_verify":true,"self_hosted_frontend":true,"rust_free_bootstrap":false}
                         })),
                         _ => respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"})),
@@ -481,6 +485,15 @@ mod tests {
             b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 99999999\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 413 Payload Too Large"));
+    }
+
+    #[test]
+    fn oversized_incomplete_headers_receive_http_431_response() {
+        let mut request = b"POST /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\nX-Fill: ".to_vec();
+        request.extend(std::iter::repeat_n(b'a', MAX_HEADER_BYTES));
+        let response = response_for(&request);
+        assert!(response.starts_with("HTTP/1.1 431 Request Header Fields Too Large"));
+        assert!(response.contains("HTTP headers exceed 16 KiB"));
     }
 
     #[test]
