@@ -298,15 +298,19 @@ if get(generic_driver_recursive, "ok") and get(generic_driver_recursive_run, "ok
 }
 
 
-# Truthiness follows language value categories: false, zero, and empty strings are false.
-define generic_driver_truthy := compile_source("if 1 {\nshow 1\n} otherwise {\nshow 0\n}\nif 0 {\nshow 0\n} otherwise {\nshow 2\n}\nif \"hello\" {\nshow 3\n} otherwise {\nshow 0\n}\nif \"\" {\nshow 0\n} otherwise {\nshow 4\n}\n")
+# Truthiness matches the reference VM: booleans and integers are valid conditions; strings are rejected.
+define generic_driver_truthy := compile_source("if 1 {\nshow 1\n} otherwise {\nshow 0\n}\nif 0 {\nshow 0\n} otherwise {\nshow 2\n}\nif -1 {\nshow 3\n} otherwise {\nshow 0\n}\nif true {\nshow 4\n} otherwise {\nshow 0\n}\nif false {\nshow 0\n} otherwise {\nshow 5\n}\n")
 define generic_driver_truthy_run := execute_bytecode_plan(get(generic_driver_truthy, "plan"))
-if get(generic_driver_truthy, "ok") and get(generic_driver_truthy_run, "ok") and len(get(generic_driver_truthy_run, "output")) == 4 and get(get(generic_driver_truthy_run, "output"), 0) == "1" and get(get(generic_driver_truthy_run, "output"), 1) == "2" and get(get(generic_driver_truthy_run, "output"), 2) == "3" and get(get(generic_driver_truthy_run, "output"), 3) == "4" {
+define generic_driver_string_condition := compile_source("if \"hello\" {\nshow 1\n}\n")
+define generic_driver_string_condition_run := execute_bytecode_plan(get(generic_driver_string_condition, "plan"))
+if get(generic_driver_truthy, "ok") and get(generic_driver_truthy_run, "ok") and len(get(generic_driver_truthy_run, "output")) == 5 and get(get(generic_driver_truthy_run, "output"), 0) == "1" and get(get(generic_driver_truthy_run, "output"), 1) == "2" and get(get(generic_driver_truthy_run, "output"), 2) == "3" and get(get(generic_driver_truthy_run, "output"), 3) == "4" and get(get(generic_driver_truthy_run, "output"), 4) == "5" and get(generic_driver_string_condition, "ok") and not get(generic_driver_string_condition_run, "ok") and get(generic_driver_string_condition_run, "error") == "type error: condition expects a boolean or integer" {
   show "ZENVORA_VM_TRUTHINESS_PASS"
 } otherwise {
   show "ZENVORA_VM_TRUTHINESS_FAIL"
   show generic_driver_truthy
   show generic_driver_truthy_run
+  show generic_driver_string_condition
+  show generic_driver_string_condition_run
 }
 
 # Explicitly report indirect-call IR as unsupported instead of silently falling through.
