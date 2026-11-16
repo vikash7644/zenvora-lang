@@ -3594,7 +3594,8 @@ fn main() {
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--compiler-api") {
-        let port = args.get(2).map(|value| value.parse::<u16>().map_err(|_| "compiler API port must be between 1 and 65535".to_string())).transpose().unwrap_or_else(|error| { eprintln!("Zenvora API error: {error}"); process::exit(2) }).unwrap_or(8787);
+        let configured_port = args.get(2).cloned().or_else(|| env::var("PORT").ok());
+        let port = configured_port.as_deref().map(|value| value.parse::<u16>().map_err(|_| "compiler API port must be between 1 and 65535".to_string())).transpose().unwrap_or_else(|error| { eprintln!("Zenvora API error: {error}"); process::exit(2) }).unwrap_or(8787);
         if let Err(error) = compiler_api::serve(port) { eprintln!("Zenvora API error: {error}"); process::exit(1); }
         return;
     }
