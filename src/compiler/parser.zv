@@ -1554,7 +1554,7 @@ fn vm_truthy(value) {
   if type_of(value) == "boolean" {
     return value
   } otherwise {
-    if type_of(value) == "number" {
+    if type_of(value) == "integer" or type_of(value) == "number" {
       return value != 0
     } otherwise {
       if type_of(value) == "string" {
@@ -2140,20 +2140,12 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
                         err := get(popped, "error")
                       } otherwise {
                         define condition_value := get(popped, "value")
-                        define condition_truthy := true
-                        if type_of(condition_value) == "boolean" {
-                          condition_truthy := condition_value
+                        if type_of(condition_value) != "boolean" and type_of(condition_value) != "integer" and type_of(condition_value) != "number" {
+                          err := "type error: condition expects a boolean or integer"
                         } otherwise {
-                          if type_of(condition_value) == "number" {
-                            condition_truthy := condition_value != 0
-                          } otherwise {
-                            if type_of(condition_value) == "string" {
-                              condition_truthy := char_count(condition_value) > 0
-                            }
+                          if not vm_truthy(condition_value) {
+                            pc := get(ins, "target") - 1
                           }
-                        }
-                        if not condition_truthy {
-                          pc := get(ins, "target") - 1
                         }
                       }
                     } otherwise {
