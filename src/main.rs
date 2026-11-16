@@ -3584,6 +3584,23 @@ fn write_self_hosted_bytecode_v2(source_path: &str, output_path: &str) -> Result
     })
 }
 
+
+/// Runs the separated Zenvora-written frontend regression harness with a larger
+/// host budget. The normal user-program execution limit remains unchanged.
+fn run_self_hosted_frontend_tests() -> Result<(), String> {
+    const COMPILER_SOURCE: &str = include_str!("compiler/parser.zv");
+    const TEST_SOURCE: &str = include_str!("compiler/parser_tests.zv");
+    let program = format!("{COMPILER_SOURCE}\n{TEST_SOURCE}");
+    let code = compile(&program)
+        .map_err(|error| format!("cannot compile self-hosted frontend test harness: {error}"))?;
+    let mut output = Vec::new();
+    run_with_output_limit(&code, &mut |line| output.push(line), 3_000_000)?;
+    for line in output {
+        println!("{line}");
+    }
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
@@ -3592,6 +3609,13 @@ fn main() {
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
         println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (API v1; host/token configured with ZENVORA_API_HOST and ZENVORA_API_TOKEN, default 127.0.0.1:8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --emit-self-hosted-bytecode-v2 <file.zv> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        return;
+    }
+    if args.len() == 2 && args[1] == "--test-self-hosted-frontend" {
+        if let Err(error) = run_self_hosted_frontend_tests() {
+            eprintln!("Zenvora self-hosted frontend test error: {error}");
+            process::exit(1);
+        }
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
