@@ -2,11 +2,23 @@
 //! This is a development service; it intentionally binds to 127.0.0.1 by default.
 use serde_json::{json, Value};
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_SOURCE_BYTES: usize = 48 * 1024;
+const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+const MAX_ACTIVE_CONNECTIONS: usize = 32;
+static ACTIVE_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
+
+struct ConnectionGuard;
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 
 pub fn serve(port: u16) -> Result<(), String> {
     let host = std::env::var("ZENVORA_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());
@@ -18,7 +30,10 @@ pub fn serve(port: u16) -> Result<(), String> {
     if !token.is_empty() && token.len() < 16 {
         return Err("ZENVORA_API_TOKEN must contain at least 16 characters".into());
     }
-    let address = format!("{host}:{port}");
+    let address = match host.parse::<IpAddr>() {
+        Ok(ip) => SocketAddr::new(ip, port).to_string(),
+        Err(_) => format!("{host}:{port}"),
+    };
     let listener = TcpListener::bind(&address)
         .map_err(|e| format!("cannot bind compiler API at {address}: {e}"))?;
     println!("Zenvora compiler API listening at http://{address}");
@@ -31,9 +46,16 @@ pub fn serve(port: u16) -> Result<(), String> {
     for incoming in listener.incoming() {
         match incoming {
             Ok(mut stream) => {
+                let active = ACTIVE_CONNECTIONS.fetch_add(1, Ordering::SeqCst);
+                if active >= MAX_ACTIVE_CONNECTIONS {
+                    ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::SeqCst);
+                    let _ = respond(&mut stream, "503 Service Unavailable", &json!({"ok":false,"error":"server is at connection capacity"}));
+                    continue;
+                }
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
                 let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
                 std::thread::spawn(move || {
+                    let _guard = ConnectionGuard;
                     if let Err(error) = handle(&mut stream) {
                         eprintln!("compiler API request error: {error}");
                     }
@@ -114,7 +136,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                             "ok":true,"api_version":"v1",
                             "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-run"],
                             "request":{"content_type":"application/json","body":{"source":"string"}},
-                            "limits":{"request_bytes":MAX_REQUEST_BYTES,"source_bytes":MAX_SOURCE_BYTES},
+                            "limits":{"request_bytes":MAX_REQUEST_BYTES,"source_bytes":MAX_SOURCE_BYTES,"output_bytes":MAX_OUTPUT_BYTES,"active_connections":MAX_ACTIVE_CONNECTIONS},
                             "features":{"compile":true,"execute":true,"bytecode_artifact":false,"self_hosted_compiler":false}
                         })),
                         _ => respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"})),
@@ -171,9 +193,20 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     }));
                 }
                 let mut lines = Vec::new();
-                return match super::run_with_output(&code, &mut |line| lines.push(line)) {
+                let mut output_bytes = 0usize;
+                let mut output_truncated = false;
+                return match super::run_with_output(&code, &mut |line| {
+                    let line_bytes = line.len().saturating_add(1);
+                    if output_bytes.saturating_add(line_bytes) <= MAX_OUTPUT_BYTES {
+                        output_bytes += line_bytes;
+                        lines.push(line);
+                    } else {
+                        output_truncated = true;
+                    }
+                }) {
                     Ok(()) => respond(stream, "200 OK", &json!({
                         "ok":true,"output":lines.join("\n"),"lines":lines,
+                        "output_truncated":output_truncated,
                         "instruction_count":code.len(),
                         "compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))
                     })),
