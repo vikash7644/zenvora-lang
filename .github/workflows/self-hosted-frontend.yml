@@ -215,4 +215,5 @@ jobs:
           cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-plan-repeat.zv2b
           cmp self-hosted-plan.zv2b self-hosted-plan-repeat.zv2b
           cargo run --locked --quiet -- --run-bytecode self-hosted-plan-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
+          cat self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
