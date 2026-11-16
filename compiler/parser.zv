@@ -1539,7 +1539,8 @@ fn validate_program(ast) {
   }
   define error := validate_statements(ast, 0, 0)
   if error == "" {
-    define visible_names := collect_scope_names(ast, array())
+    # source_text is the host-injected input binding used by the compiler driver.
+    define visible_names := collect_scope_names(ast, array("source_text"))
     error := validate_variable_statements(ast, visible_names)
   }
   return map("ok", error == "", "error", error)
