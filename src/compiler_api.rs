@@ -135,9 +135,9 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                         "/v1/capabilities" => respond(stream, "200 OK", &json!({
                             "ok":true,"api_version":"v1",
                             "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-bytecode-v2","POST /v1/verify-bytecode-v2","POST /v1/run-bytecode-v2","POST /v1/compile-run"],
-                            "request":{"content_type":"application/json","body":{"source":"string"}},
+                            "request":{"content_type":"application/json","compile_body":{"source":"string"},"bytecode_body":{"bytecode":"string"}},
                             "limits":{"request_bytes":MAX_REQUEST_BYTES,"source_bytes":MAX_SOURCE_BYTES,"output_bytes":MAX_OUTPUT_BYTES,"active_connections":MAX_ACTIVE_CONNECTIONS},
-                            "features":{"compile":true,"execute":true,"bytecode_artifact":true,"self_hosted_frontend":true,"rust_free_bootstrap":false}
+                            "features":{"compile":true,"execute":true,"bytecode_artifact":true,"bytecode_v2_verify":true,"self_hosted_frontend":true,"rust_free_bootstrap":false}
                         })),
                         _ => respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"})),
                     };
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn v1_bytecode_verify_and_run_endpoints_accept_self_hosted_artifacts() {
         let bytecode = super::compile_self_hosted_source("show 40 + 2\n").unwrap();
-        let body = json!({"bytecode":bytecode}).to_string();
+        let body = serde_json::json!({"bytecode":bytecode}).to_string();
         let request = format!(
             "POST /v1/run-bytecode-v2 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
             body.len(), body
