@@ -4524,6 +4524,23 @@ show char_at("hé🙂", 2)
     }
 
     #[test]
+    fn hex_encode_builtin_is_utf8_stable_and_available_in_bytecode_v2() {
+        let source = r#"show hex_encode("hé🙂")
+show hex_encode("")
+"#;
+        let expected = execute(source).unwrap();
+        assert_eq!(expected, vec!["68c3a9f09f9982", "-"]);
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        assert_eq!(actual, expected);
+        assert!(execute("show hex_encode(7)\n").unwrap_err().contains("hex_encode expects a string"));
+        assert!(execute("show hex_encode(\"a\", \"b\")\n").unwrap_err().contains("expects 1 argument"));
+    }
+
+    #[test]
     fn bytecode_v2_executes_char_at_with_unicode_scalar_indices() {
         let source = r#"show char_at("QORVYNT", 0)
 show char_at("hé🙂", 1)
