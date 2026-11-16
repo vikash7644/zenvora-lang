@@ -779,6 +779,26 @@ fn emit_expression(code_ir) {
   return out
 }
 
+# Relocate nested control-flow targets when splicing a child block into its parent.
+# Expression and ordinary instruction arrays have no absolute jump operands.
+fn append_control_flow(target, source) {
+  define base := len(target)
+  define pos := 0
+  repeat pos < len(source) {
+    define instruction := get(source, pos)
+    define op := get(instruction, "op")
+    if op == "jump" or op == "jump_if_false" {
+      define jump_target := get(instruction, "target")
+      if jump_target >= 0 {
+        instruction := put(instruction, "target", jump_target + base)
+      }
+    }
+    target := push(target, instruction)
+    pos := pos + 1
+  }
+  return target
+}
+
 fn emit_statements(ir) {
   define out := array()
   define pos := 0
@@ -806,13 +826,15 @@ fn emit_statements(ir) {
         out := append_instructions(out, emit_expression(get(item, "condition")))
         define false_jump := len(out)
         out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
-        out := append_instructions(out, emit_statements(get(item, "then")))
+        define then_code := emit_statements(get(item, "then"))
+        out := append_control_flow(out, then_code)
         define otherwise_code := get(item, "otherwise")
         if len(otherwise_code) > 0 {
           define end_jump := len(out)
           out := push(out, map("op", "jump", "target", -1, "line", line))
           out := patch_jump(out, false_jump, len(out))
-          out := append_instructions(out, emit_statements(otherwise_code))
+          define otherwise_instructions := emit_statements(otherwise_code)
+          out := append_control_flow(out, otherwise_instructions)
           out := patch_jump(out, end_jump, len(out))
         } otherwise {
           out := patch_jump(out, false_jump, len(out))
@@ -824,7 +846,8 @@ fn emit_statements(ir) {
           define exit_jump := len(out)
           out := push(out, map("op", "jump_if_false", "target", -1, "line", line))
           define body_start := len(out)
-          out := append_instructions(out, emit_statements(get(item, "body")))
+          define loop_body := emit_statements(get(item, "body"))
+          out := append_control_flow(out, loop_body)
           out := push(out, map("op", "jump", "target", loop_start, "line", line))
           define loop_end := len(out)
           out := patch_jump(out, exit_jump, loop_end)
