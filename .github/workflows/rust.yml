@@ -249,10 +249,11 @@ jobs:
           grep -q '"ok":false' /tmp/zenvora-api-error.json
           curl --silent --show-error --fail http://127.0.0.1:18787/v1/capabilities > /tmp/zenvora-api-capabilities.json
           grep -q '"self_hosted_frontend":true' /tmp/zenvora-api-capabilities.json
-          curl --silent --show-error --fail \
+          curl --silent --show-error \
             -H 'Content-Type: application/json' \
             --data '{"source":"show 40 + 2"}' \
             http://127.0.0.1:18787/v1/compile > /tmp/zenvora-api-compile.json
+          cat /tmp/zenvora-api-compile.json
           grep -q '"compiled":true' /tmp/zenvora-api-compile.json
           curl --silent --show-error \
             -H 'Content-Type: application/json' \
