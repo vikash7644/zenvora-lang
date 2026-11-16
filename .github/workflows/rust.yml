@@ -247,6 +247,36 @@ jobs:
             --data '{"source":"show missing_variable"}' \
             http://127.0.0.1:18787/compile-run > /tmp/zenvora-api-error.json
           grep -q '"ok":false' /tmp/zenvora-api-error.json
+          curl --silent --show-error --fail http://127.0.0.1:18787/v1/capabilities > /tmp/zenvora-api-capabilities.json
+          grep -q '"self_hosted_frontend":true' /tmp/zenvora-api-capabilities.json
+          curl --silent --show-error --fail \
+            -H 'Content-Type: application/json' \
+            --data '{"source":"show 40 + 2"}' \
+            http://127.0.0.1:18787/v1/compile > /tmp/zenvora-api-compile.json
+          grep -q '"compiled":true' /tmp/zenvora-api-compile.json
+          curl --silent --show-error --fail \
+            -H 'Content-Type: application/json' \
+            --data '{"source":"show 40 + 2\\n"}' \
+            http://127.0.0.1:18787/v1/compile-bytecode-v2 > /tmp/zenvora-api-bytecode.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('/tmp/zenvora-api-bytecode.json').read_text())
+          assert result['format'] == 'ZENVORA_BYTECODE 2'
+          Path('/tmp/zenvora-api-bytecode-request.json').write_text(
+              json.dumps({'bytecode': result['bytecode']})
+          )
+          PY
+          curl --silent --show-error --fail \
+            -H 'Content-Type: application/json' \
+            --data-binary @/tmp/zenvora-api-bytecode-request.json \
+            http://127.0.0.1:18787/v1/verify-bytecode-v2 > /tmp/zenvora-api-verify.json
+          grep -q '"verified":true' /tmp/zenvora-api-verify.json
+          curl --silent --show-error --fail \
+            -H 'Content-Type: application/json' \
+            --data-binary @/tmp/zenvora-api-bytecode-request.json \
+            http://127.0.0.1:18787/v1/run-bytecode-v2 > /tmp/zenvora-api-run.json
+          grep -q '"output":"42"' /tmp/zenvora-api-run.json
 
   interpreter-mvp:
     name: Interpreter MVP regression suite
