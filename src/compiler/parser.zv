@@ -2440,7 +2440,7 @@ fn compile_source(source) {
 
 
 # Direct Bytecode v2 artifact regression for the Zenvora-written backend.
-define generic_driver_v2 := compile_source("define answer := 40 + 2\\nshow answer\\n")
+define generic_driver_v2 := compile_source("define answer := 40 + 2\nshow answer\n")
 define generic_driver_v2_result := get(generic_driver_v2, "bytecode")
 if get(generic_driver_v2, "ok") and get(generic_driver_v2_result, "ok") and index_of(get(generic_driver_v2_result, "artifact"), "ZENVORA_BYTECODE 2") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "PUSH 40") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "ADD") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "PRINT") >= 0 {
   show "ZENVORA_WRITTEN_BYTECODE_V2_MAIN_PASS"
@@ -2450,7 +2450,7 @@ if get(generic_driver_v2, "ok") and get(generic_driver_v2_result, "ok") and inde
   show generic_driver_v2_result
 }
 
-define generic_driver_v2_flow := compile_source("define i := 0\\nrepeat i < 2 {\\ni := i + 1\\n}\\nif i == 2 {\\nshow 42\\n} otherwise {\\nshow 0\\n}\\n")
+define generic_driver_v2_flow := compile_source("define i := 0\nrepeat i < 2 {\ni := i + 1\n}\nif i == 2 {\nshow 42\n} otherwise {\nshow 0\n}\n")
 define generic_driver_v2_flow_result := get(generic_driver_v2_flow, "bytecode")
 if get(generic_driver_v2_flow, "ok") and get(generic_driver_v2_flow_result, "ok") and index_of(get(generic_driver_v2_flow_result, "artifact"), "JUMP_IF_FALSE") >= 0 and index_of(get(generic_driver_v2_flow_result, "artifact"), "JUMP ") >= 0 {
   show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_PASS"
