@@ -268,15 +268,17 @@ jobs:
               json.dumps({'bytecode': result['bytecode']})
           )
           PY
-          curl --silent --show-error --fail \
+          curl --silent --show-error \
             -H 'Content-Type: application/json' \
             --data-binary @/tmp/zenvora-api-bytecode-request.json \
             http://127.0.0.1:18787/v1/verify-bytecode-v2 > /tmp/zenvora-api-verify.json
+          cat /tmp/zenvora-api-verify.json
           grep -q '"verified":true' /tmp/zenvora-api-verify.json
-          curl --silent --show-error --fail \
+          curl --silent --show-error \
             -H 'Content-Type: application/json' \
             --data-binary @/tmp/zenvora-api-bytecode-request.json \
             http://127.0.0.1:18787/v1/run-bytecode-v2 > /tmp/zenvora-api-run.json
+          cat /tmp/zenvora-api-run.json
           grep -q '"output":"42"' /tmp/zenvora-api-run.json
 
   interpreter-mvp:
