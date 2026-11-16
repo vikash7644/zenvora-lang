@@ -102,7 +102,8 @@ cargo run -- --compiler-api
 
 - `GET /v1/health` — service and compiler version.
 - `GET /v1/capabilities` — supported routes, request limits, and current feature flags.
-- `POST /v1/compile` — compile/validate source and return the instruction count.
+- `POST /v1/compile` — validate source with the Rust reference compiler and return the instruction count.
+- `POST /v1/compile-bytecode-v2` — invoke the Zenvora-written self-hosted compiler frontend and return a canonical executable `ZENVORA_BYTECODE 2` artifact. The bootstrap host is still Rust; this is not yet a Rust-free Stage 1/Stage 2 build.
 - `POST /v1/compile-run` — compile and execute source, returning output lines.
 - Legacy aliases: `GET /health` and `POST /compile-run`.
 
@@ -130,7 +131,7 @@ curl -sS http://127.0.0.1:8787/v1/compile-run \
   --data '{"source":"define a := 10\\ndefine b := 20\\nshow a + b"}'
 ```
 
-The API currently reports `bytecode_artifact: false` and `self_hosted_compiler: false` in its capabilities because executable Bytecode v2 output and the Rust-free compiler path are still in progress. The GitHub Pages Playground's JavaScript demo runner is separate and is not the full compiler/VM.
+The API reports `bytecode_artifact: true` and `self_hosted_frontend: true`; `rust_free_bootstrap` remains false until the compiler can build and run without the Rust host. The GitHub Pages Playground's JavaScript demo runner is separate and is not the full compiler/VM.
 
 
 ## Build and run
