@@ -71,7 +71,7 @@ jobs:
           import json
           with open("self-hosted-native-v2.json", encoding="utf-8") as source:
               bytecode = json.load(source)
-          if not isinstance(bytecode, str) or not bytecode.startswith("ZENVORA_BYTECODE 2\\n"):
+          if not isinstance(bytecode, str) or not bytecode.startswith("ZENVORA_BYTECODE 2\n"):
               raise SystemExit("QORVYNT native emitter did not return canonical Bytecode v2 text")
           with open("self-hosted-native-v2.zv2b", "w", encoding="utf-8", newline="") as output:
               output.write(bytecode)
