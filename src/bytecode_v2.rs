@@ -51,7 +51,7 @@ pub struct ParsedV2File {
 /// Keep this list shared with the compiler and loader so verifier acceptance matches execution.
 pub fn is_supported_builtin(name: &str) -> bool {
     matches!(name,
-        "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" |
+        "array" | "map" | "get" | "len" | "contains" | "push" | "put" | "keys" | "values" | "hex_encode" |
         "type_of" | "to_string" | "abs" | "min" | "max" | "range" | "assert" | "sum" |
         "starts_with" | "ends_with" | "split" | "join" | "replace" | "char_at" | "first" | "last" |
         "reverse" | "is_empty" | "clamp" | "trim" | "lower" | "upper" | "char_count" |
