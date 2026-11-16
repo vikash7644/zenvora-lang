@@ -256,7 +256,7 @@ jobs:
           grep -q '"compiled":true' /tmp/zenvora-api-compile.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
-            --data '{"source":"show 40 + 2\\n"}' \
+            --data '{"source":"show 40 + 2\n"}' \
             http://127.0.0.1:18787/v1/compile-bytecode-v2 > /tmp/zenvora-api-bytecode.json
           python - <<'PY'
           import json
