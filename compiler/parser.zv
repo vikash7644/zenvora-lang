@@ -2444,6 +2444,15 @@ define runnable_plan := emit_bytecode_plan(runnable_ir)
 # Machine-readable PLAN_1 output is consumed directly by zv --emit-plan-bytecode-v2.
 show "ZENVORA_BYTECODE_PLAN_JSON"
 show json_encode(runnable_plan)
+define native_v2_result := emit_bytecode_v2(runnable_plan)
+if get(native_v2_result, "ok") {
+  show "ZENVORA_NATIVE_BYTECODE_V2_EMIT_PASS"
+  show "ZENVORA_BYTECODE_V2_JSON"
+  show json_encode(get(native_v2_result, "bytecode"))
+} otherwise {
+  show "ZENVORA_NATIVE_BYTECODE_V2_EMIT_FAIL"
+  show get(native_v2_result, "error")
+}
 define runnable_result := execute_bytecode_plan(runnable_plan)
 define runnable_output := get(runnable_result, "output")
 show get(runnable_ast_result, "error")
