@@ -378,11 +378,7 @@ fn parse_program(tokens) {
             }
           }
         } otherwise {
-          define is_loop_control := kw == "break"
-          if kw == "continue" {
-            is_loop_control := true
-          }
-          if is_loop_control {
+          if contains(array("break", "continue"), kw) {
             ast := push(ast, node(kw, "", "", "", ln))
             pos := pos + 1
           } otherwise {
