@@ -43,8 +43,8 @@ jobs:
       - name: Validate distributable Rust package
         run: |
           cargo package --list --locked | tee package-files.txt
-          grep -Fx 'compiler/parser.zv' package-files.txt
-          grep -Fx 'compiler/token_stream.zv' package-files.txt
+          grep -Fx 'src/compiler/parser.zv' package-files.txt
+          grep -Fx 'src/compiler/token_stream.zv' package-files.txt
           cargo package --locked
 
       - name: Execute every Zenvora Lang example
