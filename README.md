@@ -110,7 +110,7 @@ cargo run -- --compiler-api
 - Legacy aliases: `GET /health` and `POST /compile-run`.
 
 POST requests use JSON: `{"source":"define total := 10\\nshow total * 3"}`.
-The JSON request limit is 2 MiB, source limit is 48 KiB, bytecode input and response output are each capped at 1 MiB, and active connections are capped at 32. Compile/runtime errors use HTTP 422; malformed requests, missing content type, oversized bodies, and unauthorized requests use appropriate 4xx responses.
+The JSON request limit is 2 MiB, HTTP headers are capped at 16 KiB, source limit is 48 KiB, bytecode input and response output are each capped at 1 MiB, and active connections are capped at 32. Compile/runtime errors use HTTP 422; malformed requests, missing content type, oversized bodies, and unauthorized requests use appropriate 4xx responses.
 
 ### Binding and authentication
 
