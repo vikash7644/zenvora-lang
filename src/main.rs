@@ -2568,7 +2568,13 @@ fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
 
 fn run_bytecode(path: &str) -> Result<(), String> {
     let serialized = read_bytecode_source(path)?;
-    let code = deserialize_bytecode(&serialized)?;
+    // Accept both supported bytecode generations through the same CLI entry point.
+    // The v2 decoder performs framing, layout, opcode, and control-flow verification.
+    let code = if serialized.starts_with("ZENVORA_BYTECODE 2\\n") {
+        deserialize_bytecode_v2(&serialized)?
+    } else {
+        deserialize_bytecode(&serialized)?
+    };
     run(&code)
 }
 
