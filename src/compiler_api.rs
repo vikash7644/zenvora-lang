@@ -6,7 +6,7 @@ use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-const MAX_REQUEST_BYTES: usize = 64 * 1024;
+const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 const MAX_SOURCE_BYTES: usize = 48 * 1024;
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const MAX_ACTIVE_CONNECTIONS: usize = 32;
@@ -134,7 +134,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                         })),
                         "/v1/capabilities" => respond(stream, "200 OK", &json!({
                             "ok":true,"api_version":"v1",
-                            "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-bytecode-v2","POST /v1/compile-run"],
+                            "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-bytecode-v2","POST /v1/verify-bytecode-v2","POST /v1/run-bytecode-v2","POST /v1/compile-run"],
                             "request":{"content_type":"application/json","body":{"source":"string"}},
                             "limits":{"request_bytes":MAX_REQUEST_BYTES,"source_bytes":MAX_SOURCE_BYTES,"output_bytes":MAX_OUTPUT_BYTES,"active_connections":MAX_ACTIVE_CONNECTIONS},
                             "features":{"compile":true,"execute":true,"bytecode_artifact":true,"self_hosted_frontend":true,"rust_free_bootstrap":false}
@@ -145,7 +145,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 if method != "POST" {
                     return respond(stream, "405 Method Not Allowed", &json!({"ok":false,"error":"method not allowed"}));
                 }
-                if !matches!(route.as_str(), "/compile-run" | "/v1/compile" | "/v1/compile-bytecode-v2" | "/v1/compile-run") {
+                if !matches!(route.as_str(), "/compile-run" | "/v1/compile" | "/v1/compile-bytecode-v2" | "/v1/verify-bytecode-v2" | "/v1/run-bytecode-v2" | "/v1/compile-run") {
                     return respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"}));
                 }
                 let expected_token = std::env::var("ZENVORA_API_TOKEN").unwrap_or_default();
@@ -172,6 +172,47 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     Ok(value) => value,
                     Err(_) => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"body must be valid JSON"})),
                 };
+                if route == "/v1/verify-bytecode-v2" || route == "/v1/run-bytecode-v2" {
+                    let bytecode = match request.get("bytecode").and_then(Value::as_str) {
+                        Some(bytecode) => bytecode,
+                        None => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"JSON field 'bytecode' must be a string"})),
+                    };
+                    if bytecode.len() > MAX_OUTPUT_BYTES {
+                        return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"bytecode exceeds 1 MiB limit"}));
+                    }
+                    let code = match super::deserialize_bytecode_v2(bytecode) {
+                        Ok(code) => code,
+                        Err(error) => return respond(stream, "422 Unprocessable Entity", &json!({
+                            "ok":false,"error":error,"phase":"bytecode_verification"
+                        })),
+                    };
+                    if route == "/v1/verify-bytecode-v2" {
+                        return respond(stream, "200 OK", &json!({
+                            "ok":true,"verified":true,"format":"ZENVORA_BYTECODE 2",
+                            "instruction_count":code.len()
+                        }));
+                    }
+                    let mut lines = Vec::new();
+                    let mut output_bytes = 0usize;
+                    let mut output_truncated = false;
+                    return match super::run_with_output(&code, &mut |line| {
+                        let line_bytes = line.len().saturating_add(1);
+                        if output_bytes.saturating_add(line_bytes) <= MAX_OUTPUT_BYTES {
+                            output_bytes += line_bytes;
+                            lines.push(line);
+                        } else {
+                            output_truncated = true;
+                        }
+                    }) {
+                        Ok(()) => respond(stream, "200 OK", &json!({
+                            "ok":true,"verified":true,"output":lines.join("\n"),"lines":lines,
+                            "output_truncated":output_truncated,"instruction_count":code.len()
+                        })),
+                        Err(error) => respond(stream, "422 Unprocessable Entity", &json!({
+                            "ok":false,"error":error,"phase":"runtime"
+                        })),
+                    };
+                }
                 let source = match request.get("source").and_then(Value::as_str) {
                     Some(source) => source,
                     None => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"JSON field 'source' must be a string"})),
@@ -333,6 +374,21 @@ mod tests {
     }
 
     #[test]
+    fn v1_bytecode_verify_and_run_endpoints_accept_self_hosted_artifacts() {
+        let bytecode = super::compile_self_hosted_source("show 40 + 2").unwrap();
+        let body = json!({"bytecode":bytecode}).to_string();
+        let request = format!(
+            "POST /v1/run-bytecode-v2 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(), body
+        );
+        let response = response_for(request.as_bytes());
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        let value: Value = serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(value["verified"], true);
+        assert_eq!(value["output"], "42");
+    }
+
+    #[test]
     fn v1_capabilities_describe_real_api_routes() {
         let response = response_for(b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\n\r\n");
         assert!(response.starts_with("HTTP/1.1 200 OK"));
@@ -370,7 +426,7 @@ mod tests {
     #[test]
     fn oversized_content_length_receives_http_413_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 999999\r\n\r\n",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 99999999\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 413 Payload Too Large"));
     }
