@@ -5,6 +5,7 @@ on:
     paths:
       - "compiler/token_stream.zv"
       - "compiler/parser.zv"
+      - "compiler/SELF_HOSTED_FRONTEND.md"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -17,6 +18,7 @@ on:
     paths:
       - "compiler/token_stream.zv"
       - "compiler/parser.zv"
+      - "compiler/SELF_HOSTED_FRONTEND.md"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
