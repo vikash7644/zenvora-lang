@@ -4460,6 +4460,45 @@ show char_at("hé🙂", 2)
     }
 
     #[test]
+    fn qorvynt_plan_json_emits_direct_executable_bytecode_v2() {
+        let plan = r#"{
+          "format":"ZENVORA_BYTECODE_PLAN_1",
+          "main":[
+            {"op":"push_const","type":"number","value":21},
+            {"op":"call","name":"twice","argc":1},
+            {"op":"print"}
+          ],
+          "functions":[
+            {"name":"twice","parameters":["value"],"code":[
+              {"op":"load","name":"value"},
+              {"op":"push_const","type":"number","value":2},
+              {"op":"binary","operator":"*"},
+              {"op":"return","has_value":true}
+            ]}
+          ]
+        }"#;
+        let encoded = super::compile_plan_json_to_bytecode_v2(plan).unwrap();
+        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        let parsed = super::bytecode_v2::parse_v2_file(&encoded).unwrap();
+        assert_eq!(parsed.layout.main_end, 4);
+        assert_eq!(parsed.layout.functions.len(), 1);
+        assert_eq!(parsed.layout.functions[0].entry, 4);
+        assert_eq!(parsed.layout.functions[0].return_kind, super::bytecode_v2::ReturnKind::Value);
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn qorvynt_plan_json_rejects_invalid_jump_targets_and_unknown_opcodes() {
+        let invalid_target = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[{"op":"jump","target":99}],"functions":[]}"#;
+        assert!(super::compile_plan_json_to_bytecode_v2(invalid_target).unwrap_err().contains("outside its instruction region"));
+        let unknown = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[{"op":"eval_magic"}],"functions":[]}"#;
+        assert!(super::compile_plan_json_to_bytecode_v2(unknown).unwrap_err().contains("unsupported instruction"));
+    }
+
+    #[test]
     fn bytecode_v2_executes_char_at_with_unicode_scalar_indices() {
         let source = r#"show char_at("QORVYNT", 0)
 show char_at("hé🙂", 1)
