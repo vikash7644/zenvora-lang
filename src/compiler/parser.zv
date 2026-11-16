@@ -1029,7 +1029,7 @@ fn emit_bytecode_v2_main(plan) {
     pos := pos + 1
   }
   lines := push(lines, "JUMP " + to_string(len(code) + 1))
-  return map("ok", true, "error", "", "artifact", join(lines, "\\n") + "\\n")
+  return map("ok", true, "error", "", "artifact", join(lines, "\n") + "\n")
 }
 
 # Zenvora-written semantic checks for statement placement and supported AST shapes.
