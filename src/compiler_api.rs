@@ -134,10 +134,10 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                         })),
                         "/v1/capabilities" => respond(stream, "200 OK", &json!({
                             "ok":true,"api_version":"v1",
-                            "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-run"],
+                            "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-bytecode-v2","POST /v1/compile-run"],
                             "request":{"content_type":"application/json","body":{"source":"string"}},
                             "limits":{"request_bytes":MAX_REQUEST_BYTES,"source_bytes":MAX_SOURCE_BYTES,"output_bytes":MAX_OUTPUT_BYTES,"active_connections":MAX_ACTIVE_CONNECTIONS},
-                            "features":{"compile":true,"execute":true,"bytecode_artifact":false,"self_hosted_compiler":false}
+                            "features":{"compile":true,"execute":true,"bytecode_artifact":true,"self_hosted_frontend":true,"rust_free_bootstrap":false}
                         })),
                         _ => respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"})),
                     };
@@ -145,7 +145,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 if method != "POST" {
                     return respond(stream, "405 Method Not Allowed", &json!({"ok":false,"error":"method not allowed"}));
                 }
-                if !matches!(route.as_str(), "/compile-run" | "/v1/compile" | "/v1/compile-run") {
+                if !matches!(route.as_str(), "/compile-run" | "/v1/compile" | "/v1/compile-bytecode-v2" | "/v1/compile-run") {
                     return respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"}));
                 }
                 let expected_token = std::env::var("ZENVORA_API_TOKEN").unwrap_or_default();
@@ -178,6 +178,26 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 };
                 if source.len() > MAX_SOURCE_BYTES {
                     return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"source exceeds 48 KiB"}));
+                }
+                if route == "/v1/compile-bytecode-v2" {
+                    let bytecode = match super::compile_self_hosted_source(source) {
+                        Ok(bytecode) => bytecode,
+                        Err(error) => return respond(stream, "422 Unprocessable Entity", &json!({
+                            "ok":false,"error":error,"phase":"self_hosted_compile",
+                            "compiler":"zenvora-self-hosted-frontend"
+                        })),
+                    };
+                    if bytecode.len() > MAX_OUTPUT_BYTES {
+                        return respond(stream, "413 Payload Too Large", &json!({
+                            "ok":false,"error":"compiled bytecode exceeds 1 MiB response limit"
+                        }));
+                    }
+                    return respond(stream, "200 OK", &json!({
+                        "ok":true,"format":"ZENVORA_BYTECODE 2","bytecode":bytecode,
+                        "bytecode_bytes":bytecode.len(),
+                        "compiler":"zenvora-self-hosted-frontend",
+                        "host":"rust-bootstrap"
+                    }));
                 }
                 let code = match super::compile(source) {
                     Ok(code) => code,
@@ -297,12 +317,30 @@ mod tests {
     }
 
     #[test]
+    fn v1_self_hosted_endpoint_emits_executable_bytecode_v2() {
+        let body = r#"{"source":"show 40 + 2"}"#;
+        let request = format!(
+            "POST /v1/compile-bytecode-v2 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(), body
+        );
+        let response = response_for(request.as_bytes());
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        let value: Value = serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(value["format"], "ZENVORA_BYTECODE 2");
+        let bytecode = value["bytecode"].as_str().unwrap();
+        assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert_eq!(value["compiler"], "zenvora-self-hosted-frontend");
+    }
+
+    #[test]
     fn v1_capabilities_describe_real_api_routes() {
         let response = response_for(b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\n\r\n");
         assert!(response.starts_with("HTTP/1.1 200 OK"));
         let value: Value = serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(value["api_version"], "v1");
-        assert_eq!(value["features"]["bytecode_artifact"], false);
+        assert_eq!(value["features"]["bytecode_artifact"], true);
+        assert_eq!(value["features"]["self_hosted_frontend"], true);
+        assert_eq!(value["features"]["rust_free_bootstrap"], false);
     }
 
     #[test]
