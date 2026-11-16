@@ -1179,4 +1179,76 @@ JUMP 2
         }
     }
 
+
+    #[test]
+    fn parser_accepts_windows_crlf_bytecode_without_preserving_carriage_returns() {
+        let windows_source = concat!(
+            "ZENVORA_BYTECODE 2\r\n",
+            "PROGRAM 0 3\r\n",
+            "CODE\r\n",
+            "PUSH 7\r\n",
+            "PRINT\r\n",
+            "JUMP 3\r\n",
+        );
+
+        let parsed = parse_v2_file(windows_source).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 3"]);
+        assert!(parsed.instructions.iter().all(|instruction| !instruction.contains('\r')));
+        assert!(verify_v2_file(&parsed).is_ok());
+
+        let canonical = serialize_v2_file(&parsed).unwrap();
+        assert!(!canonical.contains('\r'));
+        assert_eq!(parse_v2_file(&canonical).unwrap(), parsed);
+    }
+
+    #[test]
+    fn parser_rejects_embedded_carriage_return_inside_instruction_record() {
+        let malformed = concat!(
+            "ZENVORA_BYTECODE 2\n",
+            "PROGRAM 0 2\n",
+            "CODE\n",
+            "PUSH 7\rX\n",
+            "JUMP 2\n",
+        );
+
+        let error = parse_v2_file(malformed).unwrap_err();
+        assert!(error.contains("embedded carriage return"));
+    }
+
+    #[test]
+    fn parser_accepts_crlf_file_without_a_final_line_terminator() {
+        let source = concat!(
+            "ZENVORA_BYTECODE 2\r\n",
+            "PROGRAM 0 3\r\n",
+            "CODE\r\n",
+            "PUSH 7\r\n",
+            "PRINT\r\n",
+            "JUMP 3",
+        );
+
+        let parsed = parse_v2_file(source).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 3"]);
+        assert!(verify_v2_file(&parsed).is_ok());
+    }
+
+ 
+    #[test]
+    fn parser_accepts_mixed_lf_and_crlf_line_endings() {
+        let source = concat!(
+            "ZENVORA_BYTECODE 2\n",
+            "PROGRAM 0 3\r\n",
+            "CODE\n",
+            "PUSH 7\r\n",
+            "PRINT\n",
+            "JUMP 3\r\n",
+        );
+
+        let parsed = parse_v2_file(source).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 3"]);
+        assert!(verify_v2_file(&parsed).is_ok());
+
+        let canonical = serialize_v2_file(&parsed).unwrap();
+        assert!(!canonical.contains('\r'));
+        assert_eq!(parse_v2_file(&canonical).unwrap(), parsed);
+    }
 }
