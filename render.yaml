@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: zenvora-compiler-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /v1/health
+    envVars:
+      - key: ZENVORA_API_HOST
+        value: 0.0.0.0
+      - key: ZENVORA_API_ALLOWED_ORIGIN
+        value: https://vikash7644.github.io
+      - key: ZENVORA_API_TOKEN
+        sync: false
