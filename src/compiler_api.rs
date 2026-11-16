@@ -229,7 +229,7 @@ fn respond(stream: &mut TcpStream, status: &str, value: &Value) -> Result<(), St
     let body = value.to_string();
     let configured_origin = std::env::var("ZENVORA_API_ALLOWED_ORIGIN")
         .unwrap_or_else(|_| "https://vikash7644.github.io".into());
-    let allowed_origin = if configured_origin.contains(['\r', '\n']) {
+    let allowed_origin = if configured_origin.contains('\r') || configured_origin.contains('\n') {
         "https://vikash7644.github.io"
     } else {
         configured_origin.as_str()
