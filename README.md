@@ -133,6 +133,17 @@ curl -sS http://127.0.0.1:8787/v1/compile-run \
   --data '{"source":"define a := 10\\ndefine b := 20\\nshow a + b"}'
 ```
 
+### Optional hosted deployment (Render)
+
+A Render Blueprint is included in `render.yaml`, with a Docker build in `Dockerfile`. To deploy it:
+
+1. In Render, create a new **Blueprint** from this GitHub repository and select the `self-hosted-compiler-foundation` branch.
+2. Set the `ZENVORA_API_TOKEN` secret when Render prompts for the unsynced environment variable. Use a random secret of at least 32 characters.
+3. Deploy, then check `https://YOUR-SERVICE.onrender.com/v1/health`.
+4. Keep the token server-side. Do not put it in the GitHub Pages browser code.
+
+Render deployment is prepared but has **not** been launched from this repository. The hosted endpoint does not exist until the Blueprint is deployed and the secret is configured.
+
 The API reports `bytecode_artifact: true` and `self_hosted_frontend: true`; `rust_free_bootstrap` remains false until the compiler can build and run without the Rust host. The GitHub Pages Playground's JavaScript demo runner is separate and is not the full compiler/VM.
 
 
