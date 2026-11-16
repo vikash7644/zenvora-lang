@@ -985,18 +985,42 @@ fn emit_v2_main_instruction(item) {
         } otherwise {
           if op == "binary" {
             define operator := get(item, "operator")
-            if operator == "+" { return "ADD" }
-            if operator == "-" { return "SUB" }
-            if operator == "*" { return "MUL" }
-            if operator == "/" { return "DIV" }
-            if operator == "==" { return "EQ" }
-            if operator == "!=" { return "NE" }
-            if operator == "<" { return "LT" }
-            if operator == "<=" { return "LE" }
-            if operator == ">" { return "GT" }
-            if operator == ">=" { return "GE" }
-            if operator == "and" { return "AND" }
-            if operator == "or" { return "OR" }
+            if operator == "+" {
+              return "ADD"
+            }
+            if operator == "-" {
+              return "SUB"
+            }
+            if operator == "*" {
+              return "MUL"
+            }
+            if operator == "/" {
+              return "DIV"
+            }
+            if operator == "==" {
+              return "EQ"
+            }
+            if operator == "!=" {
+              return "NE"
+            }
+            if operator == "<" {
+              return "LT"
+            }
+            if operator == "<=" {
+              return "LE"
+            }
+            if operator == ">" {
+              return "GT"
+            }
+            if operator == ">=" {
+              return "GE"
+            }
+            if operator == "and" {
+              return "AND"
+            }
+            if operator == "or" {
+              return "OR"
+            }
           } otherwise {
             if op == "jump" or op == "jump_if_false" {
               if op == "jump" {
