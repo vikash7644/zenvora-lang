@@ -437,6 +437,21 @@ mod tests {
     }
 
     #[test]
+    fn cors_preflight_allows_authorization_header() {
+        let response = response_for(b"OPTIONS /v1/compile-run HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert!(response.contains("Access-Control-Allow-Headers: Content-Type, Authorization"));
+    }
+
+    #[test]
+    fn non_json_post_receives_http_415_response() {
+        let response = response_for(
+            b"POST /v1/compile HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\nContent-Length: 1\r\n\r\nx",
+        );
+        assert!(response.starts_with("HTTP/1.1 415 Unsupported Media Type"));
+    }
+
+    #[test]
     fn unsupported_method_receives_http_405_response() {
         let response = response_for(b"PUT /v1/compile HTTP/1.1\r\nHost: localhost\r\n\r\n");
         assert!(response.starts_with("HTTP/1.1 405 Method Not Allowed"));
