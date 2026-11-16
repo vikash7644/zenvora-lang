@@ -3529,7 +3529,10 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
         .map_err(|error| format!("bootstrap host could not compile QORVYNT compiler source: {error}"))?;
     let mut output = Vec::new();
     run_with_output(&code, &mut |line| output.push(line))
-        .map_err(|error| format!("QORVYNT compiler bootstrap execution failed: {error}"))?;
+        .map_err(|error| {
+            let tail = output.iter().rev().take(12).cloned().collect::<Vec<_>>();
+            format!("QORVYNT compiler bootstrap execution failed after output {tail:?}: {error}")
+        })?;
     let marker = output.iter().rposition(|line| line == "QORVYNT_CLI_PLAN_JSON")
         .ok_or_else(|| "QORVYNT compiler did not emit its plan marker".to_string())?;
     let plan_text = output.get(marker + 1)
