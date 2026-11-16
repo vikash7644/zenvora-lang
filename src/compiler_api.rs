@@ -20,16 +20,36 @@ impl Drop for ConnectionGuard {
     }
 }
 
-pub fn serve(port: u16) -> Result<(), String> {
-    let host = std::env::var("ZENVORA_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());
-    let is_loopback = host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false);
-    let token = std::env::var("ZENVORA_API_TOKEN").unwrap_or_default();
-    if !is_loopback && token.len() < 32 {
+fn is_loopback_host(host: &str) -> bool {
+    host.parse::<IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
+}
+
+fn validate_bind_security(host: &str, token: &str) -> Result<(), String> {
+    if !is_loopback_host(host) && token.len() < 32 {
         return Err("public compiler API binding requires ZENVORA_API_TOKEN with at least 32 characters".into());
     }
     if !token.is_empty() && token.len() < 16 {
         return Err("ZENVORA_API_TOKEN must contain at least 16 characters".into());
     }
+    Ok(())
+}
+
+fn bearer_token_matches(expected: &str, authorization: &str) -> bool {
+    let Some(provided) = authorization.strip_prefix("Bearer ") else {
+        return false;
+    };
+    if expected.len() != provided.len() {
+        return false;
+    }
+    expected.as_bytes().iter().zip(provided.as_bytes())
+        .fold(0u8, |difference, (left, right)| difference | (left ^ right)) == 0
+}
+
+pub fn serve(port: u16) -> Result<(), String> {
+    let host = std::env::var("ZENVORA_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let is_loopback = is_loopback_host(&host);
+    let token = std::env::var("ZENVORA_API_TOKEN").unwrap_or_default();
+    validate_bind_security(&host, &token)?;
     let address = match host.parse::<IpAddr>() {
         Ok(ip) => SocketAddr::new(ip, port).to_string(),
         Err(_) => format!("{host}:{port}"),
@@ -149,7 +169,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     return respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"}));
                 }
                 let expected_token = std::env::var("ZENVORA_API_TOKEN").unwrap_or_default();
-                if !expected_token.is_empty() && authorization != format!("Bearer {expected_token}") {
+                if !expected_token.is_empty() && !bearer_token_matches(&expected_token, &authorization) {
                     return respond(stream, "401 Unauthorized", &json!({"ok":false,"error":"valid bearer token required"}));
                 }
                 if !content_type.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("application/json") {
@@ -397,6 +417,23 @@ mod tests {
         assert_eq!(value["features"]["bytecode_artifact"], true);
         assert_eq!(value["features"]["self_hosted_frontend"], true);
         assert_eq!(value["features"]["rust_free_bootstrap"], false);
+    }
+
+    #[test]
+    fn public_bind_requires_a_long_token_and_loopback_does_not() {
+        assert!(validate_bind_security("127.0.0.1", "").is_ok());
+        assert!(validate_bind_security("0.0.0.0", "").is_err());
+        assert!(validate_bind_security("0.0.0.0", "short").is_err());
+        assert!(validate_bind_security("0.0.0.0", "0123456789abcdef0123456789abcdef").is_ok());
+    }
+
+    #[test]
+    fn bearer_token_validation_requires_exact_header_and_constant_length() {
+        let expected = "0123456789abcdef0123456789abcdef";
+        assert!(bearer_token_matches(expected, "Bearer 0123456789abcdef0123456789abcdef"));
+        assert!(!bearer_token_matches(expected, "0123456789abcdef0123456789abcdef"));
+        assert!(!bearer_token_matches(expected, "Bearer wrong"));
+        assert!(!bearer_token_matches(expected, "Basic 0123456789abcdef0123456789abcdef"));
     }
 
     #[test]
