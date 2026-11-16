@@ -1068,8 +1068,9 @@ fn emit_bytecode_v2_main(plan) {
   if not get(emitted, "ok") {
     return emitted
   }
-  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(len(code)), "CODE")
+  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(len(code) + 1), "CODE")
   lines := append_instructions(lines, get(emitted, "lines"))
+  lines := push(lines, "HALT")
   return map("ok", true, "error", "", "artifact", join(lines, "\n") + "\n")
 }
 
