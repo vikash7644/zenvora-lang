@@ -217,6 +217,17 @@ if get(generic_driver_v2_flow, "ok") and get(generic_driver_v2_flow_result, "ok"
   show generic_driver_v2_flow_result
 }
 
+# Direct Bytecode v2 function metadata and CALL emission regression.
+define generic_driver_v2_function := compile_source("show twice(21)\nfn twice(value) {\nreturn value * 2\n}\n")
+define generic_driver_v2_function_result := get(generic_driver_v2_function, "bytecode")
+if get(generic_driver_v2_function, "ok") and get(generic_driver_v2_function_result, "ok") and index_of(get(generic_driver_v2_function_result, "artifact"), "FUNCTION ") >= 0 and index_of(get(generic_driver_v2_function_result, "artifact"), "CALL ") >= 0 and index_of(get(generic_driver_v2_function_result, "artifact"), "RETURN_VALUE") >= 0 {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_FUNCTION_PASS"
+} otherwise {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_FUNCTION_FAIL"
+  show json_encode(generic_driver_v2_function)
+  show json_encode(generic_driver_v2_function_result)
+}
+
 # Regression: the same entry point compiles distinct caller-provided programs,
 # and malformed source fails at the correct stage rather than emitting a plan.
 define generic_driver_a := compile_source("define answer := 40 + 2\nshow answer\n")
