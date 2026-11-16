@@ -378,7 +378,7 @@ fn parse_program(tokens) {
             }
           }
         } otherwise {
-          if contains(array("break", "continue"), kw) {
+          if kw == "break" or kw == "continue" {
             ast := push(ast, node(kw, "", "", "", ln))
             pos := pos + 1
           } otherwise {
@@ -1637,16 +1637,6 @@ fn vm_binary(operator, left, right) {
 }
 # Execute the initial builtin subset directly in the Zenvora-authored plan VM.
 # Arguments arrive in reverse stack-pop order and are normalized here.
-fn reverse_array_values(values) {
-  define reversed := array()
-  define item_pos := len(values) - 1
-  repeat item_pos >= 0 {
-    reversed := push(reversed, get(values, item_pos))
-    item_pos := item_pos - 1
-  }
-  return reversed
-}
-
 fn execute_plan_builtin(name, reversed_args) {
   define args := array()
   define pos := len(reversed_args) - 1
@@ -2026,7 +2016,13 @@ fn execute_plan_builtin(name, reversed_args) {
                           return map("ok", true, "value", len(get(args, 0)) == 0, "error", "")
                         } otherwise {
                           if name == "reverse" and len(args) == 1 and type_of(get(args, 0)) == "array" {
-                            return map("ok", true, "value", reverse_array_values(get(args, 0)), "error", "")
+                            define reversed := array()
+                            define item_pos := len(get(args, 0)) - 1
+                            repeat item_pos >= 0 {
+                              reversed := push(reversed, get(get(args, 0), item_pos))
+                              item_pos := item_pos - 1
+                            }
+                            return map("ok", true, "value", reversed, "error", "")
                           }
                         }
                       }
