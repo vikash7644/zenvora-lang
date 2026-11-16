@@ -977,7 +977,51 @@ fn is_v2_builtin(name) {
 
 # Zenvora-written Bytecode v2 backend for main-program scalar and control-flow code.
 # User-defined function layout is the next backend stage; unsupported calls fail closed.
-fn emit_v2_main_instruction(item) {
+fn find_v2_function(functions, name) {
+  define pos := 0
+  repeat pos < len(functions) {
+    define item := get(functions, pos)
+    if get(item, "name") == name {
+      return item
+    }
+    pos := pos + 1
+  }
+  return ""
+}
+
+fn v2_value_producing(op) {
+  return op == "push_const" or op == "load" or op == "call" or op == "index" or op == "unary" or op == "binary"
+}
+
+fn v2_function_return_kind(code) {
+  define has_value_return := false
+  define has_void_return := false
+  define pos := 0
+  repeat pos < len(code) {
+    define item := get(code, pos)
+    if get(item, "op") == "return" {
+      define returns_value := false
+      if pos > 0 {
+        returns_value := v2_value_producing(get(get(code, pos - 1), "op"))
+      }
+      if returns_value {
+        has_value_return := true
+      } otherwise {
+        has_void_return := true
+      }
+    }
+    pos := pos + 1
+  }
+  if has_value_return and has_void_return {
+    return "mixed"
+  }
+  if has_value_return {
+    return "value"
+  }
+  return "void"
+}
+
+fn emit_v2_instruction(item, base, functions, return_kind) {
   define op := get(item, "op")
   if op == "push_const" {
     define kind := get(item, "type")
@@ -1004,10 +1048,15 @@ fn emit_v2_main_instruction(item) {
   }
   if op == "call" {
     define name := get(item, "name")
+    define argc := get(item, "argc")
     if is_v2_builtin(name) {
-      return "BUILTIN " + name + " " + to_string(get(item, "argc"))
+      return "BUILTIN " + name + " " + to_string(argc)
     }
-    return "UNSUPPORTED user function call: " + name
+    define target := find_v2_function(functions, name)
+    if target != "" {
+      return "CALL " + to_string(get(target, "entry")) + " " + to_string(argc)
+    }
+    return "UNSUPPORTED unresolved function call: " + name
   }
   if op == "index" {
     return "INDEX"
@@ -1060,21 +1109,27 @@ fn emit_v2_main_instruction(item) {
     }
   }
   if op == "jump" {
-    return "JUMP " + to_string(get(item, "target"))
+    return "JUMP " + to_string(get(item, "target") + base)
   }
   if op == "jump_if_false" {
-    return "JUMP_IF_FALSE " + to_string(get(item, "target"))
+    return "JUMP_IF_FALSE " + to_string(get(item, "target") + base)
+  }
+  if op == "return" {
+    if return_kind == "value" {
+      return "RETURN_VALUE"
+    }
+    return "RETURN"
   }
   return "UNSUPPORTED opcode: " + op
 }
 
-fn emit_v2_main_code(code) {
+fn emit_v2_code(code, base, functions, return_kind) {
   define lines := array()
   define pos := 0
   repeat pos < len(code) {
-    define line := emit_v2_main_instruction(get(code, pos))
+    define line := emit_v2_instruction(get(code, pos), base, functions, return_kind)
     if starts_with(line, "UNSUPPORTED ") {
-      return map("ok", false, "error", line, "artifact", "")
+      return map("ok", false, "error", line, "lines", array())
     }
     lines := push(lines, line)
     pos := pos + 1
@@ -1083,19 +1138,71 @@ fn emit_v2_main_code(code) {
 }
 
 fn emit_bytecode_v2_main(plan) {
-  define functions := get(plan, "functions")
-  if len(functions) > 0 {
-    return map("ok", false, "error", "function metadata and CALL emission are not implemented", "artifact", "")
+  define main := get(plan, "main")
+  define source_functions := get(plan, "functions")
+  define main_end := len(main) + 1
+  define functions := array()
+  define next_entry := main_end
+  define pos := 0
+
+  # Reserve stable function regions before encoding CALL instructions.
+  repeat pos < len(source_functions) {
+    define source_function := get(source_functions, pos)
+    define code := get(source_function, "code")
+    define return_kind := v2_function_return_kind(code)
+    if return_kind == "mixed" {
+      return map("ok", false, "error", "function mixes value and void returns", "artifact", "")
+    }
+    define extra := 1
+    if return_kind == "value" {
+      extra := 2
+    }
+    define region_size := len(code) + extra
+    functions := push(functions, map("name", get(source_function, "name"), "parameters", get(source_function, "parameters"), "entry", next_entry, "end", next_entry + region_size, "return_kind", return_kind))
+    next_entry := next_entry + region_size
+    pos := pos + 1
   }
-  define code := get(plan, "main")
-  define emitted := emit_v2_main_code(code)
-  if not get(emitted, "ok") {
-    return emitted
+
+  define main_result := emit_v2_code(main, 0, functions, "void")
+  if not get(main_result, "ok") {
+    return map("ok", false, "error", get(main_result, "error"), "artifact", "")
   }
-  define main_end := len(code) + 1
-  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(main_end), "CODE")
-  lines := append_instructions(lines, get(emitted, "lines"))
+
+  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(main_end))
+  pos := 0
+  repeat pos < len(functions) {
+    define fn := get(functions, pos)
+    define params := get(fn, "parameters")
+    define param_text := join(params, " ")
+    if len(params) == 0 {
+      param_text := "-"
+    }
+    lines := push(lines, "FUNCTION " + to_string(get(fn, "entry")) + " " + to_string(get(fn, "end")) + " " + to_string(len(params)) + " " + get(fn, "return_kind") + " " + param_text)
+    pos := pos + 1
+  }
+  lines := push(lines, "CODE")
+  lines := append_instructions(lines, get(main_result, "lines"))
   lines := push(lines, "JUMP " + to_string(main_end))
+
+  pos := 0
+  repeat pos < len(source_functions) {
+    define source_function := get(source_functions, pos)
+    define fn := get(functions, pos)
+    define return_kind := get(fn, "return_kind")
+    define emitted := emit_v2_code(get(source_function, "code"), get(fn, "entry"), functions, return_kind)
+    if not get(emitted, "ok") {
+      return map("ok", false, "error", get(emitted, "error"), "artifact", "")
+    }
+    lines := append_instructions(lines, get(emitted, "lines"))
+    if return_kind == "value" {
+      lines := push(lines, "PUSH 0")
+      lines := push(lines, "RETURN_VALUE")
+    } otherwise {
+      lines := push(lines, "RETURN")
+    }
+    pos := pos + 1
+  }
+
   return map("ok", true, "error", "", "artifact", join(lines, "\n") + "\n")
 }
 
