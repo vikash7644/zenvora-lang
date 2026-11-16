@@ -87,27 +87,51 @@ Each archive includes the `zv` CLI, README, and MIT license. These binaries were
 
 **Prototype warning:** this is not a production smart-contract toolchain. Do not use real funds or deploy production contracts with it.
 
-## Local Rust compiler HTTP API (development preview)
+## Zenvora compiler HTTP API v1 (development server)
 
-The CLI can start a loopback-only HTTP service that uses the actual Rust compiler and VM (not the browser demo interpreter):
+The CLI exposes a versioned HTTP API backed by the current Rust compiler and VM. It is useful for local tools and playground integration, but it is **not yet a hosted production service** and does not yet use the self-hosted compiler.
+
+Start locally:
 
 ```sh
 cargo run -- --compiler-api
-# listens on http://127.0.0.1:8787
+# http://127.0.0.1:8787
 ```
 
-- `GET /health` reports the service identity.
-- `POST /compile-run` accepts JSON such as `{"source":"define a := 10\\nshow a * 3"}` and returns `ok`, output lines, or a compile/runtime error.
-- Requests are limited to 64 KiB and source programs to 48 KiB.
-- The service binds to `127.0.0.1` only. It is a local development API, **not a public hosted endpoint**, and should not be exposed to the internet. The GitHub Pages Playground now has an expanded JavaScript demo runner for variables, strings, expressions, branching, loops, functions, arrays/maps, and selected standard-library helpers. It still does not execute the actual Rust compiler/VM and does not yet support module imports, the contract DSL, file/network APIs, or full language parity. A secure hosted compiler service or a browser-compatible build of the real compiler is required before claiming that every `.zv` program can run on the website.
+### Routes
 
-Example request:
+- `GET /v1/health` — service and compiler version.
+- `GET /v1/capabilities` — supported routes, request limits, and current feature flags.
+- `POST /v1/compile` — compile/validate source and return the instruction count.
+- `POST /v1/compile-run` — compile and execute source, returning output lines.
+- Legacy aliases: `GET /health` and `POST /compile-run`.
+
+POST requests use JSON: `{"source":"define total := 10\\nshow total * 3"}`.
+The request limit is 64 KiB and the source limit is 48 KiB. Compile/runtime errors use HTTP 422; malformed requests, missing content type, oversized bodies, and unauthorized requests use appropriate 4xx responses.
+
+### Binding and authentication
+
+The default listener is loopback-only. For a private network or hosted deployment, configure a bearer token and bind address:
 
 ```sh
-curl -sS http://127.0.0.1:8787/compile-run \
+ZENVORA_API_HOST=0.0.0.0 \
+ZENVORA_API_TOKEN='use-a-random-secret-of-at-least-32-characters' \
+ZENVORA_API_ALLOWED_ORIGIN='https://your-playground.example' \
+cargo run -- --compiler-api
+```
+
+When a token is configured, compile routes require `Authorization: Bearer YOUR_TOKEN`. Use a TLS reverse proxy in front of this plain-HTTP server before exposing it outside a trusted network. Keep the token in server-side secrets; never embed it in browser JavaScript. The listener has bounded request/source sizes and per-connection timeouts, but a hosted deployment still needs external rate limiting, monitoring, TLS termination, and operational controls.
+
+Example:
+
+```sh
+curl -sS http://127.0.0.1:8787/v1/compile-run \
   -H 'Content-Type: application/json' \
   --data '{"source":"define a := 10\\ndefine b := 20\\nshow a + b"}'
 ```
+
+The API currently reports `bytecode_artifact: false` and `self_hosted_compiler: false` in its capabilities because executable Bytecode v2 output and the Rust-free compiler path are still in progress. The GitHub Pages Playground's JavaScript demo runner is separate and is not the full compiler/VM.
+
 
 ## Build and run
 
