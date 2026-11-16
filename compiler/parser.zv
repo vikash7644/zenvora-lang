@@ -1321,13 +1321,16 @@ fn verify_code(code) {
   define pos := 0
   repeat pos < len(code) {
     define instruction := get(code, pos)
+    if type_of(instruction) != "map" {
+      return "malformed instruction record"
+    }
     define op := get(instruction, "op")
     if not is_allowed_opcode(op) {
       return "unsupported bytecode opcode: " + op
     }
     if op == "jump" or op == "jump_if_false" {
       define target := get(instruction, "target")
-      if target < 0 or target > len(code) {
+      if type_of(target) != "integer" or target < 0 or target > len(code) {
         return "invalid jump target"
       }
     }
@@ -2348,4 +2351,21 @@ if get(generic_driver_recursive, "ok") and get(generic_driver_recursive_run, "ok
   show generic_driver_undefined_local
   show generic_driver_duplicate_params
   show generic_driver_wrong_arity
+}
+
+
+# Verifier hardening: reject malformed instruction records and non-integer branch targets.
+define malformed_instruction_plan := map("format", "ZENVORA_BYTECODE_PLAN_1", "main", array("jump"), "functions", array())
+define malformed_instruction_result := verify_bytecode_plan(malformed_instruction_plan)
+define string_jump_plan := map("format", "ZENVORA_BYTECODE_PLAN_1", "main", array(map("op", "jump", "target", "0")), "functions", array())
+define string_jump_result := verify_bytecode_plan(string_jump_plan)
+define function_bad_jump_plan := map("format", "ZENVORA_BYTECODE_PLAN_1", "main", array(), "functions", array(map("name", "broken", "code", array(map("op", "jump_if_false", "target", 2)))))
+define function_bad_jump_result := verify_bytecode_plan(function_bad_jump_plan)
+if not get(malformed_instruction_result, "ok") and get(malformed_instruction_result, "error") == "main: malformed instruction record" and not get(string_jump_result, "ok") and get(string_jump_result, "error") == "main: invalid jump target" and not get(function_bad_jump_result, "ok") and get(function_bad_jump_result, "error") == "function broken: invalid jump target" {
+  show "ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS"
+} otherwise {
+  show "ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_FAIL"
+  show malformed_instruction_result
+  show string_jump_result
+  show function_bad_jump_result
 }
