@@ -1230,4 +1230,25 @@ JUMP 2
         assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 3"]);
         assert!(verify_v2_file(&parsed).is_ok());
     }
+
+ 
+    #[test]
+    fn parser_accepts_mixed_lf_and_crlf_line_endings() {
+        let source = concat!(
+            "ZENVORA_BYTECODE 2\n",
+            "PROGRAM 0 3\r\n",
+            "CODE\n",
+            "PUSH 7\r\n",
+            "PRINT\n",
+            "JUMP 3\r\n",
+        );
+
+        let parsed = parse_v2_file(source).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 3"]);
+        assert!(verify_v2_file(&parsed).is_ok());
+
+        let canonical = serialize_v2_file(&parsed).unwrap();
+        assert!(!canonical.contains('\r'));
+        assert_eq!(parse_v2_file(&canonical).unwrap(), parsed);
+    }
 }
