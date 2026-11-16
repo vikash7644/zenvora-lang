@@ -307,10 +307,10 @@ if get(generic_driver_truthy, "ok") and get(generic_driver_truthy_run, "ok") and
   show "ZENVORA_VM_TRUTHINESS_PASS"
 } otherwise {
   show "ZENVORA_VM_TRUTHINESS_FAIL"
-  show generic_driver_truthy
-  show generic_driver_truthy_run
-  show generic_driver_string_condition
-  show generic_driver_string_condition_run
+  show json_encode(generic_driver_truthy)
+  show json_encode(generic_driver_truthy_run)
+  show json_encode(generic_driver_string_condition)
+  show json_encode(generic_driver_string_condition_run)
 }
 
 # Explicitly report indirect-call IR as unsupported instead of silently falling through.
