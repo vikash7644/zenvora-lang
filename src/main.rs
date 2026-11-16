@@ -3515,13 +3515,13 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
     let compiler_source = COMPILER_SOURCE;
     let source_literal = quote_qorvynt_string(source)?;
     let invocation = format!(
-        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\\
-         show \"QORVYNT_CLI_PLAN_JSON\"\n\\
-         show json_encode(get(qorvynt_cli_result, \"plan\"))\n\\
-         show get(qorvynt_cli_result, \"ok\")\n\\
-         show get(qorvynt_cli_result, \"stage\")\n\\
-         show get(qorvynt_cli_result, \"error\")\n\\
-         show get(get(qorvynt_cli_result, \"bytecode\"), \"ok\")\n\\
+        "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
+         show \"QORVYNT_CLI_PLAN_JSON\"\n\
+         show json_encode(get(qorvynt_cli_result, \"plan\"))\n\
+         show get(qorvynt_cli_result, \"ok\")\n\
+         show get(qorvynt_cli_result, \"stage\")\n\
+         show get(qorvynt_cli_result, \"error\")\n\
+         show get(get(qorvynt_cli_result, \"bytecode\"), \"ok\")\n\
          show json_encode(get(get(qorvynt_cli_result, \"bytecode\"), \"artifact\"))\n"
     );
     let program = format!("{compiler_source}\n{invocation}");
