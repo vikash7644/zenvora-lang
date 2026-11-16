@@ -3507,7 +3507,7 @@ fn quote_qorvynt_string(value: &str) -> Result<String, String> {
 
 /// Runs the QORVYNT-written compiler entry point against arbitrary caller source.
 /// The Rust VM here is the bootstrap host; parsing, semantic validation, lowering,
-/// and bytecode-plan verification are performed by compiler/parser.zv itself.
+/// and bytecode-plan verification are performed by src/compiler/parser.zv itself.
 fn compile_self_hosted_source(source: &str) -> Result<String, String> {
     // Embed the compiler at build time so the installed CLI does not depend on
     // the caller's working directory or a separately copied compiler/ folder.
