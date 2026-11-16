@@ -1179,4 +1179,25 @@ JUMP 2
         }
     }
 
+
+    #[test]
+    fn parser_accepts_windows_crlf_bytecode_without_preserving_carriage_returns() {
+        let windows_source = concat!(
+            "ZENVORA_BYTECODE 2\r\n",
+            "PROGRAM 0 2\r\n",
+            "CODE\r\n",
+            "PUSH 7\r\n",
+            "PRINT\r\n",
+            "JUMP 2\r\n",
+        );
+
+        let parsed = parse_v2_file(windows_source).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 2"]);
+        assert!(parsed.instructions.iter().all(|instruction| !instruction.contains('\r')));
+        assert!(verify_v2_file(&parsed).is_ok());
+
+        let canonical = serialize_v2_file(&parsed).unwrap();
+        assert!(!canonical.contains('\r'));
+        assert_eq!(parse_v2_file(&canonical).unwrap(), parsed);
+    }
 }
