@@ -2073,7 +2073,20 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
                       if get(popped, "error") != "" {
                         err := get(popped, "error")
                       } otherwise {
-                        if not get(popped, "value") {
+                        define condition_value := get(popped, "value")
+                        define condition_truthy := true
+                        if type_of(condition_value) == "boolean" {
+                          condition_truthy := condition_value
+                        } otherwise {
+                          if type_of(condition_value) == "number" {
+                            condition_truthy := condition_value != 0
+                          } otherwise {
+                            if type_of(condition_value) == "string" {
+                              condition_truthy := char_count(condition_value) > 0
+                            }
+                          }
+                        }
+                        if not condition_truthy {
                           pc := get(ins, "target") - 1
                         }
                       }
