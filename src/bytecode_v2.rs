@@ -1184,7 +1184,7 @@ JUMP 2
     fn parser_accepts_windows_crlf_bytecode_without_preserving_carriage_returns() {
         let windows_source = concat!(
             "ZENVORA_BYTECODE 2\r\n",
-            "PROGRAM 0 2\r\n",
+            "PROGRAM 0 3\r\n",
             "CODE\r\n",
             "PUSH 7\r\n",
             "PRINT\r\n",
@@ -1219,7 +1219,7 @@ JUMP 2
     fn parser_accepts_crlf_file_without_a_final_line_terminator() {
         let source = concat!(
             "ZENVORA_BYTECODE 2\r\n",
-            "PROGRAM 0 2\r\n",
+            "PROGRAM 0 3\r\n",
             "CODE\r\n",
             "PUSH 7\r\n",
             "PRINT\r\n",
