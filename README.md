@@ -104,11 +104,13 @@ cargo run -- --compiler-api
 - `GET /v1/capabilities` — supported routes, request limits, and current feature flags.
 - `POST /v1/compile` — validate source with the Rust reference compiler and return the instruction count.
 - `POST /v1/compile-bytecode-v2` — invoke the Zenvora-written self-hosted compiler frontend and return a canonical executable `ZENVORA_BYTECODE 2` artifact. The bootstrap host is still Rust; this is not yet a Rust-free Stage 1/Stage 2 build.
+- `POST /v1/verify-bytecode-v2` — verify a submitted Bytecode v2 artifact before execution.
+- `POST /v1/run-bytecode-v2` — verify and execute a submitted Bytecode v2 artifact.
 - `POST /v1/compile-run` — compile and execute source, returning output lines.
 - Legacy aliases: `GET /health` and `POST /compile-run`.
 
 POST requests use JSON: `{"source":"define total := 10\\nshow total * 3"}`.
-The request limit is 64 KiB, source limit is 48 KiB, response output is capped at 1 MiB, and active connections are capped at 32. Compile/runtime errors use HTTP 422; malformed requests, missing content type, oversized bodies, and unauthorized requests use appropriate 4xx responses.
+The JSON request limit is 2 MiB, source limit is 48 KiB, bytecode input and response output are each capped at 1 MiB, and active connections are capped at 32. Compile/runtime errors use HTTP 422; malformed requests, missing content type, oversized bodies, and unauthorized requests use appropriate 4xx responses.
 
 ### Binding and authentication
 
