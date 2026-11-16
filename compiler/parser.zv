@@ -2330,3 +2330,22 @@ if get(generic_driver_multi_control, "ok") and get(generic_driver_multi_run, "ok
   show generic_driver_multi_run
 }
 
+
+
+# Compiler-driver semantic regressions: recursive functions, function-local names,
+# duplicate parameters, and call arity must be checked through compile_source().
+define generic_driver_recursive := compile_source("fn sum_to(n) {\nif n <= 0 {\nreturn 0\n} otherwise {\ndefine previous := sum_to(n - 1)\nreturn n + previous\n}\n}\nshow sum_to(5)\n")
+define generic_driver_recursive_run := execute_bytecode_plan(get(generic_driver_recursive, "plan"))
+define generic_driver_undefined_local := compile_source("fn broken(value) {\nreturn value + missing_local\n}\nshow broken(1)\n")
+define generic_driver_duplicate_params := compile_source("fn broken(value, value) {\nreturn value\n}\nshow broken(1, 2)\n")
+define generic_driver_wrong_arity := compile_source("fn double(value) {\nreturn value * 2\n}\nshow double(1, 2)\n")
+if get(generic_driver_recursive, "ok") and get(generic_driver_recursive_run, "ok") and get(get(generic_driver_recursive_run, "output"), 0) == "15" and not get(generic_driver_undefined_local, "ok") and get(generic_driver_undefined_local, "stage") == "validate" and not get(generic_driver_duplicate_params, "ok") and get(generic_driver_duplicate_params, "stage") == "validate" and not get(generic_driver_wrong_arity, "ok") and get(generic_driver_wrong_arity, "stage") == "validate" {
+  show "ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS"
+} otherwise {
+  show "ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_FAIL"
+  show generic_driver_recursive
+  show generic_driver_recursive_run
+  show generic_driver_undefined_local
+  show generic_driver_duplicate_params
+  show generic_driver_wrong_arity
+}
