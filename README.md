@@ -89,7 +89,7 @@ Each archive includes the `zv` CLI, README, and MIT license. These binaries were
 
 ## Zenvora compiler HTTP API v1 (development server)
 
-The CLI exposes a versioned HTTP API backed by the current Rust compiler and VM. It is useful for local tools and playground integration, but it is **not yet a hosted production service** and does not yet use the self-hosted compiler.
+The CLI exposes a versioned HTTP API hosted by the current Rust runtime. The general `compile` and `compile-run` routes use the Rust reference compiler/VM; `compile-bytecode-v2` invokes the Zenvora-written self-hosted frontend and the Rust bootstrap host serializes its result. It is useful for local tools and playground integration, but it is **not yet a hosted production service** or a Rust-free compiler service.
 
 Start locally:
 
@@ -144,7 +144,7 @@ A Render Blueprint is included in `render.yaml`, with a Docker build in `Dockerf
 
 Render deployment is prepared but has **not** been launched from this repository. The hosted endpoint does not exist until the Blueprint is deployed and the secret is configured.
 
-The API reports `bytecode_artifact: true` and `self_hosted_frontend: true`; `rust_free_bootstrap` remains false until the compiler can build and run without the Rust host. The GitHub Pages Playground's JavaScript demo runner is separate and is not the full compiler/VM.
+The API reports `bytecode_artifact: true` and `self_hosted_frontend: true`; `rust_free_bootstrap` remains false until the compiler can build and run without the Rust host. The self-hosted endpoint is an initial integration surface, not proof of a complete Rust-independent compiler. The GitHub Pages Playground's JavaScript demo runner is separate and is not the full compiler/VM.
 
 
 ## Build and run
