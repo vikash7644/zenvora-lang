@@ -9,19 +9,35 @@ const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_SOURCE_BYTES: usize = 48 * 1024;
 
 pub fn serve(port: u16) -> Result<(), String> {
-    let address = format!("127.0.0.1:{port}");
+    let host = std::env::var("ZENVORA_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let is_loopback = host.parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false);
+    let token = std::env::var("ZENVORA_API_TOKEN").unwrap_or_default();
+    if !is_loopback && token.len() < 32 {
+        return Err("public compiler API binding requires ZENVORA_API_TOKEN with at least 32 characters".into());
+    }
+    if !token.is_empty() && token.len() < 16 {
+        return Err("ZENVORA_API_TOKEN must contain at least 16 characters".into());
+    }
+    let address = format!("{host}:{port}");
     let listener = TcpListener::bind(&address)
         .map_err(|e| format!("cannot bind compiler API at {address}: {e}"))?;
     println!("Zenvora compiler API listening at http://{address}");
-    println!("Development-only: loopback binding; press Ctrl+C to stop.");
+    println!("API v1 routes: GET /v1/health, GET /v1/capabilities, POST /v1/compile, POST /v1/compile-run");
+    if is_loopback {
+        println!("Loopback mode: API is reachable only from this device.");
+    } else {
+        println!("Public bind enabled: bearer-token authentication is required for compile routes.");
+    }
     for incoming in listener.incoming() {
         match incoming {
             Ok(mut stream) => {
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
                 let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
-                if let Err(error) = handle(&mut stream) {
-                    eprintln!("compiler API request error: {error}");
-                }
+                std::thread::spawn(move || {
+                    if let Err(error) = handle(&mut stream) {
+                        eprintln!("compiler API request error: {error}");
+                    }
+                });
             }
             Err(error) => eprintln!("compiler API connection error: {error}"),
         }
@@ -34,6 +50,11 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
     let mut chunk = [0u8; 4096];
     let mut header_end = None;
     let mut content_length = None;
+    let mut route = String::new();
+    let mut method = String::new();
+    let mut content_type = String::new();
+    let mut authorization = String::new();
+
     loop {
         if buffer.len() > MAX_REQUEST_BYTES {
             return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"request exceeds 64 KiB"}));
@@ -46,33 +67,75 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 };
                 let mut lines = headers.split("\r\n");
                 let request_line = lines.next().unwrap_or("");
-                if request_line == "OPTIONS /compile-run HTTP/1.1" || request_line == "OPTIONS /compile-run HTTP/1.0" {
-                    return respond(stream, "204 No Content", &json!({"ok":true}));
+                let mut request_parts = request_line.split_whitespace();
+                method = request_parts.next().unwrap_or("").to_string();
+                let raw_path = request_parts.next().unwrap_or("");
+                let version = request_parts.next().unwrap_or("");
+                if method.is_empty() || raw_path.is_empty() || !matches!(version, "HTTP/1.0" | "HTTP/1.1") || request_parts.next().is_some() {
+                    return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"malformed HTTP request line"}));
                 }
-                if request_line != "GET /health HTTP/1.1" && request_line != "GET /health HTTP/1.0"
-                    && request_line != "POST /compile-run HTTP/1.1" && request_line != "POST /compile-run HTTP/1.0" {
-                    return respond(stream, "404 Not Found", &json!({"ok":false,"error":"use GET /health or POST /compile-run"}));
-                }
-                if request_line.starts_with("GET ") {
-                    return respond(stream, "200 OK", &json!({"ok":true,"service":"zenvora-compiler-api","compiler":"Rust","mode":"development"}));
-                }
+                route = raw_path.split('?').next().unwrap_or("").to_string();
                 let mut length = None;
                 for line in lines {
-                    let Some((name, value)) = line.split_once(':') else { return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"malformed HTTP header"})); };
+                    let Some((name, value)) = line.split_once(':') else {
+                        return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"malformed HTTP header"}));
+                    };
+                    let name = name.trim();
+                    let value = value.trim();
                     if name.eq_ignore_ascii_case("transfer-encoding") {
                         return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"transfer-encoding is unsupported"}));
                     }
                     if name.eq_ignore_ascii_case("content-length") {
-                        if length.is_some() { return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"duplicate Content-Length"})); }
-                        length = Some(match value.trim().parse::<usize>() {
+                        if length.is_some() {
+                            return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"duplicate Content-Length"}));
+                        }
+                        length = Some(match value.parse::<usize>() {
                             Ok(length) => length,
                             Err(_) => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"invalid Content-Length"})),
                         });
+                    } else if name.eq_ignore_ascii_case("content-type") {
+                        content_type = value.to_ascii_lowercase();
+                    } else if name.eq_ignore_ascii_case("authorization") {
+                        authorization = value.to_string();
                     }
+                }
+
+                if method == "OPTIONS" {
+                    return respond(stream, "200 OK", &json!({"ok":true}));
+                }
+                if method == "GET" {
+                    return match route.as_str() {
+                        "/health" | "/v1/health" => respond(stream, "200 OK", &json!({
+                            "ok":true,"service":"zenvora-compiler-api","api_version":"v1",
+                            "compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION")),
+                            "mode": if std::env::var("ZENVORA_API_TOKEN").is_ok() {"authenticated"} else {"development"}
+                        })),
+                        "/v1/capabilities" => respond(stream, "200 OK", &json!({
+                            "ok":true,"api_version":"v1",
+                            "endpoints":["GET /v1/health","GET /v1/capabilities","POST /v1/compile","POST /v1/compile-run"],
+                            "request":{"content_type":"application/json","body":{"source":"string"}},
+                            "limits":{"request_bytes":MAX_REQUEST_BYTES,"source_bytes":MAX_SOURCE_BYTES},
+                            "features":{"compile":true,"execute":true,"bytecode_artifact":false,"self_hosted_compiler":false}
+                        })),
+                        _ => respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"})),
+                    };
+                }
+                if method != "POST" {
+                    return respond(stream, "405 Method Not Allowed", &json!({"ok":false,"error":"method not allowed"}));
+                }
+                if !matches!(route.as_str(), "/compile-run" | "/v1/compile" | "/v1/compile-run") {
+                    return respond(stream, "404 Not Found", &json!({"ok":false,"error":"route not found"}));
+                }
+                let expected_token = std::env::var("ZENVORA_API_TOKEN").unwrap_or_default();
+                if !expected_token.is_empty() && authorization != format!("Bearer {expected_token}") {
+                    return respond(stream, "401 Unauthorized", &json!({"ok":false,"error":"valid bearer token required"}));
+                }
+                if !content_type.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("application/json") {
+                    return respond(stream, "415 Unsupported Media Type", &json!({"ok":false,"error":"Content-Type must be application/json"}));
                 }
                 content_length = Some(match length {
                     Some(length) => length,
-                    None => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"Content-Length is required"})),
+                    None => return respond(stream, "411 Length Required", &json!({"ok":false,"error":"Content-Length is required"})),
                 });
                 header_end = Some(pos + 4);
                 if content_length.unwrap_or(0) > MAX_REQUEST_BYTES {
@@ -94,21 +157,37 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 if source.len() > MAX_SOURCE_BYTES {
                     return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"source exceeds 48 KiB"}));
                 }
-                let result = match super::compile(source) {
-                    Ok(code) => {
-                        let mut lines = Vec::new();
-                        match super::run_with_output(&code, &mut |line| lines.push(line)) {
-                            Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))}),
-                            Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))}),
-                        }
-                    }
-                    Err(error) => json!({"ok":false,"error":error,"phase":"compile","compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))}),
+                let code = match super::compile(source) {
+                    Ok(code) => code,
+                    Err(error) => return respond(stream, "422 Unprocessable Entity", &json!({
+                        "ok":false,"error":error,"phase":"compile",
+                        "compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))
+                    })),
                 };
-                return respond(stream, "200 OK", &result);
+                if route == "/v1/compile" {
+                    return respond(stream, "200 OK", &json!({
+                        "ok":true,"compiled":true,"instruction_count":code.len(),
+                        "compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))
+                    }));
+                }
+                let mut lines = Vec::new();
+                return match super::run_with_output(&code, &mut |line| lines.push(line)) {
+                    Ok(()) => respond(stream, "200 OK", &json!({
+                        "ok":true,"output":lines.join("\n"),"lines":lines,
+                        "instruction_count":code.len(),
+                        "compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))
+                    })),
+                    Err(error) => respond(stream, "422 Unprocessable Entity", &json!({
+                        "ok":false,"error":error,"phase":"runtime",
+                        "compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION"))
+                    })),
+                };
             }
         }
         let read = stream.read(&mut chunk).map_err(|e| format!("read failed: {e}"))?;
-        if read == 0 { return Err("client closed before request completed".into()); }
+        if read == 0 {
+            return Err("client closed before request completed".into());
+        }
         buffer.extend_from_slice(&chunk[..read]);
     }
 }
@@ -116,7 +195,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
 fn respond(stream: &mut TcpStream, status: &str, value: &Value) -> Result<(), String> {
     let body = value.to_string();
     let header = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: https://vikash7644.github.io\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nVary: Origin\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nVary: Origin\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         body.len()
     );
     stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(body.as_bytes()))
