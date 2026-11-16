@@ -1669,7 +1669,7 @@ fn run_with_output_metered<F>(
 where
     F: FnMut(String),
 {
-    run_with_output_metered_and_bindings(code, output, gas_meter, HashMap::new())
+    run_with_output_metered_and_bindings(code, output, gas_meter, HashMap::new(), 1_000_000)
 }
 
 fn run_with_output_and_bindings<F>(
@@ -1680,7 +1680,21 @@ fn run_with_output_and_bindings<F>(
 where
     F: FnMut(String),
 {
-    run_with_output_metered_and_bindings(code, output, None, initial_bindings)
+    run_with_output_metered_and_bindings(code, output, None, initial_bindings, 1_000_000)
+}
+
+fn run_with_compiler_bindings<F>(
+    code: &[Op],
+    output: &mut F,
+    initial_bindings: HashMap<String, Value>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    // The compiler frontend runs a substantial regression suite in addition to compiling
+    // the caller's source. Keep ordinary program execution at 1M steps, but allow this
+    // dedicated, still-bounded compiler-host path up to 20M instructions.
+    run_with_output_metered_and_bindings(code, output, None, initial_bindings, 20_000_000)
 }
 
 fn run_with_output_metered_and_bindings<F>(
@@ -1688,6 +1702,7 @@ fn run_with_output_metered_and_bindings<F>(
     output: &mut F,
     mut gas_meter: Option<&mut contract_gas::GasMeter>,
     mut vars: HashMap<String, Value>,
+    max_steps: usize,
 ) -> Result<(), String>
 where
     F: FnMut(String),
@@ -1710,15 +1725,14 @@ where
     let mut pc = 0usize;
     let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
     let mut steps = 0usize;
-    const MAX_STEPS: usize = 1_000_000;
     const MAX_CALL_DEPTH: usize = 1_024;
     if code.len() > MAX_BYTECODE_INSTRUCTIONS {
         return Err(format!("program instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
     }
     while pc < code.len() {
         steps += 1;
-        if steps > MAX_STEPS {
-            return Err("execution exceeded safety limit (1,000,000 instructions)".into());
+        if steps > max_steps {
+            return Err(format!("execution exceeded safety limit ({max_steps} instructions)"));
         }
         if let Some(meter) = gas_meter.as_deref_mut() {
             let cost = match code.get(pc) {
@@ -2847,7 +2861,7 @@ fn run_qorvynt_compiler_and_write(
     let input_source = read_program(input_path)?;
     let bindings = HashMap::from([("source_text".to_string(), Value::Str(input_source))]);
     let mut output = Vec::new();
-    run_with_output_and_bindings(compiler_code, &mut |line| output.push(line), bindings)?;
+    run_with_compiler_bindings(compiler_code, &mut |line| output.push(line), bindings)?;
 
     for line in &output {
         println!("{line}");
