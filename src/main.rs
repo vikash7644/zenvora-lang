@@ -1420,6 +1420,18 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
             }
             Ok(Value::Array(items))
         }
+        "char_at" => {
+            arity(2)?;
+            let (Value::Str(value), Value::Int(index)) = (&args[0], &args[1]) else {
+                return Err("type error: char_at expects a string and a non-negative integer index".into());
+            };
+            if *index < 0 {
+                return Err("char_at index out of bounds".into());
+            }
+            value.chars().nth(*index as usize)
+                .map(|character| Value::Str(character.to_string()))
+                .ok_or_else(|| "char_at index out of bounds".into())
+        }
         "index_of" => {
             arity(2)?;
             match (&args[0], &args[1]) {
@@ -4201,6 +4213,25 @@ show to_int(17)
         assert!(execute("show to_int(true)\n").unwrap_err().contains("integer or numeric string"));
         assert!(execute(r#"show to_int("9223372036854775808")
 "#).unwrap_err().contains("cannot convert"));
+    }
+
+    #[test]
+    fn char_at_supports_unicode_scalar_indices_and_rejects_invalid_inputs() {
+        let output = execute(r#"show char_at("QORVYNT", 0)
+show char_at("hé🙂", 1)
+show char_at("hé🙂", 2)
+"#).unwrap();
+        assert_eq!(output, vec!["Q", "é", "🙂"]);
+        assert!(execute(r#"show char_at("abc", -1)
+"#).unwrap_err().contains("out of bounds"));
+        assert!(execute(r#"show char_at("abc", 3)
+"#).unwrap_err().contains("out of bounds"));
+        assert!(execute(r#"show char_at(12, 0)
+"#).unwrap_err().contains("string and a non-negative integer"));
+        assert!(execute(r#"show char_at("abc", "0")
+"#).unwrap_err().contains("string and a non-negative integer"));
+        assert!(execute(r#"show char_at("abc", 0, 1)
+"#).unwrap_err().contains("expects 2 argument"));
     }
 
     #[test]
