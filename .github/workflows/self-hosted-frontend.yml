@@ -206,7 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo run --locked --quiet -- src/compiler/token_stream.zv > token-output-repeat.txt
-          cargo run --locked --quiet -- src/compiler/parser.zv > parser-output-repeat.txt
+          cargo run --locked --quiet -- --test-self-hosted-frontend > parser-output-repeat.txt
           diff -u frontend-output.txt token-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           test -s self-hosted-plan-repeat.json
