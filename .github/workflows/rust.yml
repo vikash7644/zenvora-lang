@@ -124,6 +124,15 @@ jobs:
       - name: Verify CLI help
         run: cargo run --locked -- --help
 
+      - name: Check program through native Zenvora Engine
+        run: cargo run --locked -- --engine-check examples/hello.zv
+
+      - name: Execute program through native Zenvora Engine
+        run: cargo run --locked -- --engine-run examples/hello.zv | grep -Fxq 35
+
+      - name: Execute relative modules through native Zenvora Engine
+        run: cargo run --locked -- --engine-run examples/modules.zv | grep -Fxq 42
+
       - name: Smoke-test Rust compiler HTTP API
         shell: bash
         run: |
