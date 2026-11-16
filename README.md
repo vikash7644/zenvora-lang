@@ -149,7 +149,7 @@ The API reports `bytecode_artifact: true` and `self_hosted_frontend: true`; `rus
 
 ## Build and run
 
-Requires Rust and Cargo (including on Android through Termux if the Rust toolchain is installed).
+Requires Rust and Cargo on a supported desktop or cloud build environment. For Android users, use GitHub Actions or the hosted API rather than compiling the toolchain on the phone.
 
 ```sh
 cargo check
