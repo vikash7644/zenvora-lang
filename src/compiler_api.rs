@@ -37,7 +37,7 @@ pub fn serve(port: u16) -> Result<(), String> {
     let listener = TcpListener::bind(&address)
         .map_err(|e| format!("cannot bind compiler API at {address}: {e}"))?;
     println!("Zenvora compiler API listening at http://{address}");
-    println!("API v1 routes: GET /v1/health, GET /v1/capabilities, POST /v1/compile, POST /v1/compile-run");
+    println!("API v1 routes: health, capabilities, compile, compile-bytecode-v2, verify-bytecode-v2, run-bytecode-v2, compile-run");
     if is_loopback {
         println!("Loopback mode: API is reachable only from this device.");
     } else {
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn v1_bytecode_verify_and_run_endpoints_accept_self_hosted_artifacts() {
-        let bytecode = super::compile_self_hosted_source("show 40 + 2").unwrap();
+        let bytecode = super::compile_self_hosted_source("show 40 + 2\n").unwrap();
         let body = json!({"bytecode":bytecode}).to_string();
         let request = format!(
             "POST /v1/run-bytecode-v2 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
