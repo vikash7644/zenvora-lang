@@ -4554,6 +4554,24 @@ show char_at("hé🙂", 2)
     }
 
     #[test]
+    fn vm_can_execute_compiler_programs_with_host_supplied_source_bindings() {
+        let (code, _) = super::compile_with_layout("show source_text\n").unwrap();
+        let bindings = std::collections::HashMap::from([(
+            "source_text".to_string(),
+            super::Value::Str("show 42".to_string()),
+        )]);
+        let mut output = Vec::new();
+        super::run_with_output_and_bindings(&code, &mut |line| output.push(line), bindings).unwrap();
+        assert_eq!(output, vec!["show 42"]);
+        let invalid = std::collections::HashMap::from([(
+            "not-valid".to_string(),
+            super::Value::Str("x".to_string()),
+        )]);
+        assert!(super::run_with_output_and_bindings(&code, &mut |_| {}, invalid)
+            .unwrap_err().contains("invalid initial binding name"));
+    }
+
+    #[test]
     fn hex_encode_builtin_is_utf8_stable_and_available_in_bytecode_v2() {
         let source = r#"show hex_encode("hé🙂")
 show hex_encode("")
