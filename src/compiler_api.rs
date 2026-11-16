@@ -489,8 +489,8 @@ mod tests {
 
     #[test]
     fn oversized_incomplete_headers_receive_http_431_response() {
-        let mut request = b"POST /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\nX-Fill: ".to_vec();
-        request.extend(std::iter::repeat_n(b'a', MAX_HEADER_BYTES));
+        let mut request = b"POST /v1/compile HTTP/1.1\r\nHost: localhost\r\nX-Fill: ".to_vec();
+        request.extend(std::iter::repeat(b'a').take(MAX_HEADER_BYTES));
         let response = response_for(&request);
         assert!(response.starts_with("HTTP/1.1 431 Request Header Fields Too Large"));
         assert!(response.contains("HTTP headers exceed 16 KiB"));
