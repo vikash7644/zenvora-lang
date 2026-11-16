@@ -942,120 +942,6 @@ fn emit_bytecode_plan(ir) {
   return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
 }
 
-
-# First Zenvora-written Bytecode v2 backend slice.
-# This emits canonical textual bytecode for main-program scalar/control-flow
-# instructions. Function metadata and string encoding are intentionally gated
-# until their parity tests are added; unsupported instructions fail closed.
-fn emit_v2_main_instruction(item) {
-  define op := get(item, "op")
-  if op == "push_const" {
-    define kind := get(item, "type")
-    define value := get(item, "value")
-    if kind == "number" {
-      return "PUSH " + to_string(value)
-    } otherwise {
-      if kind == "boolean" and (value == "true" or value == "false") {
-        return "PUSH_BOOL " + value
-      }
-    }
-  } otherwise {
-    if op == "load" or op == "declare" or op == "store" {
-      if op == "load" {
-        return "LOAD " + get(item, "name")
-      } otherwise {
-        if op == "declare" {
-          return "DECLARE " + get(item, "name")
-        } otherwise {
-          return "STORE " + get(item, "name")
-        }
-      }
-    } otherwise {
-      if op == "print" {
-        return "PRINT"
-      } otherwise {
-        if op == "unary" {
-          if get(item, "operator") == "-" {
-            return "NEG"
-          } otherwise {
-            if get(item, "operator") == "!" or get(item, "operator") == "not" {
-              return "NOT"
-            }
-          }
-        } otherwise {
-          if op == "binary" {
-            define operator := get(item, "operator")
-            if operator == "+" {
-              return "ADD"
-            }
-            if operator == "-" {
-              return "SUB"
-            }
-            if operator == "*" {
-              return "MUL"
-            }
-            if operator == "/" {
-              return "DIV"
-            }
-            if operator == "==" {
-              return "EQ"
-            }
-            if operator == "!=" {
-              return "NE"
-            }
-            if operator == "<" {
-              return "LT"
-            }
-            if operator == "<=" {
-              return "LE"
-            }
-            if operator == ">" {
-              return "GT"
-            }
-            if operator == ">=" {
-              return "GE"
-            }
-            if operator == "and" {
-              return "AND"
-            }
-            if operator == "or" {
-              return "OR"
-            }
-          } otherwise {
-            if op == "jump" or op == "jump_if_false" {
-              if op == "jump" {
-                return "JUMP " + to_string(get(item, "target"))
-              } otherwise {
-                return "JUMP_IF_FALSE " + to_string(get(item, "target"))
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  return "UNSUPPORTED " + op
-}
-
-fn emit_bytecode_v2_main(plan) {
-  if len(get(plan, "functions")) != 0 {
-    return map("ok", false, "error", "v2 backend slice: function metadata is not implemented")
-  }
-  define code := get(plan, "main")
-  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(len(code) + 1), "CODE")
-  define pos := 0
-  repeat pos < len(code) {
-    define line := emit_v2_main_instruction(get(code, pos))
-    if starts_with(line, "UNSUPPORTED ") {
-      return map("ok", false, "error", "v2 backend slice: unsupported instruction " + get(get(code, pos), "op"))
-    }
-    lines := push(lines, line)
-    pos := pos + 1
-  }
-  lines := push(lines, "JUMP " + to_string(len(code) + 1))
-  return map("ok", true, "error", "", "artifact", join(lines, "\n") + "\n")
-}
-
 # Zenvora-written semantic checks for statement placement and supported AST shapes.
 fn validate_expression(ast) {
   define kind := get(ast, "kind")
@@ -1170,7 +1056,7 @@ fn validate_statements(ast, function_depth, loop_depth) {
 
 # Built-ins are callable without user-defined function declarations.
 fn is_builtin_function(name) {
-  return name == "array" or name == "map" or name == "get" or name == "len" or name == "contains" or name == "push" or name == "put" or name == "keys" or name == "values" or name == "char_at" or name == "type_of" or name == "to_string" or name == "abs" or name == "min" or name == "max" or name == "range" or name == "assert" or name == "sum" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "clamp" or name == "starts_with" or name == "ends_with" or name == "replace" or name == "split" or name == "join" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "index_of" or name == "unique" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "pow_int" or name == "mean" or name == "speed" or name == "force" or name == "kinetic_energy" or name == "density" or name == "molarity" or name == "bmi_x10" or name == "molar_mass" or name == "dna_complement" or name == "gc_content_percent" or name == "grid_step" or name == "input_step"
+  return name == "array" or name == "map" or name == "get" or name == "len" or name == "contains" or name == "push" or name == "put" or name == "keys" or name == "values" or name == "char_at" or name == "type_of" or name == "to_string" or name == "abs" or name == "min" or name == "max" or name == "range" or name == "assert" or name == "sum" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "clamp" or name == "starts_with" or name == "ends_with" or name == "replace" or name == "split" or name == "join" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "index_of" or name == "unique" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "pow_int" or name == "mean" or name == "speed" or name == "force" or name == "kinetic_energy" or name == "density" or name == "molarity" or name == "bmi_x10" or name == "molar_mass" or name == "dna_complement" or name == "gc_content_percent"
 }
 
 # Returns a fixed arity for built-ins; -1 means the builtin has a variable arity.
@@ -1183,12 +1069,6 @@ fn builtin_fixed_arity(name) {
   }
   if name == "put" or name == "replace" or name == "clamp" {
     return 3
-  }
-  if name == "grid_step" {
-    return 6
-  }
-  if name == "input_step" {
-    return 9
   }
   return -1
 }
@@ -2294,7 +2174,7 @@ define bad_variable_result := validate_program(get(bad_variable_ast, "ast"))
 define bad_assignment_lexed := lex("ghost := 3\\n")
 define bad_assignment_ast := parse_program(get(bad_assignment_lexed, "tokens"))
 define bad_assignment_result := validate_program(get(bad_assignment_ast, "ast"))
-define builtin_call_lexed := lex("show len(array(1, 2))\nshow sum(array(3, 4))\nshow char_at(\"zv\", 1)\nshow starts_with(\"zenvora\", \"zen\")\nshow upper(\"zv\")\nshow char_count(\"zv\")\nshow index_of(\"zenvora\", \"v\")\nshow contains(array(1, 2, 3), 2)\nshow get(map(\"answer\", 42), \"answer\")\nshow len(push(array(1), 2))\nshow grid_step(1, 2, 3, 4, 5, 6)\nshow input_step(1, 2, 3, 4, 5, 6, 7, 8, 9)\n")
+define builtin_call_lexed := lex("show len(array(1, 2))\nshow sum(array(3, 4))\nshow char_at(\"zv\", 1)\nshow starts_with(\"zenvora\", \"zen\")\nshow upper(\"zv\")\nshow char_count(\"zv\")\nshow index_of(\"zenvora\", \"v\")\nshow contains(array(1, 2, 3), 2)\nshow get(map(\"answer\", 42), \"answer\")\nshow len(push(array(1), 2))\n")
 define builtin_call_ast := parse_program(get(builtin_call_lexed, "tokens"))
 define builtin_call_result := validate_program(get(builtin_call_ast, "ast"))
 define bad_builtin_arity_lexed := lex("show len(array(1), array(2))\n")
@@ -2303,12 +2183,6 @@ define bad_builtin_arity_result := validate_program(get(bad_builtin_arity_ast, "
 define bad_sum_arity_lexed := lex("show sum(array(1), array(2))\n")
 define bad_sum_arity_ast := parse_program(get(bad_sum_arity_lexed, "tokens"))
 define bad_sum_arity_result := validate_program(get(bad_sum_arity_ast, "ast"))
-define bad_grid_step_arity_lexed := lex("show grid_step(1, 2, 3, 4, 5)\\n")
-define bad_grid_step_arity_ast := parse_program(get(bad_grid_step_arity_lexed, "tokens"))
-define bad_grid_step_arity_result := validate_program(get(bad_grid_step_arity_ast, "ast"))
-define bad_input_step_arity_lexed := lex("show input_step(1, 2, 3, 4, 5, 6, 7, 8)\\n")
-define bad_input_step_arity_ast := parse_program(get(bad_input_step_arity_lexed, "tokens"))
-define bad_input_step_arity_result := validate_program(get(bad_input_step_arity_ast, "ast"))
 define bad_arity_lexed := lex("fn one(a) {\nreturn a\n}\nshow one(1, 2)\n")
 define bad_arity_ast := parse_program(get(bad_arity_lexed, "tokens"))
 define bad_arity_result := validate_program(get(bad_arity_ast, "ast"))
@@ -2338,8 +2212,6 @@ show get(invalid_return_result, "error")
 show get(nested_function_result, "error")
 show get(bad_builtin_arity_result, "error")
 show get(bad_sum_arity_result, "error")
-show get(bad_grid_step_arity_result, "error")
-show get(bad_input_step_arity_result, "error")
 
 define unsupported_nested_fn_opcode := verify_code(array(map("op", "nested_function", "name", "inner", "line", 1)))
 show unsupported_nested_fn_opcode
@@ -2418,30 +2290,11 @@ fn compile_source(source) {
   if not get(verified, "ok") {
     return map("ok", false, "stage", "verify", "error", get(verified, "error"), "plan", "")
   }
-  define bytecode := emit_bytecode_v2_main(plan)
-  return map("ok", true, "stage", "complete", "error", "", "plan", plan, "bytecode", bytecode)
+  return map("ok", true, "stage", "complete", "error", "", "plan", plan)
 }
 
 # Regression: the same entry point compiles distinct caller-provided programs,
 # and malformed source fails at the correct stage rather than emitting a plan.
-define generic_driver_v2 := compile_source("define answer := 40 + 2\nshow answer\n")
-define generic_driver_v2_result := get(generic_driver_v2, "bytecode")
-if get(generic_driver_v2_result, "ok") and index_of(get(generic_driver_v2_result, "artifact"), "ZENVORA_BYTECODE 2") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "PUSH 40") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "ADD") >= 0 and index_of(get(generic_driver_v2_result, "artifact"), "PRINT") >= 0 {
-  show "ZENVORA_WRITTEN_BYTECODE_V2_MAIN_PASS"
-} otherwise {
-  show "ZENVORA_WRITTEN_BYTECODE_V2_MAIN_FAIL"
-  show generic_driver_v2_result
-}
-
-
-define generic_driver_v2_flow := compile_source("define i := 0\nrepeat i < 2 {\ni := i + 1\n}\nif i == 2 {\nshow 42\n} otherwise {\nshow 0\n}\n")
-define generic_driver_v2_flow_artifact := get(get(generic_driver_v2_flow, "bytecode"), "artifact")
-if get(generic_driver_v2_flow, "ok") and index_of(generic_driver_v2_flow_artifact, "JUMP_IF_FALSE") >= 0 and index_of(generic_driver_v2_flow_artifact, "JUMP ") >= 0 and index_of(generic_driver_v2_flow_artifact, "ZENVORA_BYTECODE 2") >= 0 {
-  show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_PASS"
-} otherwise {
-  show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_FAIL"
-  show get(generic_driver_v2_flow, "bytecode")
-}
 define generic_driver_a := compile_source("define answer := 40 + 2\nshow answer\n")
 define generic_driver_b := compile_source("fn double(n) {\nreturn n * 2\n}\nshow double(21)\n")
 define generic_driver_bad := compile_source("show (1 +\n")
