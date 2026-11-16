@@ -1188,7 +1188,7 @@ JUMP 2
             "CODE\r\n",
             "PUSH 7\r\n",
             "PRINT\r\n",
-            "JUMP 2\r\n",
+            "JUMP 3\r\n",
         );
 
         let parsed = parse_v2_file(windows_source).unwrap();
@@ -1223,7 +1223,7 @@ JUMP 2
             "CODE\r\n",
             "PUSH 7\r\n",
             "PRINT\r\n",
-            "JUMP 2",
+            "JUMP 3",
         );
 
         let parsed = parse_v2_file(source).unwrap();
