@@ -97,6 +97,8 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
     let mut method = String::new();
     let mut content_type = String::new();
     let mut authorization = String::new();
+    let mut content_type_seen = false;
+    let mut authorization_seen = false;
 
     loop {
         if buffer.len() > MAX_REQUEST_BYTES {
@@ -140,8 +142,16 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                             Err(_) => return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"invalid Content-Length"})),
                         });
                     } else if name.eq_ignore_ascii_case("content-type") {
+                        if content_type_seen {
+                            return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"duplicate Content-Type"}));
+                        }
+                        content_type_seen = true;
                         content_type = value.to_ascii_lowercase();
                     } else if name.eq_ignore_ascii_case("authorization") {
+                        if authorization_seen {
+                            return respond(stream, "400 Bad Request", &json!({"ok":false,"error":"duplicate Authorization"}));
+                        }
+                        authorization_seen = true;
                         authorization = value.to_string();
                     }
                 }
@@ -468,6 +478,24 @@ mod tests {
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("duplicate Content-Length"));
+    }
+
+    #[test]
+    fn duplicate_content_type_receives_http_400_response() {
+        let response = response_for(
+            b"POST /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Type: application/json\\r\\ncontent-type: text/plain\\r\\nContent-Length: 2\\r\\n\\r\\n{}",
+        );
+        assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(response.contains("duplicate Content-Type"));
+    }
+
+    #[test]
+    fn duplicate_authorization_receives_http_400_response() {
+        let response = response_for(
+            b"POST /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\nAuthorization: Bearer first\\r\\nauthorization: Bearer second\\r\\nContent-Type: application/json\\r\\nContent-Length: 2\\r\\n\\r\\n{}",
+        );
+        assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(response.contains("duplicate Authorization"));
     }
 
     #[test]
