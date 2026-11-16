@@ -3,8 +3,8 @@ name: Zenvora self-hosted frontend smoke
 on:
   pull_request:
     paths:
-      - "compiler/token_stream.zv"
-      - "compiler/parser.zv"
+      - "src/compiler/token_stream.zv"
+      - "src/compiler/parser.zv"
       - "compiler/SELF_HOSTED_FRONTEND.md"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
@@ -16,8 +16,8 @@ on:
       - main
       - self-hosted-compiler-foundation
     paths:
-      - "compiler/token_stream.zv"
-      - "compiler/parser.zv"
+      - "src/compiler/token_stream.zv"
+      - "src/compiler/parser.zv"
       - "compiler/SELF_HOSTED_FRONTEND.md"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
@@ -52,7 +52,7 @@ jobs:
         run: cargo test --locked
       - name: Execute Zenvora-written token component
         run: |
-          cargo run --locked --quiet -- compiler/token_stream.zv > frontend-output.txt
+          cargo run --locked --quiet -- src/compiler/token_stream.zv > frontend-output.txt
           cat frontend-output.txt
           grep -F 'keyword' frontend-output.txt
           grep -F 'operator' frontend-output.txt
@@ -64,7 +64,7 @@ jobs:
           grep -F 'error' frontend-output.txt
       - name: Execute Zenvora-written parser foundation
         run: |
-          cargo run --locked --quiet -- compiler/parser.zv > parser-output.txt
+          cargo run --locked --quiet -- src/compiler/parser.zv > parser-output.txt
           cat parser-output.txt
           grep -F 'binary' parser-output.txt
           grep -F 'and' parser-output.txt
@@ -192,8 +192,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/token_stream.zv > token-output-repeat.txt
-          cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
+          cargo run --locked --quiet -- src/compiler/token_stream.zv > token-output-repeat.txt
+          cargo run --locked --quiet -- src/compiler/parser.zv > parser-output-repeat.txt
           diff -u frontend-output.txt token-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           test -s self-hosted-plan-repeat.json
