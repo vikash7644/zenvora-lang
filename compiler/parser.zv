@@ -1097,11 +1097,11 @@ fn emit_bytecode_v2(plan) {
   define cursor := main_end
   define pos := 0
   repeat pos < len(functions) {
-    define fn := get(functions, pos)
-    define fn_name := get(fn, "name")
-    define fn_code := get(fn, "code")
+    define function_item := get(functions, pos)
+    define fn_name := get(function_item, "name")
+    define fn_code := get(function_item, "code")
     define fn_size := len(fn_code)
-    if get(fn, "falls_through") {
+    if get(function_item, "falls_through") {
       fn_size := fn_size + 1
     }
     entries := push(entries, map("name", fn_name, "entry", cursor, "end", cursor + fn_size))
@@ -1119,19 +1119,19 @@ fn emit_bytecode_v2(plan) {
 
   pos := 0
   repeat pos < len(functions) {
-    define fn := get(functions, pos)
-    define fn_name := get(fn, "name")
-    define fn_code := get(fn, "code")
+    define function_item := get(functions, pos)
+    define fn_name := get(function_item, "name")
+    define fn_code := get(function_item, "code")
     define layout := find_plan_function_layout(entries, fn_name)
     define entry := get(layout, "entry")
     define fn_end := get(layout, "end")
-    define params := get(fn, "parameters")
+    define params := get(function_item, "parameters")
     define has_value_return := plan_code_has_return(fn_code, true)
     define has_void_return := plan_code_has_return(fn_code, false)
     if has_value_return and has_void_return {
       return map("ok", false, "bytecode", "", "error", "function mixes value and void returns: " + fn_name)
     }
-    if has_value_return and get(fn, "falls_through") {
+    if has_value_return and get(function_item, "falls_through") {
       return map("ok", false, "bytecode", "", "error", "function may fall through without a value: " + fn_name)
     }
     define return_kind := "void"
@@ -1148,7 +1148,7 @@ fn emit_bytecode_v2(plan) {
       return map("ok", false, "bytecode", "", "error", "function " + fn_name + ": " + get(fn_result, "error"))
     }
     instruction_lines := append_instructions(instruction_lines, get(fn_result, "lines"))
-    if get(fn, "falls_through") {
+    if get(function_item, "falls_through") {
       instruction_lines := push(instruction_lines, "RETURN")
     }
     pos := pos + 1
