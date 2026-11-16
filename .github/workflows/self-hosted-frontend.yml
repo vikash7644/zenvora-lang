@@ -1,4 +1,4 @@
-name: QORVYNT self-hosted compiler bridge
+name: QORVYNT self-hosted compiler and Bytecode v2 validation
 
 on:
   pull_request:
@@ -57,57 +57,31 @@ jobs:
           ! grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_FAIL' parser-output.txt
           ! grep -F 'compile_error' parser-output.txt
-      - name: Convert the generated plan into executable Bytecode v2
+      - name: Validate plan JSON and compile the self-hosted frontend to canonical Bytecode v2
         shell: bash
         run: |
           set -euo pipefail
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output.txt > self-hosted-plan.json
           test -s self-hosted-plan.json
           python3 -m json.tool self-hosted-plan.json >/dev/null
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-plan.zv2b
-          grep -F 'ZENVORA_BYTECODE 2' self-hosted-plan.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-plan.zv2b > self-hosted-bytecode-output.txt
-          cat > expected-bytecode-output.txt <<'EXPECTED'
-          14
-          42
-          7
-          7
-          120
-          7
-          3
-          v
-          true
-          ZV
-          2
-          3
-          true
-          42
-          2
-          xv
-          2
-          5
-          2
-          42
-          3
-          720
-          55
-          256
-          6
-          25
-          21
-          18
-          228
-          29
-          EXPECTED
-          diff -u expected-bytecode-output.txt self-hosted-bytecode-output.txt
-      - name: Verify deterministic compiler output and bytecode artifact
+          cargo run --locked --quiet -- --emit-bytecode-v2 compiler/parser.zv self-hosted-compiler.zv2b
+          grep -F 'ZENVORA_BYTECODE 2' self-hosted-compiler.zv2b
+          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
+          grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_PASS' self-hosted-bytecode-output.txt
+          grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_PASS' self-hosted-bytecode-output.txt
+          grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS' self-hosted-bytecode-output.txt
+          grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_PASS' self-hosted-bytecode-output.txt
+          grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' self-hosted-bytecode-output.txt
+          grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' self-hosted-bytecode-output.txt
+          grep -F 'ZENVORA_VM_BUILTIN_PARITY_PASS' self-hosted-bytecode-output.txt
+      - name: Verify deterministic compiler output and Bytecode v2 artifact
         shell: bash
         run: |
           set -euo pipefail
           cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-plan-repeat.zv2b
-          cmp self-hosted-plan.zv2b self-hosted-plan-repeat.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-plan-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
+          cargo run --locked --quiet -- --emit-bytecode-v2 compiler/parser.zv self-hosted-compiler-repeat.zv2b
+          cmp self-hosted-compiler.zv2b self-hosted-compiler-repeat.zv2b
+          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
