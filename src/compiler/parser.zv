@@ -1,3 +1,27 @@
+fn compile_source(source) {
+  define lexed := lex(source)
+  if get(lexed, "error") != "" {
+    return map("ok", false, "stage", "lex", "error", get(lexed, "error"), "plan", "")
+  }
+  define parsed := parse_program(get(lexed, "tokens"))
+  if get(parsed, "error") != "" {
+    return map("ok", false, "stage", "parse", "error", get(parsed, "error"), "plan", "")
+  }
+  define semantic := validate_program(get(parsed, "ast"))
+  if not get(semantic, "ok") {
+    return map("ok", false, "stage", "validate", "error", get(semantic, "error"), "plan", "")
+  }
+  define ir := lower_program(get(parsed, "ast"))
+  define plan := emit_bytecode_plan(ir)
+  define verified := verify_bytecode_plan(plan)
+  if not get(verified, "ok") {
+    return map("ok", false, "stage", "verify", "error", get(verified, "error"), "plan", "")
+  }
+  define bytecode := emit_bytecode_v2_main(plan)
+  return map("ok", true, "stage", "complete", "error", "", "plan", plan, "bytecode", bytecode)
+}
+
+
 # Zenvora-written recursive-descent parser foundation.
 # Current supported statements: define name := expression; show expression.
 # Expressions: literals, names, parentheses, unary -, !, not, *, /, +, -, comparisons, and/or.
@@ -2224,28 +2248,6 @@ fn execute_bytecode_plan(plan) {
   return map("ok", get(executed, "error") == "", "output", get(executed, "output"), "error", get(executed, "error"), "environment", get(executed, "environment"))
 }
 
-fn compile_source(source) {
-  define lexed := lex(source)
-  if get(lexed, "error") != "" {
-    return map("ok", false, "stage", "lex", "error", get(lexed, "error"), "plan", "")
-  }
-  define parsed := parse_program(get(lexed, "tokens"))
-  if get(parsed, "error") != "" {
-    return map("ok", false, "stage", "parse", "error", get(parsed, "error"), "plan", "")
-  }
-  define semantic := validate_program(get(parsed, "ast"))
-  if not get(semantic, "ok") {
-    return map("ok", false, "stage", "validate", "error", get(semantic, "error"), "plan", "")
-  }
-  define ir := lower_program(get(parsed, "ast"))
-  define plan := emit_bytecode_plan(ir)
-  define verified := verify_bytecode_plan(plan)
-  if not get(verified, "ok") {
-    return map("ok", false, "stage", "verify", "error", get(verified, "error"), "plan", "")
-  }
-  define bytecode := emit_bytecode_v2_main(plan)
-  return map("ok", true, "stage", "complete", "error", "", "plan", plan, "bytecode", bytecode)
-}
 
 
 # Exercise the Zenvora-written AST-to-IR lowering on the parsed source above.
