@@ -3512,7 +3512,7 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
     // Embed the compiler at build time so the installed CLI does not depend on
     // the caller's working directory or a separately copied compiler/ folder.
     const COMPILER_SOURCE: &str = include_str!("compiler/parser.zv");
-    let compiler_source = COMPILER_SOURCE.split("# Exercise the Zenvora-written AST-to-IR lowering").next().unwrap_or(COMPILER_SOURCE);
+    let compiler_source = COMPILER_SOURCE;
     let source_literal = quote_qorvynt_string(source)?;
     let invocation = format!(
         "\ndefine qorvynt_cli_result := compile_source({source_literal})\n\
@@ -3523,7 +3523,7 @@ fn compile_self_hosted_source(source: &str) -> Result<String, String> {
     let code = compile(&program)
         .map_err(|error| format!("bootstrap host could not compile QORVYNT compiler source: {error}"))?;
     let mut output = Vec::new();
-    run_with_output(&code, &mut |line| output.push(line))
+    run_with_output_limit(&code, &mut |line| output.push(line), 2_000_000)
         .map_err(|error| {
             let tail = output.iter().rev().take(12).cloned().collect::<Vec<_>>();
             format!("QORVYNT compiler bootstrap execution failed after output {tail:?}: {error}")
