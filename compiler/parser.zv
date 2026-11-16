@@ -797,7 +797,7 @@ fn emit_statements(ir) {
           if op == "print" {
             out := push(out, map("op", "print", "line", line))
           } otherwise {
-            out := push(out, map("op", "return", "line", line))
+            out := push(out, map("op", "return", "has_value", len(get(item, "code")) > 0, "line", line))
           }
         }
       }
