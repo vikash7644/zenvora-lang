@@ -79,7 +79,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
 
     loop {
         if buffer.len() > MAX_REQUEST_BYTES {
-            return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"request exceeds 64 KiB"}));
+            return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"request exceeds 2 MiB"}));
         }
         if header_end.is_none() {
             if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -161,7 +161,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 });
                 header_end = Some(pos + 4);
                 if content_length.unwrap_or(0) > MAX_REQUEST_BYTES {
-                    return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"request exceeds 64 KiB"}));
+                    return respond(stream, "413 Payload Too Large", &json!({"ok":false,"error":"request exceeds 2 MiB"}));
                 }
             }
         }
