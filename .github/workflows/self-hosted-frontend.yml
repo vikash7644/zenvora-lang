@@ -65,8 +65,7 @@ jobs:
           grep -F 'error' frontend-output.txt
       - name: Execute Zenvora-written parser foundation
         run: |
-          cat src/compiler/parser.zv src/compiler/parser_tests.zv > parser-suite.zv
-          cargo run --locked --quiet -- parser-suite.zv > parser-output.txt
+          cargo run --locked --quiet -- --test-self-hosted-frontend > parser-output.txt
           cat parser-output.txt
           grep -F 'binary' parser-output.txt
           grep -F 'and' parser-output.txt
