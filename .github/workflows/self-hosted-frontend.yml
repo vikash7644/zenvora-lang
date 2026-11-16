@@ -50,6 +50,8 @@ jobs:
           grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_PASS' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' parser-output.txt
           grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' parser-output.txt
+          grep -F 'ZENVORA_NATIVE_BYTECODE_V2_EMIT_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_NATIVE_BYTECODE_V2_EMIT_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_FAIL' parser-output.txt
@@ -64,9 +66,22 @@ jobs:
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output.txt > self-hosted-plan.json
           test -s self-hosted-plan.json
           python3 -m json.tool self-hosted-plan.json >/dev/null
+          awk '/^ZENVORA_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output.txt > self-hosted-native-v2.json
+          python3 - <<'PY'
+          import json
+          with open("self-hosted-native-v2.json", encoding="utf-8") as source:
+              bytecode = json.load(source)
+          if not isinstance(bytecode, str) or not bytecode.startswith("ZENVORA_BYTECODE 2\\n"):
+              raise SystemExit("QORVYNT native emitter did not return canonical Bytecode v2 text")
+          with open("self-hosted-native-v2.zv2b", "w", encoding="utf-8", newline="") as output:
+              output.write(bytecode)
+          PY
           cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
+          cmp self-hosted-native-v2.zv2b self-hosted-compiler.zv2b
           grep -F 'ZENVORA_BYTECODE 2' self-hosted-compiler.zv2b
           cargo run --locked --quiet -- --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
+          cargo run --locked --quiet -- --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
+          diff -u self-hosted-bytecode-output.txt self-hosted-native-v2-output.txt
           python3 - <<'PY'
           expected = [
               "14", "42", "7", "7", "120", "7", "3", "v", "true", "ZV",
@@ -85,7 +100,16 @@ jobs:
           set -euo pipefail
           cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
+          awk '/^ZENVORA_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-native-v2-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json
+          python3 - <<'PY'
+          import json
+          with open("self-hosted-native-v2-repeat.json", encoding="utf-8") as source:
+              bytecode = json.load(source)
+          with open("self-hosted-native-v2-repeat.zv2b", "w", encoding="utf-8", newline="") as output:
+              output.write(bytecode)
+          PY
+          cmp self-hosted-native-v2.zv2b self-hosted-native-v2-repeat.zv2b
           cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
           cmp self-hosted-compiler.zv2b self-hosted-compiler-repeat.zv2b
           cargo run --locked --quiet -- --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
