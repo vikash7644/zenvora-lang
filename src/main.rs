@@ -5310,7 +5310,7 @@ mod game_builtin_tests {
     fn self_hosted_compiler_compiles_recursive_functions_to_verified_bytecode_v2() {
         let source = "fn factorial(n) {\nif n <= 1 {\nreturn 1\n} otherwise {\nreturn n * factorial(n - 1)\n}\n}\nshow factorial(5)\n";
         let bytecode = super::compile_self_hosted_source(source).unwrap();
-        assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\\n"));
+        assert!(bytecode.starts_with("ZENVORA_BYTECODE 2\n"));
         let loaded = super::deserialize_bytecode_v2(&bytecode).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&loaded, &mut |line| output.push(line)).unwrap();
