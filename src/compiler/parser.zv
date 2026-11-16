@@ -2585,7 +2585,7 @@ if get(multiline_function_driver, "ok") and get(multiline_function_run, "ok") an
 }
 
 # The self-hosted v2 emitter lowers verified built-in calls to the canonical BUILTIN opcode.
-define generic_driver_v2_builtin := compile_source("show abs(-5)\\n")
+define generic_driver_v2_builtin := compile_source("show abs(-5)")
 define generic_driver_v2_builtin_result := get(generic_driver_v2_builtin, "bytecode")
 if get(generic_driver_v2_builtin, "ok") and get(generic_driver_v2_builtin_result, "ok") and index_of(get(generic_driver_v2_builtin_result, "artifact"), "BUILTIN abs 1") >= 0 {
   show "ZENVORA_WRITTEN_BYTECODE_V2_BUILTIN_PASS"
