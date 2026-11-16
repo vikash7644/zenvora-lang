@@ -978,6 +978,33 @@ fn plan_code_has_return(code, has_value) {
   return false
 }
 
+fn binary_v2_opcode(operator) {
+  if operator == "+" { return "ADD" } otherwise {
+    if operator == "-" { return "SUB" } otherwise {
+      if operator == "*" { return "MUL" } otherwise {
+        if operator == "/" { return "DIV" } otherwise {
+          if operator == "==" { return "EQ" } otherwise {
+            if operator == "!=" { return "NE" } otherwise {
+              if operator == "<" { return "LT" } otherwise {
+                if operator == "<=" { return "LE" } otherwise {
+                  if operator == ">" { return "GT" } otherwise {
+                    if operator == ">=" { return "GE" } otherwise {
+                      if operator == "and" { return "AND" } otherwise {
+                        if operator == "or" { return "OR" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return ""
+}
+
 fn emit_v2_instruction(item, base, entries) {
   define op := get(item, "op")
   if op == "push_const" {
@@ -1016,41 +1043,41 @@ fn emit_v2_instruction(item, base, entries) {
         }
       } otherwise {
         if op == "binary" {
-          define operator := get(item, "operator")
-          if operator == "+" { return "ADD" }
-          if operator == "-" { return "SUB" }
-          if operator == "*" { return "MUL" }
-          if operator == "/" { return "DIV" }
-          if operator == "==" { return "EQ" }
-          if operator == "!=" { return "NE" }
-          if operator == "<" { return "LT" }
-          if operator == "<=" { return "LE" }
-          if operator == ">" { return "GT" }
-          if operator == ">=" { return "GE" }
-          if operator == "and" { return "AND" }
-          if operator == "or" { return "OR" }
+          define opcode := binary_v2_opcode(get(item, "operator"))
+          if opcode != "" {
+            return opcode
+          }
         } otherwise {
-          if op == "index" { return "INDEX" }
-          if op == "print" { return "PRINT" }
-          if op == "return" {
-            if get(item, "has_value") { return "RETURN_VALUE" }
-            return "RETURN"
+          if op == "index" {
+            return "INDEX"
           } otherwise {
-            if op == "jump" {
-              return "JUMP " + to_string(base + get(item, "target"))
+            if op == "print" {
+              return "PRINT"
             } otherwise {
-              if op == "jump_if_false" {
-                return "JUMP_IF_FALSE " + to_string(base + get(item, "target"))
+              if op == "return" {
+                if get(item, "has_value") {
+                  return "RETURN_VALUE"
+                } otherwise {
+                  return "RETURN"
+                }
               } otherwise {
-                if op == "call" {
-                  define name := get(item, "name")
-                  define argc := get(item, "argc")
-                  if is_builtin_function(name) {
-                    return "BUILTIN " + name + " " + to_string(argc)
+                if op == "jump" {
+                  return "JUMP " + to_string(base + get(item, "target"))
+                } otherwise {
+                  if op == "jump_if_false" {
+                    return "JUMP_IF_FALSE " + to_string(base + get(item, "target"))
                   } otherwise {
-                    define entry := find_plan_function_entry(entries, name)
-                    if entry >= 0 {
-                      return "CALL " + to_string(entry) + " " + to_string(argc)
+                    if op == "call" {
+                      define name := get(item, "name")
+                      define argc := get(item, "argc")
+                      if is_builtin_function(name) {
+                        return "BUILTIN " + name + " " + to_string(argc)
+                      } otherwise {
+                        define entry := find_plan_function_entry(entries, name)
+                        if entry >= 0 {
+                          return "CALL " + to_string(entry) + " " + to_string(argc)
+                        }
+                      }
                     }
                   }
                 }
