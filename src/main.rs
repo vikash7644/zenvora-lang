@@ -1420,6 +1420,16 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
             }
             Ok(Value::Array(items))
         }
+        "hex_encode" => {
+            arity(1)?;
+            let Value::Str(value) = &args[0] else {
+                return Err("type error: hex_encode expects a string".into());
+            };
+            if value.len() > MAX_BYTECODE_STRING_BYTES {
+                return Err("hex_encode input exceeds string safety limit".into());
+            }
+            Ok(Value::Str(hex_encode(value)))
+        }
         "char_at" => {
             arity(2)?;
             let (Value::Str(value), Value::Int(index)) = (&args[0], &args[1]) else {
@@ -4511,6 +4521,23 @@ show char_at("hé🙂", 2)
         assert!(super::compile_plan_json_to_bytecode_v2(invalid_target).unwrap_err().contains("outside its instruction region"));
         let unknown = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[{"op":"eval_magic"}],"functions":[]}"#;
         assert!(super::compile_plan_json_to_bytecode_v2(unknown).unwrap_err().contains("unsupported instruction"));
+    }
+
+    #[test]
+    fn hex_encode_builtin_is_utf8_stable_and_available_in_bytecode_v2() {
+        let source = r#"show hex_encode("hé🙂")
+show hex_encode("")
+"#;
+        let expected = execute(source).unwrap();
+        assert_eq!(expected, vec!["68c3a9f09f9982", "-"]);
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        let decoded = super::deserialize_bytecode_v2(&encoded).unwrap();
+        let mut actual = Vec::new();
+        super::run_with_output(&decoded, &mut |line| actual.push(line)).unwrap();
+        assert_eq!(actual, expected);
+        assert!(execute("show hex_encode(7)\n").unwrap_err().contains("hex_encode expects a string"));
+        assert!(execute("show hex_encode(\"a\", \"b\")\n").unwrap_err().contains("expects 1 argument"));
     }
 
     #[test]
