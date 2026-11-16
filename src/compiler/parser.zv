@@ -947,152 +947,88 @@ fn emit_bytecode_plan(ir) {
 # This emits canonical textual bytecode for main-program scalar/control-flow
 # instructions. Function metadata and string encoding are intentionally gated
 # until their parity tests are added; unsupported instructions fail closed.
-# Zenvora-written Bytecode v2 backend. Strings remain explicitly gated until
-# UTF-8 byte-to-hex encoding is available in the source language.
-fn find_v2_function(functions, name) {
-  define pos := 0
-  repeat pos < len(functions) {
-    define item := get(functions, pos)
-    if get(item, "name") == name {
-      return item
-    }
-    pos := pos + 1
-  }
-  return ""
-}
-
-fn emit_v2_instruction(item, base, functions) {
+fn emit_v2_main_instruction(item) {
   define op := get(item, "op")
   if op == "push_const" {
     define kind := get(item, "type")
     define value := get(item, "value")
-    if kind == "number" { return "PUSH " + to_string(value) }
-    if kind == "boolean" { return "PUSH_BOOL " + to_string(value) }
-    return "UNSUPPORTED string literal: UTF-8 hex encoding is not implemented"
-  }
-  if op == "load" { return "LOAD " + get(item, "name") }
-  if op == "declare" { return "DECLARE " + get(item, "name") }
-  if op == "store" { return "STORE " + get(item, "name") }
-  if op == "print" { return "PRINT" }
-  if op == "index" { return "INDEX" }
-  if op == "return" { return "RETURN_VALUE" }
-  if op == "unary" {
-    if get(item, "operator") == "-" { return "NEG" }
-    if get(item, "operator") == "!" or get(item, "operator") == "not" { return "NOT" }
-  }
-  if op == "binary" {
-    define operator := get(item, "operator")
-    if operator == "+" { return "ADD" }
-    if operator == "-" { return "SUB" }
-    if operator == "*" { return "MUL" }
-    if operator == "/" { return "DIV" }
-    if operator == "==" { return "EQ" }
-    if operator == "!=" { return "NE" }
-    if operator == "<" { return "LT" }
-    if operator == "<=" { return "LE" }
-    if operator == ">" { return "GT" }
-    if operator == ">=" { return "GE" }
-    if operator == "and" { return "AND" }
-    if operator == "or" { return "OR" }
-  }
-  if op == "jump" { return "JUMP " + to_string(get(item, "target") + base) }
-  if op == "jump_if_false" { return "JUMP_IF_FALSE " + to_string(get(item, "target") + base) }
-  if op == "call" {
-    define name := get(item, "name")
-    define argc := get(item, "argc")
-    if is_builtin_function(name) { return "BUILTIN " + name + " " + to_string(argc) }
-    define target := find_v2_function(functions, name)
-    if target != "" { return "CALL " + to_string(get(target, "entry")) + " " + to_string(argc) }
-    return "UNSUPPORTED unresolved function: " + name
+    if kind == "number" {
+      return "PUSH " + to_string(value)
+    } otherwise {
+      if kind == "boolean" and (value == "true" or value == "false") {
+        return "PUSH_BOOL " + value
+      }
+    }
+  } otherwise {
+    if op == "load" or op == "declare" or op == "store" {
+      if op == "load" {
+        return "LOAD " + get(item, "name")
+      } otherwise {
+        if op == "declare" {
+          return "DECLARE " + get(item, "name")
+        } otherwise {
+          return "STORE " + get(item, "name")
+        }
+      }
+    } otherwise {
+      if op == "print" {
+        return "PRINT"
+      } otherwise {
+        if op == "unary" {
+          if get(item, "operator") == "-" {
+            return "NEG"
+          } otherwise {
+            if get(item, "operator") == "!" or get(item, "operator") == "not" {
+              return "NOT"
+            }
+          }
+        } otherwise {
+          if op == "binary" {
+            define operator := get(item, "operator")
+            if operator == "+" { return "ADD" }
+            if operator == "-" { return "SUB" }
+            if operator == "*" { return "MUL" }
+            if operator == "/" { return "DIV" }
+            if operator == "==" { return "EQ" }
+            if operator == "!=" { return "NE" }
+            if operator == "<" { return "LT" }
+            if operator == "<=" { return "LE" }
+            if operator == ">" { return "GT" }
+            if operator == ">=" { return "GE" }
+            if operator == "and" { return "AND" }
+            if operator == "or" { return "OR" }
+          } otherwise {
+            if op == "jump" or op == "jump_if_false" {
+              if op == "jump" {
+                return "JUMP " + to_string(get(item, "target"))
+              } otherwise {
+                return "JUMP_IF_FALSE " + to_string(get(item, "target"))
+              }
+            }
+          }
+        }
+      }
+    }
   }
   return "UNSUPPORTED " + op
 }
 
-fn emit_v2_code(code, base, functions) {
-  define lines := array()
+fn emit_bytecode_v2_main(plan) {
+  if len(get(plan, "functions")) != 0 {
+    return map("ok", false, "error", "v2 backend slice: function metadata is not implemented")
+  }
+  define code := get(plan, "main")
+  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(len(code) + 1), "CODE")
   define pos := 0
   repeat pos < len(code) {
-    define line := emit_v2_instruction(get(code, pos), base, functions)
+    define line := emit_v2_main_instruction(get(code, pos))
     if starts_with(line, "UNSUPPORTED ") {
-      return map("ok", false, "error", line)
+      return map("ok", false, "error", "v2 backend slice: unsupported instruction " + get(get(code, pos), "op"))
     }
     lines := push(lines, line)
     pos := pos + 1
   }
-  return map("ok", true, "error", "", "lines", lines)
-}
-
-fn emit_bytecode_v2(plan) {
-  define main := get(plan, "main")
-  define source_functions := get(plan, "functions")
-  define main_end := len(main) + 1
-  define functions := array()
-  define next_entry := main_end
-  define pos := 0
-  # Precompute every function entry before encoding CALL instructions (supports recursion).
-  repeat pos < len(source_functions) {
-    define fn := get(source_functions, pos)
-    define code := get(fn, "code")
-    define has_return := false
-    define has_end_jump := false
-    define scan := 0
-    repeat scan < len(code) {
-      define instruction := get(code, scan)
-      if get(instruction, "op") == "return" { has_return := true }
-      if get(instruction, "op") == "jump" and get(instruction, "target") == len(code) { has_end_jump := true }
-      scan := scan + 1
-    }
-    define extra := 0
-    if not has_return { extra := 1 } otherwise {
-      if has_end_jump { extra := 2 }
-    }
-    define region_size := len(code) + extra
-    define return_kind := "void"
-    if has_return { return_kind := "value" }
-    functions := push(functions, map("name", get(fn, "name"), "parameters", get(fn, "parameters"), "entry", next_entry, "end", next_entry + region_size, "return_kind", return_kind))
-    next_entry := next_entry + region_size
-    pos := pos + 1
-  }
-  define main_result := emit_v2_code(main, 0, functions)
-  if not get(main_result, "ok") { return main_result }
-  define lines := array("ZENVORA_BYTECODE 2", "PROGRAM 0 " + to_string(main_end))
-  pos := 0
-  repeat pos < len(functions) {
-    define fn := get(functions, pos)
-    define params := get(fn, "parameters")
-    define param_text := join(params, " ")
-    if len(params) == 0 { param_text := "-" }
-    lines := push(lines, "FUNCTION " + to_string(get(fn, "entry")) + " " + to_string(get(fn, "end")) + " " + to_string(len(params)) + " " + get(fn, "return_kind") + " " + param_text)
-    pos := pos + 1
-  }
-  lines := push(lines, "CODE")
-  lines := append_instructions(lines, get(main_result, "lines"))
-  lines := push(lines, "JUMP " + to_string(main_end))
-  pos := 0
-  repeat pos < len(source_functions) {
-    define fn_source := get(source_functions, pos)
-    define fn_meta := get(functions, pos)
-    define fn_code := emit_v2_code(get(fn_source, "code"), get(fn_meta, "entry"), functions)
-    if not get(fn_code, "ok") { return fn_code }
-    lines := append_instructions(lines, get(fn_code, "lines"))
-    define has_return := get(fn_meta, "return_kind") == "value"
-    define has_end_jump := false
-    define scan := 0
-    repeat scan < len(get(fn_source, "code")) {
-      define instruction := get(get(fn_source, "code"), scan)
-      if get(instruction, "op") == "jump" and get(instruction, "target") == len(get(fn_source, "code")) { has_end_jump := true }
-      scan := scan + 1
-    }
-    if not has_return {
-      lines := push(lines, "RETURN")
-    } otherwise {
-      if has_end_jump {
-        lines := push(lines, "PUSH 0")
-        lines := push(lines, "RETURN_VALUE")
-      }
-    }
-    pos := pos + 1
-  }
+  lines := push(lines, "JUMP " + to_string(len(code) + 1))
   return map("ok", true, "error", "", "artifact", join(lines, "\n") + "\n")
 }
 
@@ -2458,7 +2394,7 @@ fn compile_source(source) {
   if not get(verified, "ok") {
     return map("ok", false, "stage", "verify", "error", get(verified, "error"), "plan", "")
   }
-  define bytecode := emit_bytecode_v2(plan)
+  define bytecode := emit_bytecode_v2_main(plan)
   return map("ok", true, "stage", "complete", "error", "", "plan", plan, "bytecode", bytecode)
 }
 
@@ -2481,15 +2417,6 @@ if get(generic_driver_v2_flow, "ok") and contains(generic_driver_v2_flow_artifac
 } otherwise {
   show "ZENVORA_WRITTEN_BYTECODE_V2_CONTROL_FLOW_FAIL"
   show get(generic_driver_v2_flow, "bytecode")
-}
-
-define generic_driver_v2_function := compile_source("show twice(21)\\nfn twice(value) {\\nreturn value * 2\\n}\\n")
-define generic_driver_v2_function_artifact := get(get(generic_driver_v2_function, "bytecode"), "artifact")
-if get(generic_driver_v2_function, "ok") and contains(generic_driver_v2_function_artifact, "FUNCTION ") and contains(generic_driver_v2_function_artifact, "CALL ") and contains(generic_driver_v2_function_artifact, "RETURN_VALUE") {
-  show "ZENVORA_WRITTEN_BYTECODE_V2_FUNCTION_PASS"
-} otherwise {
-  show "ZENVORA_WRITTEN_BYTECODE_V2_FUNCTION_FAIL"
-  show get(generic_driver_v2_function, "bytecode")
 }
 define generic_driver_a := compile_source("define answer := 40 + 2\nshow answer\n")
 define generic_driver_b := compile_source("fn double(n) {\nreturn n * 2\n}\nshow double(21)\n")
