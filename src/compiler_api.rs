@@ -1,5 +1,5 @@
-//! Loopback-only HTTP API for compiling and executing Zenvora Lang source.
-//! This is a development service; it intentionally binds to 127.0.0.1 by default.
+//! Versioned HTTP API for compiling and executing Zenvora Lang source.
+//! It binds to loopback by default; public binding requires bearer-token configuration.
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
@@ -130,7 +130,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                         "/health" | "/v1/health" => respond(stream, "200 OK", &json!({
                             "ok":true,"service":"zenvora-compiler-api","api_version":"v1",
                             "compiler":concat!("zenvora-rust-v", env!("CARGO_PKG_VERSION")),
-                            "mode": if std::env::var("ZENVORA_API_TOKEN").is_ok() {"authenticated"} else {"development"}
+                            "mode": if std::env::var("ZENVORA_API_TOKEN").map(|value| !value.is_empty()).unwrap_or(false) {"authenticated"} else {"development"}
                         })),
                         "/v1/capabilities" => respond(stream, "200 OK", &json!({
                             "ok":true,"api_version":"v1",
@@ -227,10 +227,17 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
 
 fn respond(stream: &mut TcpStream, status: &str, value: &Value) -> Result<(), String> {
     let body = value.to_string();
+    let configured_origin = std::env::var("ZENVORA_API_ALLOWED_ORIGIN")
+        .unwrap_or_else(|_| "https://vikash7644.github.io".into());
+    let allowed_origin = if configured_origin.contains(['\r', '\n']) {
+        "https://vikash7644.github.io"
+    } else {
+        configured_origin.as_str()
+    };
     let header = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nVary: Origin\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         body.len(),
-        std::env::var("ZENVORA_API_ALLOWED_ORIGIN").unwrap_or_else(|_| "https://vikash7644.github.io".into())
+        allowed_origin
     );
     stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(body.as_bytes()))
         .map_err(|e| format!("write failed: {e}"))
@@ -325,7 +332,7 @@ mod tests {
     #[test]
     fn oversized_content_length_receives_http_413_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999999\r\n\r\n",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 999999\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 413 Payload Too Large"));
     }
@@ -333,7 +340,7 @@ mod tests {
     #[test]
     fn malformed_json_receives_http_400_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\n\r\nx",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\nx",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("body must be valid JSON"));
@@ -348,7 +355,7 @@ mod tests {
     #[test]
     fn malformed_content_length_receives_http_400_response() {
         let response = response_for(
-            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Length: nope\r\n\r\n",
+            b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: nope\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("invalid Content-Length"));
@@ -372,7 +379,7 @@ mod tests {
         let response = response_for(
             b"POST /compile-run HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n",
         );
-        assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(response.starts_with("HTTP/1.1 411 Length Required"));
         assert!(response.contains("Content-Length is required"));
     }
 }
