@@ -1664,7 +1664,30 @@ where
 fn run_with_output_metered<F>(
     code: &[Op],
     output: &mut F,
+    gas_meter: Option<&mut contract_gas::GasMeter>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    run_with_output_metered_and_bindings(code, output, gas_meter, HashMap::new())
+}
+
+fn run_with_output_and_bindings<F>(
+    code: &[Op],
+    output: &mut F,
+    initial_bindings: HashMap<String, Value>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    run_with_output_metered_and_bindings(code, output, None, initial_bindings)
+}
+
+fn run_with_output_metered_and_bindings<F>(
+    code: &[Op],
+    output: &mut F,
     mut gas_meter: Option<&mut contract_gas::GasMeter>,
+    mut vars: HashMap<String, Value>,
 ) -> Result<(), String>
 where
     F: FnMut(String),
@@ -1674,8 +1697,15 @@ where
     }
     let mut stack: Vec<Value> = Vec::new();
     let mut stack_value_bytes = 0usize;
-    let mut runtime_state_bytes = 0usize;
-    let mut vars: HashMap<String, Value> = HashMap::new();
+    let mut runtime_state_bytes = binding_map_size(&vars);
+    if runtime_state_bytes > MAX_RUNTIME_STATE_BYTES {
+        return Err(format!("initial bindings exceed runtime state safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
+    }
+    for name in vars.keys() {
+        if !valid_identifier(name) {
+            return Err(format!("invalid initial binding name '{name}'"));
+        }
+    }
     let mut globals: HashMap<String, Value> = HashMap::new();
     let mut pc = 0usize;
     let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
