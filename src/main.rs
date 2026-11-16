@@ -540,7 +540,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
         } else if let Some((name, expr)) = line.split_once(":=") {
             (name.trim().to_string(), expr.trim(), false)
         } else {
-            return Err(format!("line {}: expected a declaration, assignment, show, call, return, if, repeat, break, continue, or closing brace", line_no + 1));
+            return Err(format!("line {}: unexpected statement {:?}; expected a declaration, assignment, show, call, return, if, repeat, break, continue, or closing brace", line_no + 1, line));
         };
 
         if statement.1.is_empty() { return Err(format!("line {}: missing expression", line_no + 1)); }
