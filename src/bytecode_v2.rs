@@ -1214,4 +1214,20 @@ JUMP 2
         let error = parse_v2_file(malformed).unwrap_err();
         assert!(error.contains("embedded carriage return"));
     }
+
+    #[test]
+    fn parser_accepts_crlf_file_without_a_final_line_terminator() {
+        let source = concat!(
+            "ZENVORA_BYTECODE 2\r\n",
+            "PROGRAM 0 2\r\n",
+            "CODE\r\n",
+            "PUSH 7\r\n",
+            "PRINT\r\n",
+            "JUMP 2",
+        );
+
+        let parsed = parse_v2_file(source).unwrap();
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 2"]);
+        assert!(verify_v2_file(&parsed).is_ok());
+    }
 }
