@@ -979,28 +979,9 @@ fn plan_code_has_return(code, has_value) {
 }
 
 fn binary_v2_opcode(operator) {
-  if operator == "+" { return "ADD" } otherwise {
-    if operator == "-" { return "SUB" } otherwise {
-      if operator == "*" { return "MUL" } otherwise {
-        if operator == "/" { return "DIV" } otherwise {
-          if operator == "==" { return "EQ" } otherwise {
-            if operator == "!=" { return "NE" } otherwise {
-              if operator == "<" { return "LT" } otherwise {
-                if operator == "<=" { return "LE" } otherwise {
-                  if operator == ">" { return "GT" } otherwise {
-                    if operator == ">=" { return "GE" } otherwise {
-                      if operator == "and" { return "AND" } otherwise {
-                        if operator == "or" { return "OR" }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+  define opcodes := map("+", "ADD", "-", "SUB", "*", "MUL", "/", "DIV", "==", "EQ", "!=", "NE", "<", "LT", "<=", "LE", ">", "GT", ">=", "GE", "and", "AND", "or", "OR")
+  if contains(opcodes, operator) {
+    return get(opcodes, operator)
   }
   return ""
 }
