@@ -941,6 +941,219 @@ fn emit_bytecode_plan(ir) {
   return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
 }
 
+# Native QORVYNT PLAN_1 -> canonical Bytecode v2 serializer.
+fn find_plan_function_entry(entries, name) {
+  define pos := 0
+  repeat pos < len(entries) {
+    define entry := get(entries, pos)
+    if get(entry, "name") == name {
+      return get(entry, "entry")
+    }
+    pos := pos + 1
+  }
+  return -1
+}
+
+fn find_plan_function_layout(entries, name) {
+  define pos := 0
+  repeat pos < len(entries) {
+    define entry := get(entries, pos)
+    if get(entry, "name") == name {
+      return entry
+    }
+    pos := pos + 1
+  }
+  return map()
+}
+
+fn plan_code_has_return(code, has_value) {
+  define pos := 0
+  repeat pos < len(code) {
+    define item := get(code, pos)
+    if get(item, "op") == "return" and get(item, "has_value") == has_value {
+      return true
+    }
+    pos := pos + 1
+  }
+  return false
+}
+
+fn emit_v2_instruction(item, base, entries) {
+  define op := get(item, "op")
+  if op == "push_const" {
+    define kind := get(item, "type")
+    if kind == "number" {
+      return "PUSH " + to_string(get(item, "value"))
+    } otherwise {
+      if kind == "boolean" {
+        return "PUSH_BOOL " + to_string(get(item, "value"))
+      } otherwise {
+        if kind == "string" {
+          return "PUSH_STRING_HEX " + hex_encode(get(item, "value"))
+        }
+      }
+    }
+  } otherwise {
+    if op == "load" or op == "declare" or op == "store" {
+      if op == "load" {
+        return "LOAD " + get(item, "name")
+      } otherwise {
+        if op == "declare" {
+          return "DECLARE " + get(item, "name")
+        } otherwise {
+          return "STORE " + get(item, "name")
+        }
+      }
+    } otherwise {
+      if op == "unary" {
+        define operator := get(item, "operator")
+        if operator == "-" {
+          return "NEG"
+        } otherwise {
+          if operator == "!" or operator == "not" {
+            return "NOT"
+          }
+        }
+      } otherwise {
+        if op == "binary" {
+          define operator := get(item, "operator")
+          if operator == "+" { return "ADD" }
+          if operator == "-" { return "SUB" }
+          if operator == "*" { return "MUL" }
+          if operator == "/" { return "DIV" }
+          if operator == "==" { return "EQ" }
+          if operator == "!=" { return "NE" }
+          if operator == "<" { return "LT" }
+          if operator == "<=" { return "LE" }
+          if operator == ">" { return "GT" }
+          if operator == ">=" { return "GE" }
+          if operator == "and" { return "AND" }
+          if operator == "or" { return "OR" }
+        } otherwise {
+          if op == "index" { return "INDEX" }
+          if op == "print" { return "PRINT" }
+          if op == "return" {
+            if get(item, "has_value") { return "RETURN_VALUE" }
+            return "RETURN"
+          } otherwise {
+            if op == "jump" {
+              return "JUMP " + to_string(base + get(item, "target"))
+            } otherwise {
+              if op == "jump_if_false" {
+                return "JUMP_IF_FALSE " + to_string(base + get(item, "target"))
+              } otherwise {
+                if op == "call" {
+                  define name := get(item, "name")
+                  define argc := get(item, "argc")
+                  if is_builtin_function(name) {
+                    return "BUILTIN " + name + " " + to_string(argc)
+                  } otherwise {
+                    define entry := find_plan_function_entry(entries, name)
+                    if entry >= 0 {
+                      return "CALL " + to_string(entry) + " " + to_string(argc)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return ""
+}
+
+fn emit_v2_code(code, base, entries) {
+  define lines := array()
+  define pos := 0
+  repeat pos < len(code) {
+    define line := emit_v2_instruction(get(code, pos), base, entries)
+    if line == "" {
+      return map("ok", false, "lines", array(), "error", "unsupported plan instruction at index " + to_string(pos))
+    }
+    lines := push(lines, line)
+    pos := pos + 1
+  }
+  return map("ok", true, "lines", lines, "error", "")
+}
+
+fn emit_bytecode_v2(plan) {
+  if get(plan, "format") != "ZENVORA_BYTECODE_PLAN_1" {
+    return map("ok", false, "bytecode", "", "error", "unsupported bytecode plan format")
+  }
+  define main := get(plan, "main")
+  define functions := get(plan, "functions")
+  define main_end := len(main) + 1
+  define entries := array()
+  define cursor := main_end
+  define pos := 0
+  repeat pos < len(functions) {
+    define fn := get(functions, pos)
+    define fn_name := get(fn, "name")
+    define fn_code := get(fn, "code")
+    define fn_size := len(fn_code)
+    if get(fn, "falls_through") {
+      fn_size := fn_size + 1
+    }
+    entries := push(entries, map("name", fn_name, "entry", cursor, "end", cursor + fn_size))
+    cursor := cursor + fn_size
+    pos := pos + 1
+  }
+
+  define main_result := emit_v2_code(main, 0, entries)
+  if not get(main_result, "ok") {
+    return map("ok", false, "bytecode", "", "error", get(main_result, "error"))
+  }
+  define instruction_lines := get(main_result, "lines")
+  instruction_lines := push(instruction_lines, "JUMP " + to_string(main_end))
+  define metadata_lines := array()
+
+  pos := 0
+  repeat pos < len(functions) {
+    define fn := get(functions, pos)
+    define fn_name := get(fn, "name")
+    define fn_code := get(fn, "code")
+    define layout := find_plan_function_layout(entries, fn_name)
+    define entry := get(layout, "entry")
+    define fn_end := get(layout, "end")
+    define params := get(fn, "parameters")
+    define has_value_return := plan_code_has_return(fn_code, true)
+    define has_void_return := plan_code_has_return(fn_code, false)
+    if has_value_return and has_void_return {
+      return map("ok", false, "bytecode", "", "error", "function mixes value and void returns: " + fn_name)
+    }
+    if has_value_return and get(fn, "falls_through") {
+      return map("ok", false, "bytecode", "", "error", "function may fall through without a value: " + fn_name)
+    }
+    define return_kind := "void"
+    if has_value_return {
+      return_kind := "value"
+    }
+    define parameter_text := "-"
+    if len(params) > 0 {
+      parameter_text := join(params, " ")
+    }
+    metadata_lines := push(metadata_lines, "FUNCTION " + to_string(entry) + " " + to_string(fn_end) + " " + to_string(len(params)) + " " + return_kind + " " + parameter_text)
+    define fn_result := emit_v2_code(fn_code, entry, entries)
+    if not get(fn_result, "ok") {
+      return map("ok", false, "bytecode", "", "error", "function " + fn_name + ": " + get(fn_result, "error"))
+    }
+    instruction_lines := append_instructions(instruction_lines, get(fn_result, "lines"))
+    if get(fn, "falls_through") {
+      instruction_lines := push(instruction_lines, "RETURN")
+    }
+    pos := pos + 1
+  }
+
+  define metadata_text := ""
+  if len(metadata_lines) > 0 {
+    metadata_text := join(metadata_lines, "\n") + "\n"
+  }
+  define bytecode := "ZENVORA_BYTECODE 2\nPROGRAM 0 " + to_string(main_end) + "\n" + metadata_text + "CODE\n" + join(instruction_lines, "\n") + "\n"
+  return map("ok", true, "bytecode", bytecode, "error", "")
+}
+
 # Zenvora-written semantic checks for statement placement and supported AST shapes.
 fn validate_expression(ast) {
   define kind := get(ast, "kind")
