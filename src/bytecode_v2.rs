@@ -1200,4 +1200,18 @@ JUMP 2
         assert!(!canonical.contains('\r'));
         assert_eq!(parse_v2_file(&canonical).unwrap(), parsed);
     }
+
+    #[test]
+    fn parser_rejects_embedded_carriage_return_inside_instruction_record() {
+        let malformed = concat!(
+            "ZENVORA_BYTECODE 2\n",
+            "PROGRAM 0 2\n",
+            "CODE\n",
+            "PUSH 7\rX\n",
+            "JUMP 2\n",
+        );
+
+        let error = parse_v2_file(malformed).unwrap_err();
+        assert!(error.contains("embedded carriage return"));
+    }
 }
