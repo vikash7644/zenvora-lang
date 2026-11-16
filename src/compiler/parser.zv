@@ -946,8 +946,13 @@ fn emit_bytecode_plan(ir) {
   return map("format", "ZENVORA_BYTECODE_PLAN_1", "main", main, "functions", functions)
 }
 
+# Built-ins whose names and arity are verified by the Bytecode v2 loader.
+fn is_v2_builtin(name) {
+  return name == "array" or name == "map" or name == "get" or name == "len" or name == "contains" or name == "push" or name == "put" or name == "keys" or name == "values" or name == "type_of" or name == "to_string" or name == "abs" or name == "min" or name == "max" or name == "range" or name == "assert" or name == "sum" or name == "starts_with" or name == "ends_with" or name == "split" or name == "join" or name == "replace" or name == "char_at" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "clamp" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "index_of" or name == "unique" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "pow_int" or name == "mean" or name == "speed" or name == "density" or name == "molarity" or name == "force" or name == "kinetic_energy" or name == "bmi_x10" or name == "molar_mass" or name == "dna_complement" or name == "gc_content_percent" or name == "grid_step" or name == "input_step"
+}
+
 # Zenvora-written Bytecode v2 backend for main-program scalar and control-flow code.
-# Strings and user functions deliberately fail closed until their encoders/layouts land.
+# User-defined function layout is the next backend stage; unsupported calls fail closed.
 fn emit_v2_main_instruction(item) {
   define op := get(item, "op")
   if op == "push_const" {
@@ -972,6 +977,13 @@ fn emit_v2_main_instruction(item) {
   }
   if op == "print" {
     return "PRINT"
+  }
+  if op == "call" {
+    define name := get(item, "name")
+    if is_v2_builtin(name) {
+      return "BUILTIN " + name + " " + to_string(get(item, "argc"))
+    }
+    return "UNSUPPORTED user function call: " + name
   }
   if op == "index" {
     return "INDEX"
@@ -2570,4 +2582,15 @@ if get(multiline_function_driver, "ok") and get(multiline_function_run, "ok") an
   show "ZENVORA_MULTILINE_FUNCTION_BOUNDARY_FAIL"
   show multiline_function_driver
   show multiline_function_run
+}
+
+# The self-hosted v2 emitter lowers verified built-in calls to the canonical BUILTIN opcode.
+define generic_driver_v2_builtin := compile_source("show abs(-5)\\n")
+define generic_driver_v2_builtin_result := get(generic_driver_v2_builtin, "bytecode")
+if get(generic_driver_v2_builtin, "ok") and get(generic_driver_v2_builtin_result, "ok") and index_of(get(generic_driver_v2_builtin_result, "artifact"), "BUILTIN abs 1") >= 0 {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_BUILTIN_PASS"
+} otherwise {
+  show "ZENVORA_WRITTEN_BYTECODE_V2_BUILTIN_FAIL"
+  show generic_driver_v2_builtin
+  show generic_driver_v2_builtin_result
 }
