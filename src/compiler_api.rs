@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn duplicate_content_type_receives_http_400_response() {
         let response = response_for(
-            b"POST /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Type: application/json\\r\\ncontent-type: text/plain\\r\\nContent-Length: 2\\r\\n\\r\\n{}",
+            b"POST /v1/compile HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\ncontent-type: text/plain\r\nContent-Length: 2\r\n\r\n{}",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("duplicate Content-Type"));
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn duplicate_authorization_receives_http_400_response() {
         let response = response_for(
-            b"POST /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\nAuthorization: Bearer first\\r\\nauthorization: Bearer second\\r\\nContent-Type: application/json\\r\\nContent-Length: 2\\r\\n\\r\\n{}",
+            b"POST /v1/compile HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer first\r\nauthorization: Bearer second\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("duplicate Authorization"));
