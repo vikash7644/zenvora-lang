@@ -196,7 +196,8 @@ fn respond(stream: &mut TcpStream, status: &str, value: &Value) -> Result<(), St
     let body = value.to_string();
     let header = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nVary: Origin\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
-        body.len()
+        body.len(),
+        std::env::var("ZENVORA_API_ALLOWED_ORIGIN").unwrap_or_else(|_| "https://vikash7644.github.io".into())
     );
     stream.write_all(header.as_bytes()).and_then(|_| stream.write_all(body.as_bytes()))
         .map_err(|e| format!("write failed: {e}"))
@@ -239,6 +240,35 @@ mod tests {
             format!("zenvora-rust-v{}", env!("CARGO_PKG_VERSION"))
         );
         assert_eq!(value["output"], "2");
+    }
+
+    #[test]
+    fn v1_compile_endpoint_returns_instruction_count() {
+        let body = r#"{"source":"show 40 + 2"}"#;
+        let request = format!(
+            "POST /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\n\\r\\n{}",
+            body.len(), body
+        );
+        let response = response_for(request.as_bytes());
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        let value: Value = serde_json::from_str(response.split("\\r\\n\\r\\n").nth(1).unwrap()).unwrap();
+        assert_eq!(value["compiled"], true);
+        assert!(value["instruction_count"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn v1_capabilities_describe_real_api_routes() {
+        let response = response_for(b"GET /v1/capabilities HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n");
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        let value: Value = serde_json::from_str(response.split("\\r\\n\\r\\n").nth(1).unwrap()).unwrap();
+        assert_eq!(value["api_version"], "v1");
+        assert_eq!(value["features"]["bytecode_artifact"], false);
+    }
+
+    #[test]
+    fn unsupported_method_receives_http_405_response() {
+        let response = response_for(b"PUT /v1/compile HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n");
+        assert!(response.starts_with("HTTP/1.1 405 Method Not Allowed"));
     }
 
     #[test]
