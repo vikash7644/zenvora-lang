@@ -86,6 +86,12 @@ jobs:
           ! grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_FAIL' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
+          grep -F 'ZENVORA_VM_TRUTHINESS_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_VM_TRUTHINESS_FAIL' parser-output.txt
+          grep -F 'ZENVORA_INDIRECT_CALL_REJECTED_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_INDIRECT_CALL_REJECTED_FAIL' parser-output.txt
+          grep -F 'ZENVORA_MULTILINE_FUNCTION_BOUNDARY_PASS' parser-output.txt
+          ! grep -F 'ZENVORA_MULTILINE_FUNCTION_BOUNDARY_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_FAIL' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
           grep -F 'ZENVORA_MULTI_CONTROL_FLOW_PLAN_PASS' parser-output.txt
