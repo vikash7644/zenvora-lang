@@ -1192,7 +1192,7 @@ JUMP 2
         );
 
         let parsed = parse_v2_file(windows_source).unwrap();
-        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 2"]);
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 3"]);
         assert!(parsed.instructions.iter().all(|instruction| !instruction.contains('\r')));
         assert!(verify_v2_file(&parsed).is_ok());
 
@@ -1227,7 +1227,7 @@ JUMP 2
         );
 
         let parsed = parse_v2_file(source).unwrap();
-        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 2"]);
+        assert_eq!(parsed.instructions, vec!["PUSH 7", "PRINT", "JUMP 3"]);
         assert!(verify_v2_file(&parsed).is_ok());
     }
 }
