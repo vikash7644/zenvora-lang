@@ -467,6 +467,76 @@ mod tests {
     }
 
     #[test]
+    fn block_store_persists_and_replays_signed_contract_deployment() {
+        use super::super::chain_block::{
+            combined_contract_receipt_root, combined_contract_transaction_root, execute_block_with_contracts,
+        };
+        use super::super::contract_executor::SignedContractTransaction;
+        use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
+
+        let key = SigningKey::from_bytes(&[99; 32]);
+        let public = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public).unwrap();
+        let mut allocations = BTreeMap::new();
+        allocations.insert(address.clone(), 5_000_000);
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&address, 5_000_000).unwrap();
+        let genesis_header = BlockHeaderV1 {
+            chain_id: 71, height: 0, timestamp_secs: 1_800_000_000,
+            parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(),
+            proposer: "validator_1".into(), consensus_proof: Vec::new(),
+        };
+        execute_block(&mut runtime, &genesis_header, &[], 71, None).unwrap();
+        let mut store = BlockStore::new(71, allocations).unwrap();
+        let path = std::env::temp_dir().join(format!("qorvynt-contract-block-store-{}.zvb", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        store.append_executed_block_with_contracts(&path, &runtime, &genesis_header, &[], &[], &[]).unwrap();
+
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let mut transaction = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 0,
+            gas_limit: 200_000, max_fee: 200_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Deploy { artifact: serde_json::to_vec(&artifact).unwrap() },
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = SignedContractTransaction { transaction, public_key: public.to_vec() };
+        let mut candidate = runtime.clone();
+        let contract_receipts = candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&envelope), 71, 1,
+        ).unwrap();
+        let empty_tx_root = transaction_merkle_root(&[]).unwrap();
+        let empty_receipt_root = ChainRuntime::receipt_root_for(&[]).unwrap();
+        let mut header = BlockHeaderV1 {
+            chain_id: 71, height: 1, timestamp_secs: 1_800_000_001,
+            parent_hash: genesis_header.header_hash().unwrap(),
+            transaction_root: combined_contract_transaction_root(empty_tx_root, std::slice::from_ref(&envelope)).unwrap(),
+            receipt_root: combined_contract_receipt_root(empty_receipt_root, &contract_receipts).unwrap(),
+            state_root: candidate.try_state_root().unwrap(),
+            proposer: String::new(), consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut header, &key).unwrap();
+        execute_block_with_contracts(
+            &mut runtime, &header, &[], std::slice::from_ref(&envelope), 71, Some(&genesis_header),
+        ).unwrap();
+        store.append_executed_block_with_contracts(
+            &path, &runtime, &header, &[], std::slice::from_ref(&envelope), &[],
+        ).unwrap();
+
+        let (loaded, restored) = BlockStore::load_from_file(&path, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 2);
+        assert_eq!(loaded.blocks()[1].contract_transactions.len(), 1);
+        assert_eq!(restored.try_state_root().unwrap(), runtime.try_state_root().unwrap());
+        assert_eq!(restored.contract_state().deployed_contract_count(), 1);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn append_rejects_state_and_receipts_from_unrelated_transactions() {
         let key = SigningKey::from_bytes(&[83; 32]);
         let (runtime, mut store, genesis_header) = genesis(&key);
