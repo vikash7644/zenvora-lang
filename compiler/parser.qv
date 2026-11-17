@@ -2525,7 +2525,7 @@ define missing_map_key_ast := parse_program(get(missing_map_key_lexed, "tokens")
 define missing_map_key_ir := lower_program(get(missing_map_key_ast, "ast"))
 define missing_map_key_plan := emit_bytecode_plan(missing_map_key_ir)
 define missing_map_key_result := execute_bytecode_plan(missing_map_key_plan)
-if not get(missing_map_key_result, "ok") and contains(get(missing_map_key_result, "error"), "map key not found") {
+if not get(missing_map_key_result, "ok") and starts_with(get(missing_map_key_result, "error"), "map key not found") {
   show "QORVYNT_VM_MISSING_MAP_KEY_PASS"
 } otherwise {
   show "QORVYNT_VM_MISSING_MAP_KEY_FAIL"
