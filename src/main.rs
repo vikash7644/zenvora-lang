@@ -3449,9 +3449,10 @@ fn submit_contract_transaction_cli(
         transaction, public_key: public_key.to_vec(),
     };
     let transaction_id = pool.submit(&runtime, envelope)?;
+    let next_nonce = nonce.checked_add(1).ok_or_else(|| "contract account nonce overflow".to_string())?;
     pool.save_to_file(pool_path)?;
     println!("QORVYNT contract transaction queued: {}", hex_encode_bytes(&transaction_id));
-    println!("Chain height={height} next_nonce={}", nonce + 1);
+    println!("Chain height={height} next_nonce={next_nonce}");
     Ok(())
 }
 
