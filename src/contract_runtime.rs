@@ -81,6 +81,7 @@ pub fn execute(
     let code = deserialize_bytecode_v2(&artifact)?;
     let mut output = Vec::new();
     let mut meter = GasMeter::new(gas_limit);
+    meter.charge(super::contract_gas::BASE_EXECUTION_GAS)?;
     for _ in &state_vars {
         meter.charge(super::contract_gas::STORAGE_READ_GAS)?;
     }
