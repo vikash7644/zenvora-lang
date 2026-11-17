@@ -54,6 +54,18 @@ pub fn execute_block_candidate(
     execute_block_inner(runtime, header, transactions, &[], expected_chain_id, previous_header, false)
 }
 
+/// Validate a proposal containing transfers and signed contract transactions before quorum.
+pub fn execute_block_candidate_with_contracts(
+    runtime: &mut ChainRuntime,
+    header: &BlockHeaderV1,
+    transactions: &[SignedTransactionEnvelope],
+    contract_transactions: &[SignedContractTransaction],
+    expected_chain_id: u64,
+    previous_header: Option<&BlockHeaderV1>,
+) -> Result<Vec<TransferReceipt>, String> {
+    execute_block_inner(runtime, header, transactions, contract_transactions, expected_chain_id, previous_header, false)
+}
+
 fn execute_block_inner(
     runtime: &mut ChainRuntime,
     header: &BlockHeaderV1,
