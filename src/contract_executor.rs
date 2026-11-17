@@ -806,7 +806,7 @@ mod tests {
         let transfer_from = make_tx(&bob_key, 0, "transfer_from", &format!("{alice},dave,25"));
         let third = state.execute_signed_registered_call(&transfer_from, &bob_public, 9001, 100).unwrap();
         assert!(third.execution.is_ok());
-        assert_eq!(state.tokens.balance_of("qvc", &alice), 900);
+        assert_eq!(state.tokens.balance_of("qvc", &alice), 875);
         assert_eq!(state.tokens.balance_of("qvc", &bob), 100);
         assert_eq!(state.tokens.balance_of("qvc", "dave"), 25);
         assert_eq!(state.tokens.allowance("qvc", &alice, &bob), 35);
