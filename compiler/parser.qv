@@ -2270,10 +2270,26 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
                   } otherwise {
                     define index := get(index_value, "value")
                     define target := get(collection, "value")
-                    if type_of(index) != "integer" or index < 0 or index >= len(target) {
-                      err := "invalid collection index"
+                    if type_of(target) == "array" {
+                      if type_of(index) != "integer" or index < 0 or index >= len(target) {
+                        err := "invalid array index"
+                      } otherwise {
+                        stack := push(stack, get(target, index))
+                      }
                     } otherwise {
-                      stack := push(stack, get(target, index))
+                      if type_of(target) == "map" {
+                        if type_of(index) != "string" {
+                          err := "map index must be a string"
+                        } otherwise {
+                          if not contains(target, index) {
+                            err := "map key not found: " + index
+                          } otherwise {
+                            stack := push(stack, get(target, index))
+                          }
+                        }
+                      } otherwise {
+                        err := "indexing expects an array or map"
+                      }
                     }
                   }
                 } otherwise {
