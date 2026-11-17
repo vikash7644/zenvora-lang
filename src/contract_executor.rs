@@ -701,6 +701,29 @@ mod tests {
     }
 
     #[test]
+    fn native_token_state_is_committed_and_persisted_with_qvm_contract_state() {
+        let mut state = ContractAccountState::new();
+        let legacy_root = state.state_root().unwrap();
+        state.create_token("qvc", "QORVYNT Coin", "QVC", 18, "alice", 1_000).unwrap();
+        assert_ne!(state.state_root().unwrap(), legacy_root);
+        state.token_transfer("qvc", "alice", "bob", 250).unwrap();
+        state.token_approve("qvc", "bob", "carol", 100).unwrap();
+        state.token_transfer_from("qvc", "carol", "bob", "dave", 40).unwrap();
+        state.token_mint("qvc", "alice", "bob", 10).unwrap();
+        state.token_burn("qvc", "dave", 5).unwrap();
+        assert_eq!(state.tokens.balance_of("qvc", "alice"), 750);
+        assert_eq!(state.tokens.balance_of("qvc", "bob"), 220);
+        assert_eq!(state.tokens.balance_of("qvc", "dave"), 35);
+        assert_eq!(state.tokens.allowance("qvc", "bob", "carol"), 60);
+        assert_eq!(state.tokens.token("qvc").unwrap().total_supply, 1_005);
+        let root = state.state_root().unwrap();
+        let encoded = state.encode_snapshot().unwrap();
+        let restored = ContractAccountState::decode_snapshot(&encoded).unwrap();
+        assert_eq!(restored, state);
+        assert_eq!(restored.state_root().unwrap(), root);
+    }
+
+    #[test]
     fn invalid_signature_and_underfunded_reserve_do_not_consume_nonce() {
         let key = SigningKey::from_bytes(&[74; 32]);
         let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
