@@ -20,6 +20,7 @@ mod contract_state;
 mod contract_runtime;
 mod contract_executor;
 mod contract_gas;
+mod token_standard;
 pub mod contract_protocol;
 
 #[derive(Debug, Clone, PartialEq)]
