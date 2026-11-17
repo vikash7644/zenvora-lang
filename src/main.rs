@@ -1137,10 +1137,35 @@ fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Val
     runtime_state_bytes_after_sizes(current, old_size, binding_size(name, new))
 }
 
+fn value_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Int(number) => serde_json::Value::Number((*number).into()),
+        Value::Str(text) => serde_json::Value::String(text.clone()),
+        Value::Bool(boolean) => serde_json::Value::Bool(*boolean),
+        Value::Array(items) => serde_json::Value::Array(items.iter().map(value_to_json).collect()),
+        Value::Map(items) => {
+            let object = items.iter()
+                .map(|(key, value)| (key.clone(), value_to_json(value)))
+                .collect::<serde_json::Map<String, serde_json::Value>>();
+            serde_json::Value::Object(object)
+        }
+    }
+}
+
 fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let arg_len = args.len();
     let arity = |expected: usize| if arg_len == expected { Ok(()) } else { Err(format!("builtin '{name}' expects {expected} argument(s), got {arg_len}")) };
     match name {
+        "json_encode" => {
+            arity(1)?;
+            ensure_value_depth(&args[0])?;
+            let encoded = serde_json::to_string(&value_to_json(&args[0]))
+                .map_err(|error| format!("json_encode failed: {error}"))?;
+            if encoded.len() > MAX_VALUE_BYTES {
+                return Err(format!("json_encode output exceeds safety limit ({MAX_VALUE_BYTES} bytes)"));
+            }
+            Ok(Value::Str(encoded))
+        }
         "array" => Ok(Value::Array(args)),
         "map" => {
             if !args.len().is_multiple_of(2) { return Err("builtin 'map' expects alternating string keys and values".into()); }
@@ -4521,6 +4546,18 @@ show char_at("hé🙂", 2)
         assert!(super::compile_plan_json_to_bytecode_v2(invalid_target).unwrap_err().contains("outside its instruction region"));
         let unknown = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[{"op":"eval_magic"}],"functions":[]}"#;
         assert!(super::compile_plan_json_to_bytecode_v2(unknown).unwrap_err().contains("unsupported instruction"));
+    }
+
+    #[test]
+    fn json_encode_builtin_serializes_nested_values_and_is_available_in_bytecode_v2() {
+        let source = r#"show json_encode(map("name", "QORVYNT", "active", true, "items", array(7, "x")))"#;
+        let output = execute(source).unwrap();
+        assert_eq!(output, vec![r#"{"active":true,"items":[7,"x"],"name":"QORVYNT"}"#]);
+
+        let (code, layout) = super::compile_with_layout(source).unwrap();
+        let bytecode = super::serialize_bytecode_v2(&code, &layout).unwrap();
+        assert!(bytecode.contains("BUILTIN json_encode 1"));
+        assert_eq!(super::run_bytecode_v2(&bytecode).unwrap(), output);
     }
 
     #[test]
