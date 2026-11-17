@@ -34,7 +34,7 @@ fn append_bounded(expanded: &mut String, text: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Loads a .zv program and expands use "relative/path.zv" directives.
+/// Loads a QORVYNT source program and expands relative .qv module imports.
 /// Paths are resolved relative to the file containing the directive.
 pub fn load(path: &Path) -> Result<String, String> {
     let mut loaded = HashSet::new();
@@ -236,6 +236,16 @@ mod tests {
 
         let source = load(&temp.0.join("main.zv")).unwrap();
         assert_eq!(source.matches("fn add").count(), 1);
+        assert!(source.contains("show add(2, 3)"));
+    }
+
+    #[test]
+    fn expands_qv_modules() {
+        let temp = TempDir::new();
+        fs::write(temp.0.join("main.qv"), "use \\"child.qv\\"\\nshow add(2, 3)\\n").unwrap();
+        fs::write(temp.0.join("child.qv"), "fn add(a, b) {\\n return a + b\\n}\\n").unwrap();
+        let source = load(&temp.0.join("main.qv")).unwrap();
+        assert!(source.contains("fn add(a, b)"));
         assert!(source.contains("show add(2, 3)"));
     }
 
