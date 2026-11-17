@@ -653,6 +653,23 @@ mod tests {
     }
 
     #[test]
+    fn token_rpc_queries_fail_closed_for_unknown_token_ids() {
+        let (path, cleanup_path) = test_store();
+        let requests = [
+            br#"{"jsonrpc":"2.0","id":31,"method":"chain_getTokenInfo","params":{"tokenId":"missing"}}"#.as_slice(),
+            br#"{"jsonrpc":"2.0","id":32,"method":"chain_getTokenBalance","params":{"tokenId":"missing","account":"alice"}}"#.as_slice(),
+            br#"{"jsonrpc":"2.0","id":33,"method":"chain_getTokenAllowance","params":{"tokenId":"missing","owner":"alice","spender":"bob"}}"#.as_slice(),
+            br#"{"jsonrpc":"2.0","id":34,"method":"chain_getTokenEvents","params":{"tokenId":"missing"}}"#.as_slice(),
+        ];
+        for request in requests {
+            let response = handle_json_rpc(request, &path, 71);
+            assert_eq!(response["error"]["code"], -32602);
+            assert_eq!(response["error"]["message"], "token ID not found");
+        }
+        std::fs::remove_file(cleanup_path).unwrap();
+    }
+
+    #[test]
     fn http_parser_rejects_duplicate_content_length_headers() {
         use std::io::Write;
         use std::net::{TcpListener, TcpStream};
