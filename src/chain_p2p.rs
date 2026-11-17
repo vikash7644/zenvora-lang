@@ -17,7 +17,7 @@ use super::contract_executor::SignedContractTransaction;
 use super::contract_protocol::ContractTransactionV1;
 use super::tx_pool::TransactionPool;
 
-const PROTOCOL_VERSION: u64 = 1;
+const PROTOCOL_VERSION: u64 = 2;
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 const PEER_TIMEOUT: Duration = Duration::from_secs(5);
 
