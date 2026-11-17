@@ -1,0 +1,9 @@
+# Example #36: function parameters, local variables, and return values.
+fn rectangle_area(width, height) {
+    define area := width * height
+    return area
+}
+
+define width := 8
+define height := 5
+show rectangle_area(width, height)
