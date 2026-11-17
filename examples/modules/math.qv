@@ -1,0 +1,7 @@
+fn add(left, right) {
+    return left + right
+}
+
+fn square(value) {
+    return value * value
+}
