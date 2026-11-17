@@ -1,9 +1,9 @@
 {
-  "name": "zenvora-lang",
+  "name": "qorvynt-lang",
   "displayName": "QORVYNT",
   "description": "Syntax highlighting and language configuration for QORVYNT (.qv).",
   "version": "0.1.0",
-  "publisher": "zenvora",
+  "publisher": "qorvynt",
   "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
@@ -14,10 +14,10 @@
   "contributes": {
     "languages": [
       {
-        "id": "zenvora",
+        "id": "qorvynt",
         "aliases": [
           "QORVYNT",
-          "zenvora"
+          "qorvynt"
         ],
         "extensions": [
           ".qv"
@@ -27,18 +27,18 @@
     ],
     "grammars": [
       {
-        "language": "zenvora",
-        "scopeName": "source.zenvora",
-        "path": "./syntaxes/zenvora.tmLanguage.json"
+        "language": "qorvynt",
+        "scopeName": "source.qorvynt",
+        "path": "./syntaxes/qorvynt.tmLanguage.json"
       }
     ]
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/vikash7644/zenvora-lang.git"
+    "url": "https://github.com/vikash7644/qorvynt-lang.git"
   },
-  "homepage": "https://github.com/vikash7644/zenvora-lang/tree/main/editors/vscode",
+  "homepage": "https://github.com/vikash7644/qorvynt-lang/tree/main/editors/vscode",
   "bugs": {
-    "url": "https://github.com/vikash7644/zenvora-lang/issues"
+    "url": "https://github.com/vikash7644/qorvynt-lang/issues"
   }
 }
