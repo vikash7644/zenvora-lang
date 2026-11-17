@@ -1,6 +1,6 @@
 {
-  "scopeName": "source.zenvora",
-  "name": "Zenvora Lang",
+  "scopeName": "source.qorvynt",
+  "name": "QORVYNT",
   "patterns": [
     {
       "include": "#comments"
@@ -34,22 +34,22 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.number-sign.zenvora",
+          "name": "comment.line.number-sign.qorvynt",
           "match": "#.*$"
         }
       ]
     },
     "strings": {
-      "name": "string.quoted.double.zenvora",
+      "name": "string.quoted.double.qorvynt",
       "begin": "\"",
       "end": "\"",
       "patterns": [
         {
-          "name": "constant.character.escape.zenvora",
+          "name": "constant.character.escape.qorvynt",
           "match": "\\\\(?:[\"\\\\nrt])"
         },
         {
-          "name": "invalid.illegal.escape.zenvora",
+          "name": "invalid.illegal.escape.qorvynt",
           "match": "\\\\."
         }
       ]
@@ -57,23 +57,23 @@
     "function-declarations": {
       "patterns": [
         {
-          "name": "meta.function.zenvora",
+          "name": "meta.function.qorvynt",
           "begin": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
           "beginCaptures": {
             "1": {
-              "name": "keyword.declaration.function.zenvora"
+              "name": "keyword.declaration.function.qorvynt"
             },
             "2": {
-              "name": "entity.name.function.zenvora"
+              "name": "entity.name.function.qorvynt"
             },
             "3": {
-              "name": "punctuation.section.parameters.begin.zenvora"
+              "name": "punctuation.section.parameters.begin.qorvynt"
             }
           },
           "end": "(\\))",
           "endCaptures": {
             "1": {
-              "name": "punctuation.section.parameters.end.zenvora"
+              "name": "punctuation.section.parameters.end.qorvynt"
             }
           },
           "patterns": [
@@ -81,7 +81,7 @@
               "include": "#strings"
             },
             {
-              "name": "variable.parameter.zenvora",
+              "name": "variable.parameter.qorvynt",
               "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
             },
             {
@@ -94,11 +94,11 @@
     "keywords": {
       "patterns": [
         {
-          "name": "keyword.control.zenvora",
+          "name": "keyword.control.qorvynt",
           "match": "\\b(?:define|show|print|if|otherwise|repeat|break|continue|return|call|use|contract|state|action|view|fn)\\b"
         },
         {
-          "name": "keyword.operator.word.zenvora",
+          "name": "keyword.operator.word.qorvynt",
           "match": "\\b(?:and|or|not)\\b"
         }
       ]
@@ -106,7 +106,7 @@
     "constants": {
       "patterns": [
         {
-          "name": "constant.language.boolean.zenvora",
+          "name": "constant.language.boolean.qorvynt",
           "match": "\\b(?:true|false)\\b"
         }
       ]
@@ -114,7 +114,7 @@
     "builtins": {
       "patterns": [
         {
-          "name": "support.function.builtin.zenvora",
+          "name": "support.function.builtin.qorvynt",
           "match": "\\b(?:len|range|array|map|get|push|put|keys|values|first|last|reverse|split|join|type_of|to_string|assert|abs|min|max)\\b(?=\\s*\\()"
         }
       ]
@@ -122,7 +122,7 @@
     "numbers": {
       "patterns": [
         {
-          "name": "constant.numeric.integer.zenvora",
+          "name": "constant.numeric.integer.qorvynt",
           "match": "\\b[0-9]+\\b"
         }
       ]
@@ -130,15 +130,15 @@
     "operators": {
       "patterns": [
         {
-          "name": "keyword.operator.assignment.zenvora",
+          "name": "keyword.operator.assignment.qorvynt",
           "match": ":="
         },
         {
-          "name": "keyword.operator.comparison.zenvora",
+          "name": "keyword.operator.comparison.qorvynt",
           "match": "==|!=|<=|>=|<|>"
         },
         {
-          "name": "keyword.operator.arithmetic.zenvora",
+          "name": "keyword.operator.arithmetic.qorvynt",
           "match": "[+*/-]"
         }
       ]
@@ -146,15 +146,15 @@
     "punctuation": {
       "patterns": [
         {
-          "name": "punctuation.section.block.begin.zenvora",
+          "name": "punctuation.section.block.begin.qorvynt",
           "match": "\\{"
         },
         {
-          "name": "punctuation.section.block.end.zenvora",
+          "name": "punctuation.section.block.end.qorvynt",
           "match": "\\}"
         },
         {
-          "name": "punctuation.separator.zenvora",
+          "name": "punctuation.separator.qorvynt",
           "match": "\\(|\\)|,|;|\\[|\\]"
         }
       ]
