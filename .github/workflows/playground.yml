@@ -39,7 +39,9 @@ jobs:
         run: |
           test -s website/playground.html
           grep -q 'BROWSER DEMO' website/playground.html
-          grep -q 'not the Rust compiler' website/playground.html
+          grep -q 'terminal-form' website/playground.html
+          grep -q 'Zenvora Assistant' website/playground.html
+          grep -q 'window.ZENVORA_CHAT_API' website/playground.html
 
       - name: Test browser runner behavior
         run: node scripts/test_playground.cjs
