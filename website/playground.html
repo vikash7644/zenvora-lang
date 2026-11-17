@@ -58,7 +58,7 @@ function normalizeIndentedBlocks(text) {
       out.push("} otherwise {"); stack.pop(); stack.push({ indent, kind: "otherwise" }); continue;
     }
     while (stack.length && indent <= stack[stack.length - 1].indent) { out.push("}"); stack.pop(); }
-    const header = /^(if\s+.+|repeat\s+.+|fn\s+[A-Za-z_][A-Za-z0-9_]*\s*\(.*\))$/.test(line);
+    const header = !line.endsWith("{") && /^(if\s+.+|repeat\s+.+|fn\s+[A-Za-z_][A-Za-z0-9_]*\s*\(.*\))$/.test(line);
     if (header) {
       let next = i + 1;
       while (next < lines.length && (!lines[next].trim() || lines[next].trim().startsWith("#"))) next++;
