@@ -469,7 +469,7 @@ mod tests {
 
         let restored = ContractAccountState::decode_snapshot(&state.encode_snapshot().unwrap()).unwrap();
         assert_eq!(restored, state);
-        assert_eq!(restored.deployed_contract(&receipt.contract_id).unwrap(), deployed);
+        assert_eq!(restored.deployed_contract(&receipt.contract_id).cloned().unwrap(), deployed);
     }
 
 }
