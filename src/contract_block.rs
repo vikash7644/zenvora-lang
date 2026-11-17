@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use super::contract_executor::ContractAccountState;
 use super::contract_protocol::{ContractTransactionV1, ContractOperation};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ContractBlockHeaderV1 {
     pub chain_id: u64,
     pub height: u64,
@@ -17,7 +17,7 @@ pub struct ContractBlockHeaderV1 {
     pub state_root: [u8; 32],
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignedContractEnvelope {
     pub transaction: ContractTransactionV1,
     pub public_key: Vec<u8>,
