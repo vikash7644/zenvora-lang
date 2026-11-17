@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "compiler/parser.qv"
+      - "compiler/bytecode_v2_reader.qv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -13,6 +14,7 @@ on:
       - main
     paths:
       - "compiler/parser.qv"
+      - "compiler/bytecode_v2_reader.qv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -39,6 +41,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run reference runtime regression suite
         run: cargo test --locked
+      - name: Execute QORVYNT-written Bytecode v2 reader foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- compiler/bytecode_v2_reader.qv > bytecode-reader-output.txt
+          grep -F 'QORVYNT_BYTECODE_V2_READER_STAGE1_PASS' bytecode-reader-output.txt
+          ! grep -F 'QORVYNT_BYTECODE_V2_READER_STAGE1_FAIL' bytecode-reader-output.txt
       - name: Execute QORVYNT-written compiler frontend
         shell: bash
         run: |
