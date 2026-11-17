@@ -41,11 +41,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run reference runtime regression suite
         run: cargo test --locked
+      - name: Build reference VM host once
+        run: cargo build --locked --bin zv
       - name: Execute QORVYNT-written compiler frontend
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- --compile-with-qorvynt compiler/parser.zv compiler/fixtures/runnable_sample.zv self-hosted-compiler-from-driver.zv2b > parser-output.txt
+          target/debug/zv --compile-with-qorvynt compiler/parser.zv compiler/fixtures/runnable_sample.zv self-hosted-compiler-from-driver.zv2b > parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_PASS' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
@@ -78,12 +80,12 @@ jobs:
           with open("self-hosted-native-v2.zv2b", "w", encoding="utf-8", newline="") as output:
               output.write(bytecode)
           PY
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
+          target/debug/zv --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
           cmp self-hosted-native-v2.zv2b self-hosted-compiler.zv2b
           cmp self-hosted-compiler-from-driver.zv2b self-hosted-native-v2.zv2b
           grep -F 'ZENVORA_BYTECODE 2' self-hosted-compiler.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
-          cargo run --locked --quiet -- --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
+          target/debug/zv --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
+          target/debug/zv --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-native-v2-output.txt
           python3 - <<'PY'
           expected = [
@@ -101,7 +103,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- --compile-with-qorvynt compiler/parser.zv compiler/fixtures/runnable_sample.zv self-hosted-compiler-from-driver-repeat.zv2b > parser-output-repeat.txt
+          target/debug/zv --compile-with-qorvynt compiler/parser.zv compiler/fixtures/runnable_sample.zv self-hosted-compiler-from-driver-repeat.zv2b > parser-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           awk '/^ZENVORA_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-native-v2-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json
@@ -113,16 +115,16 @@ jobs:
               output.write(bytecode)
           PY
           cmp self-hosted-native-v2.zv2b self-hosted-native-v2-repeat.zv2b
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
+          target/debug/zv --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
           cmp self-hosted-compiler.zv2b self-hosted-compiler-repeat.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
+          target/debug/zv --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
           cmp self-hosted-compiler-from-driver.zv2b self-hosted-compiler-from-driver-repeat.zv2b
-          cargo run --locked --quiet -- --emit-bytecode-v2 compiler/bootstrap.zv self-hosted-stage1-compiler.zv2b
-          cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage1-compiler.zv2b compiler/bootstrap.zv self-hosted-stage2-compiler.zv2b > self-hosted-stage2-output.txt || { cat self-hosted-stage2-output.txt; exit 1; }
+          target/debug/zv --emit-bytecode-v2 compiler/bootstrap.zv self-hosted-stage1-compiler.zv2b
+          target/debug/zv --run-bytecode-with-source self-hosted-stage1-compiler.zv2b compiler/bootstrap.zv self-hosted-stage2-compiler.zv2b > self-hosted-stage2-output.txt || { cat self-hosted-stage2-output.txt; exit 1; }
           grep -F 'ZENVORA_INPUT_BYTECODE_V2_JSON' self-hosted-stage2-output.txt
           ! grep -F 'ZENVORA_INPUT_BYTECODE_V2_FAIL' self-hosted-stage2-output.txt
-          cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/bootstrap.zv self-hosted-stage3-compiler.zv2b > self-hosted-stage3-output.txt
+          target/debug/zv --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/bootstrap.zv self-hosted-stage3-compiler.zv2b > self-hosted-stage3-output.txt
           cmp self-hosted-stage2-compiler.zv2b self-hosted-stage3-compiler.zv2b
-          cargo run --locked --quiet -- --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/fixtures/runnable_sample.zv self-hosted-stage2-sample.zv2b > self-hosted-stage2-sample-output.txt
+          target/debug/zv --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/fixtures/runnable_sample.zv self-hosted-stage2-sample.zv2b > self-hosted-stage2-sample-output.txt
           cmp self-hosted-stage2-sample.zv2b self-hosted-native-v2.zv2b
