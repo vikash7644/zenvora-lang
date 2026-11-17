@@ -6,7 +6,7 @@ static NEXT_BYTECODE_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 fn runs_arithmetic_program() {
-    let path = std::env::temp_dir().join("zenvora_lang_test.zv");
+    let path = std::env::temp_dir().join("zenvora_lang_test.qv");
     fs::write(&path, "define a := 10\ndefine b := 20\nshow a + b * 2\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_zv")).arg(&path).output().unwrap();
     let _ = fs::remove_file(path);
@@ -16,7 +16,7 @@ fn runs_arithmetic_program() {
 
 #[test]
 fn reports_division_by_zero() {
-    let path = std::env::temp_dir().join("zenvora_lang_div_zero.zv");
+    let path = std::env::temp_dir().join("zenvora_lang_div_zero.qv");
     fs::write(&path, "show 5 / 0\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_zv")).arg(&path).output().unwrap();
     let _ = fs::remove_file(path);
