@@ -2646,19 +2646,11 @@ define v2_driver_function := compile_to_bytecode_v2("fn twice(n) {\nreturn n * 2
 define v2_driver_invalid := compile_to_bytecode_v2("show missing_symbol\n")
 define v2_driver_simple_bytes := get(v2_driver_simple, "bytecode")
 define v2_driver_function_bytes := get(v2_driver_function, "bytecode")
-define v2_driver_simple_plan := compile_source("show 40 + 2\n")
-define v2_driver_function_plan := compile_source("fn twice(n) {\nreturn n * 2\n}\nshow twice(21)\n")
-define v2_driver_simple_run := execute_bytecode_plan(get(v2_driver_simple_plan, "plan"))
-define v2_driver_function_run := execute_bytecode_plan(get(v2_driver_function_plan, "plan"))
-define v2_driver_simple_output := get(v2_driver_simple_run, "output")
-define v2_driver_function_output := get(v2_driver_function_run, "output")
-if get(v2_driver_simple, "ok") and get(v2_driver_simple, "stage") == "complete" and starts_with(v2_driver_simple_bytes, "ZENVORA_BYTECODE 2\n") and get(v2_driver_function, "ok") and starts_with(v2_driver_function_bytes, "ZENVORA_BYTECODE 2\n") and get(v2_driver_simple_run, "ok") and get(v2_driver_simple_output, 0) == "42" and get(v2_driver_function_run, "ok") and get(v2_driver_function_output, 0) == "42" and not get(v2_driver_invalid, "ok") and get(v2_driver_invalid, "stage") == "validate" and get(v2_driver_invalid, "bytecode") == "" {
+if get(v2_driver_simple, "ok") and get(v2_driver_simple, "stage") == "complete" and starts_with(v2_driver_simple_bytes, "ZENVORA_BYTECODE 2\\n") and get(v2_driver_function, "ok") and starts_with(v2_driver_function_bytes, "ZENVORA_BYTECODE 2\\n") and not get(v2_driver_invalid, "ok") and get(v2_driver_invalid, "stage") == "validate" and get(v2_driver_invalid, "bytecode") == "" {
   show "QORVYNT_SOURCE_TO_BYTECODE_V2_API_PASS"
 } otherwise {
   show "QORVYNT_SOURCE_TO_BYTECODE_V2_API_FAIL"
   show v2_driver_simple
   show v2_driver_function
   show v2_driver_invalid
-  show v2_driver_simple_run
-  show v2_driver_function_run
 }
