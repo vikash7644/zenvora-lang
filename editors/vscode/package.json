@@ -1,9 +1,9 @@
 {
-  "name": "zenvora-lang",
-  "displayName": "Zenvora Lang",
-  "description": "Syntax highlighting and language configuration for Zenvora Lang (.zv).",
+  "name": "qorvynt-lang",
+  "displayName": "QORVYNT",
+  "description": "Syntax highlighting and language configuration for QORVYNT (.qv).",
   "version": "0.1.0",
-  "publisher": "zenvora",
+  "publisher": "qorvynt",
   "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
@@ -14,22 +14,22 @@
   "contributes": {
     "languages": [
       {
-        "id": "zenvora",
+        "id": "qorvynt",
         "aliases": [
-          "Zenvora Lang",
-          "zenvora"
+          "QORVYNT",
+          "qorvynt"
         ],
         "extensions": [
-          ".zv"
+          ".qv"
         ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "zenvora",
-        "scopeName": "source.zenvora",
-        "path": "./syntaxes/zenvora.tmLanguage.json"
+        "language": "qorvynt",
+        "scopeName": "source.qorvynt",
+        "path": "./syntaxes/qorvynt.tmLanguage.json"
       }
     ]
   },

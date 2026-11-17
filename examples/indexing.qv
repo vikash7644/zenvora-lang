@@ -3,7 +3,7 @@ define numbers := array(10, 20, 30)
 show numbers[0]
 show numbers[1 + 1]
 
-define profile := map("name", "Zenvora", "level", 7)
+define profile := map("name", "QORVYNT", "level", 7)
 show profile["name"]
 show profile["level"]
 

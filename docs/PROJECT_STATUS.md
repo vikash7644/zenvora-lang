@@ -1,7 +1,16 @@
-# Zenvora Lang — Mission Status and Completion Gate
+# QORVYNT — Mission Status and Completion Gate
 
-Last audited: 2026-10-23  
-Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, not a claim that the project is complete.
+Last audited: 2026-11-17  
+Scope: `vikash7644/zenvora-lang`, including the active `.qv` migration branch. This ledger is a working checklist, not a claim that the project is complete.
+
+
+## QORVYNT identity and .qv migration audit (2026-11-17)
+
+- The language's public identity is **QORVYNT** and the active source extension is **.qv**. This does not rename the GitHub repository or automatically rename internal Rust crate/module identifiers.
+- Draft PR [#55](https://github.com/vikash7644/zenvora-lang/pull/55) is the migration vehicle. The audited tree at commit `c285f4abca1faab76ef24f7a0aa615314fe6b3ba` contains 18 `.qv` source files and zero `.zv` source files.
+- All seven workflows completed successfully on that exact commit: [QORVYNT CI](https://github.com/vikash7644/zenvora-lang/actions/runs/44047250292), [self-hosted compiler and Bytecode v2 validation](https://github.com/vikash7644/zenvora-lang/actions/runs/44047250514), [interpreter MVP](https://github.com/vikash7644/zenvora-lang/actions/runs/44047250324), [playground CI](https://github.com/vikash7644/zenvora-lang/actions/runs/44047250383), [local chain smoke test](https://github.com/vikash7644/zenvora-lang/actions/runs/44047250521), [multi-node sync smoke test](https://github.com/vikash7644/zenvora-lang/actions/runs/44047250461), and [Bytecode v2 fuzzing](https://github.com/vikash7644/zenvora-lang/actions/runs/44047250537).
+- The self-hosted job ran the QORVYNT-written frontend, translated its plan to canonical Bytecode v2, and verified deterministic output against the reference compiler.
+- Important limitation: this workflow still installs and runs a **Rust reference host**. This proves the current frontend-to-Bytecode-v2 validation path, not a clean, Rust-independent bootstrap. Do not describe the language as fully self-hosted on this evidence alone.
 
 ## Status meanings
 

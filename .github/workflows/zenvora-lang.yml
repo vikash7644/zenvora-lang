@@ -1,4 +1,4 @@
-name: Zenvora Interpreter MVP
+name: QORVYNT Interpreter MVP
 
 on:
   push:
@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: zenvora-interpreter-${{ github.workflow }}-${{ github.ref }}
+  group: qorvynt-interpreter-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -50,4 +50,4 @@ jobs:
         run: cargo test --all-targets
 
       - name: Execute shared hello example
-        run: cargo run -- ../examples/hello.zv
+        run: cargo run -- ../examples/hello.qv

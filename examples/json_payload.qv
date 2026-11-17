@@ -1,0 +1,6 @@
+# Build a JSON request payload for a provider-neutral AI endpoint.
+# Network access and credentials are intentionally supplied by a future host capability,
+# never embedded in source code or bytecode.
+
+define request := map("model", "example-model", "messages", array(map("role", "user", "content", "Hello from QORVYNT")), "stream", false)
+show json_encode(request)

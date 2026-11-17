@@ -3,7 +3,8 @@ name: QORVYNT self-hosted compiler and Bytecode v2 validation
 on:
   pull_request:
     paths:
-      - "compiler/parser.zv"
+      - "compiler/parser.qv"
+      - "compiler/bytecode_v2_reader.qv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -12,7 +13,8 @@ on:
     branches:
       - main
     paths:
-      - "compiler/parser.zv"
+      - "compiler/parser.qv"
+      - "compiler/bytecode_v2_reader.qv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -39,11 +41,18 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run reference runtime regression suite
         run: cargo test --locked
+      - name: Execute QORVYNT-written Bytecode v2 reader foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --quiet -- compiler/bytecode_v2_reader.qv > bytecode-reader-output.txt
+          grep -F 'QORVYNT_BYTECODE_V2_READER_STAGE1_PASS' bytecode-reader-output.txt
+          ! grep -F 'QORVYNT_BYTECODE_V2_READER_STAGE1_FAIL' bytecode-reader-output.txt
       - name: Execute QORVYNT-written compiler frontend
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.zv > parser-output.txt
+          cargo run --locked --quiet -- compiler/parser.qv > parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_PASS' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
@@ -51,7 +60,15 @@ jobs:
           grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' parser-output.txt
           grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' parser-output.txt
           grep -F 'ZENVORA_NATIVE_BYTECODE_V2_EMIT_PASS' parser-output.txt
+          grep -F 'QORVYNT_SOURCE_TO_BYTECODE_V2_API_PASS' parser-output.txt
+          grep -F 'ZENVORA_VM_EXTENDED_BUILTIN_PARITY_PASS' parser-output.txt
+          grep -F 'QORVYNT_VM_MAP_INDEX_PASS' parser-output.txt
+          grep -F 'QORVYNT_VM_MISSING_MAP_KEY_PASS' parser-output.txt
           ! grep -F 'ZENVORA_NATIVE_BYTECODE_V2_EMIT_FAIL' parser-output.txt
+          ! grep -F 'QORVYNT_SOURCE_TO_BYTECODE_V2_API_FAIL' parser-output.txt
+          ! grep -F 'ZENVORA_VM_EXTENDED_BUILTIN_PARITY_FAIL' parser-output.txt
+          ! grep -F 'QORVYNT_VM_MAP_INDEX_FAIL' parser-output.txt
+          ! grep -F 'QORVYNT_VM_MISSING_MAP_KEY_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_FAIL' parser-output.txt
@@ -94,11 +111,18 @@ jobs:
               raise SystemExit(f"direct Bytecode v2 execution mismatch:\nexpected={expected!r}\nactual={actual!r}")
           print("QORVYNT_PLAN_TO_BYTECODE_V2_EXECUTION_PASS")
           PY
+          awk '/^QORVYNT_VM_MAP_INDEX_PLAN_JSON$/ { getline; print; exit }' parser-output.txt > map-index-plan.json
+          test -s map-index-plan.json
+          cargo run --locked --quiet -- --emit-plan-bytecode-v2 map-index-plan.json map-index.zv2b
+          cargo run --locked --quiet -- --run-bytecode map-index.zv2b > map-index-output.txt
+          printf '42\n8\n' > map-index-expected.txt
+          diff -u map-index-expected.txt map-index-output.txt
+          echo 'QORVYNT_VM_TO_CANONICAL_V2_MAP_INDEX_PARITY_PASS'
       - name: Verify deterministic plan translation and Bytecode v2 artifact
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
+          cargo run --locked --quiet -- compiler/parser.qv > parser-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           awk '/^ZENVORA_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-native-v2-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json

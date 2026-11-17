@@ -1,4 +1,4 @@
-# Zenvora scientific computing (integer arithmetic only)
+# QORVYNT scientific computing (integer arithmetic only)
 show gcd(48, 18)
 show lcm(12, 18)
 show factorial(5)
