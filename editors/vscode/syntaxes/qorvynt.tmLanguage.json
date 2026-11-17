@@ -1,0 +1,163 @@
+{
+  "scopeName": "source.qorvynt",
+  "name": "QORVYNT",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#function-declarations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#builtins"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.qorvynt",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.qorvynt",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.qorvynt",
+          "match": "\\\\(?:[\"\\\\nrt])"
+        },
+        {
+          "name": "invalid.illegal.escape.qorvynt",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "function-declarations": {
+      "patterns": [
+        {
+          "name": "meta.function.qorvynt",
+          "begin": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.declaration.function.qorvynt"
+            },
+            "2": {
+              "name": "entity.name.function.qorvynt"
+            },
+            "3": {
+              "name": "punctuation.section.parameters.begin.qorvynt"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.parameters.end.qorvynt"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#strings"
+            },
+            {
+              "name": "variable.parameter.qorvynt",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.qorvynt",
+          "match": "\\b(?:define|show|print|if|otherwise|repeat|break|continue|return|call|use|contract|state|action|view|fn)\\b"
+        },
+        {
+          "name": "keyword.operator.word.qorvynt",
+          "match": "\\b(?:and|or|not)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.qorvynt",
+          "match": "\\b(?:true|false)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.qorvynt",
+          "match": "\\b(?:len|range|array|map|get|push|put|keys|values|first|last|reverse|split|join|type_of|to_string|assert|abs|min|max)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.qorvynt",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.qorvynt",
+          "match": ":="
+        },
+        {
+          "name": "keyword.operator.comparison.qorvynt",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.qorvynt",
+          "match": "[+*/-]"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.block.begin.qorvynt",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.block.end.qorvynt",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.separator.qorvynt",
+          "match": "\\(|\\)|,|;|\\[|\\]"
+        }
+      ]
+    }
+  }
+}
