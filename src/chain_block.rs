@@ -312,7 +312,7 @@ mod tests {
         let genesis = genesis_header(&runtime);
         execute_block(&mut runtime, &genesis, &[], 71, None).unwrap();
 
-        let source = "contract Counter {\\nstate count := 0\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
         let artifact = super::super::contract_abi_and_artifact(source).unwrap();
         let mut transaction = ContractTransactionV1 {
             chain_id: 71,
@@ -354,7 +354,7 @@ mod tests {
         assert!(receipts.is_empty());
         assert_eq!(runtime.try_state_root().unwrap(), header.state_root);
         assert_eq!(runtime.contract_state().nonce(&address), 1);
-        assert_eq!(runtime.contract_state().deployed_contracts_len(), 1);
+        assert_eq!(runtime.contract_state().deployed_contract_count(), 1);
     }
 
     #[test]
