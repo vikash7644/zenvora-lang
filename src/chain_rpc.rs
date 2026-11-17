@@ -438,11 +438,13 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle_json_rpc, handle_json_rpc_with_pool, hex_encode, read_http_body};
+    use super::{handle_json_rpc, handle_json_rpc_with_pool, handle_json_rpc_with_pools, hex_encode, read_http_body};
     use super::super::block_store::BlockStore;
     use super::super::chain_block::execute_block;
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
     use super::super::chain_runtime::ChainRuntime;
+    use super::super::contract_executor::SignedContractTransaction;
+    use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
     use serde_json::{json, Value};
     use ed25519_dalek::{Signer, SigningKey};
     use std::collections::BTreeMap;
@@ -523,6 +525,79 @@ mod tests {
         assert_eq!(runtime.balance("bob"), 0);
         std::fs::remove_file(store_path).unwrap();
         std::fs::remove_file(pool_path).unwrap();
+    }
+
+    #[test]
+    fn contract_rpc_submission_persists_signed_deployment_and_lists_pending() {
+        let key = SigningKey::from_bytes(&[173; 32]);
+        let public_key = key.verifying_key().to_bytes();
+        let sender = address_from_public_key(&public_key).unwrap();
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let store_path = std::env::temp_dir().join(format!("qorvynt-rpc-contract-store-{unique}.zvb"));
+        let pool_path = std::env::temp_dir().join(format!("qorvynt-rpc-contract-pool-{unique}.zvp"));
+        let store_text = store_path.to_string_lossy().to_string();
+        let pool_text = pool_path.to_string_lossy().to_string();
+
+        let mut allocations = BTreeMap::new();
+        allocations.insert(sender.clone(), 5_000_000);
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&sender, 5_000_000).unwrap();
+        let genesis = BlockHeaderV1 {
+            chain_id: 71, height: 0, timestamp_secs: 0, parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(), proposer: sender.clone(), consensus_proof: Vec::new(),
+        };
+        super::super::chain_block::execute_block(&mut runtime, &genesis, &[], 71, None).unwrap();
+        let mut store = BlockStore::new(71, allocations).unwrap();
+        store.append_executed_block(&store_text, &runtime, &genesis, &[], &[]).unwrap();
+
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let artifact_bytes = serde_json::to_vec(&artifact).unwrap();
+        let mut transaction = ContractTransactionV1 {
+            chain_id: 71, sender: sender.clone(), nonce: 0, gas_limit: 200_000,
+            max_fee: 200_000, gas_price: 1, valid_until_height: Some(20),
+            operation: ContractOperation::Deploy { artifact: artifact_bytes }, signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let request = json!({
+            "jsonrpc":"2.0", "id":21, "method":"chain_submitContractTransaction",
+            "params":{"publicKey":hex_encode(&public_key),"transaction":hex_encode(&transaction.canonical_bytes().unwrap())}
+        });
+        let response = handle_json_rpc_with_pools(
+            request.to_string().as_bytes(), &store_text, 71, None, Some(&pool_text),
+        );
+        assert!(response.get("error").is_none(), "{response}");
+        assert_eq!(response["result"]["poolSize"], 1);
+        let pending = handle_json_rpc_with_pools(
+            br#"{"jsonrpc":"2.0","id":22,"method":"chain_getPendingContractTransactions","params":[]}"#,
+            &store_text, 71, None, Some(&pool_text),
+        );
+        assert_eq!(pending["result"]["count"], 1);
+        let pool = super::super::tx_pool::ContractTransactionPool::load_from_file(
+            &pool_text, &runtime, 71, 1,
+        ).unwrap();
+        assert_eq!(pool.len(), 1);
+        let envelope = SignedContractTransaction {
+            transaction: pool.pending()[0].transaction.clone(),
+            public_key: pool.pending()[0].public_key.clone(),
+        };
+        assert_eq!(envelope.transaction.sender, sender);
+        std::fs::remove_file(store_path).unwrap();
+        std::fs::remove_file(pool_path).unwrap();
+    }
+
+    #[test]
+    fn contract_rpc_rejects_submission_when_contract_pool_is_disabled() {
+        let (path, cleanup_path) = test_store();
+        let response = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":23,"method":"chain_submitContractTransaction","params":[]}"#,
+            &path, 71,
+        );
+        assert_eq!(response["error"]["code"], -32601);
+        assert_eq!(response["error"]["message"], "contract transaction submission is disabled on this RPC");
+        std::fs::remove_file(cleanup_path).unwrap();
     }
 
     #[test]
