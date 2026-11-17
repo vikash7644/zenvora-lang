@@ -145,6 +145,10 @@ impl ContractAccountState {
         self.deployed_contracts.len()
     }
 
+    pub fn deployed_contract_ids(&self) -> Vec<String> {
+        self.deployed_contracts.keys().cloned().collect()
+    }
+
     /// Verify and register a signed artifact on the existing QVM 2.0 contract state.
     /// Contract IDs are deterministic and domain-separated from transaction IDs.
     pub fn execute_signed_deploy(
