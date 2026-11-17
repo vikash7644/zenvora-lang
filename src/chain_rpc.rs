@@ -206,6 +206,24 @@ fn handle_json_rpc_with_pool(
                     "maxFee": envelope.transaction.max_fee
                 })
             }).collect();
+            let contract_transactions: Vec<Value> = block.contract_transactions.iter().map(|envelope| {
+                let operation = match &envelope.transaction.operation {
+                    super::contract_protocol::ContractOperation::Deploy { .. } => json!({"type":"deploy"}),
+                    super::contract_protocol::ContractOperation::Call { contract_id, method, calldata } => json!({
+                        "type":"call", "contractId":contract_id, "method":method,
+                        "calldata":hex_encode(calldata)
+                    }),
+                };
+                json!({
+                    "transactionId": envelope.transaction.transaction_id().map(|id| hex_encode(&id)).unwrap_or_default(),
+                    "sender": envelope.transaction.sender,
+                    "nonce": envelope.transaction.nonce,
+                    "gasLimit": envelope.transaction.gas_limit,
+                    "maxFee": envelope.transaction.max_fee,
+                    "gasPrice": envelope.transaction.gas_price,
+                    "operation": operation
+                })
+            }).collect();
             json!({
                 "chainId": block.header.chain_id,
                 "height": block.header.height,
@@ -215,7 +233,8 @@ fn handle_json_rpc_with_pool(
                 "receiptRoot": hex_encode(&block.header.receipt_root),
                 "stateRoot": hex_encode(&block.header.state_root),
                 "proposer": block.header.proposer,
-                "transactions": transactions
+                "transactions": transactions,
+                "contractTransactions": contract_transactions
             })
         }
         "chain_submitTransaction" => {
