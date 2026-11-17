@@ -788,6 +788,34 @@ mod tests {
     }
 
     #[test]
+    fn signed_token_factory_creates_deterministic_token_inside_qvm_state() {
+        let key = SigningKey::from_bytes(&[103; 32]);
+        let public = key.verifying_key().to_bytes();
+        let owner = super::super::chain_protocol::address_from_public_key(&public).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&owner, 1_000_000).unwrap();
+        let mut tx = ContractTransactionV1 {
+            chain_id: 9001, sender: owner.clone(), nonce: 0, gas_limit: 100_000,
+            max_fee: 100_000, gas_price: 1, valid_until_height: Some(200),
+            operation: ContractOperation::Call {
+                contract_id: super::TOKEN_FACTORY_ID.into(), method: "create".into(),
+                calldata: b"QORVYNT Coin,QVC,18,1000".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
+        let receipt = state.execute_signed_registered_call(&tx, &public, 9001, 100).unwrap();
+        let output = receipt.execution.unwrap().output;
+        let token_id = output.first().unwrap();
+        let info = state.tokens.token(token_id).unwrap();
+        assert_eq!(info.name, "QORVYNT Coin");
+        assert_eq!(info.symbol, "QVC");
+        assert_eq!(info.total_supply, 1_000);
+        assert_eq!(state.tokens.balance_of(token_id, &owner), 1_000);
+        assert_eq!(state.nonce(&owner), 1);
+    }
+
+    #[test]
     fn signed_token_transfer_approve_and_transfer_from_use_nonce_fee_and_same_state() {
         let alice_key = SigningKey::from_bytes(&[101; 32]);
         let bob_key = SigningKey::from_bytes(&[102; 32]);
