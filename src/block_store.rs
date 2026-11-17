@@ -6,9 +6,11 @@
 
 use std::collections::BTreeMap;
 
-use super::chain_block::{execute_block, SignedTransactionEnvelope};
+use super::chain_block::{execute_block_with_contracts, SignedTransactionEnvelope};
+use super::contract_executor::SignedContractTransaction;
+use super::contract_protocol::ContractTransactionV1;
 use super::chain_consensus::verify_consensus_proof;
-use super::chain_protocol::{transaction_merkle_root, BlockHeaderV1, TransactionV1};
+use super::chain_protocol::BlockHeaderV1;
 use super::chain_runtime::{ChainRuntime, TransferReceipt};
 
 const STORE_VERSION: &str = "ZENVORA_BLOCK_STORE_V1";
@@ -20,6 +22,7 @@ const MAX_GENESIS_ACCOUNTS: usize = 100_000;
 pub struct StoredBlock {
     pub header: BlockHeaderV1,
     pub transactions: Vec<SignedTransactionEnvelope>,
+    pub contract_transactions: Vec<SignedContractTransaction>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +67,18 @@ impl BlockStore {
         transactions: &[SignedTransactionEnvelope],
         block_receipts: &[TransferReceipt],
     ) -> Result<(), String> {
+        self.append_executed_block_with_contracts(path, runtime_after, header, transactions, &[], block_receipts)
+    }
+
+    pub fn append_executed_block_with_contracts(
+        &mut self,
+        path: impl AsRef<std::path::Path>,
+        runtime_after: &ChainRuntime,
+        header: &BlockHeaderV1,
+        transactions: &[SignedTransactionEnvelope],
+        contract_transactions: &[SignedContractTransaction],
+        block_receipts: &[TransferReceipt],
+    ) -> Result<(), String> {
         if header.chain_id != self.chain_id {
             return Err("block chain ID does not match store".into());
         }
@@ -88,22 +103,13 @@ impl BlockStore {
                 }
             }
             None => {
-                if header.height != 0 || header.parent_hash != [0; 32] || !transactions.is_empty() {
+                if header.height != 0 || header.parent_hash != [0; 32] || !transactions.is_empty() || !contract_transactions.is_empty() {
                     return Err("first stored block must be an empty genesis block at height zero".into());
                 }
             }
         }
 
-        let txs: Vec<TransactionV1> = transactions.iter()
-            .map(|envelope| envelope.transaction.clone())
-            .collect();
-        if header.transaction_root != transaction_merkle_root(&txs)? {
-            return Err("block transaction root does not match supplied transactions".into());
-        }
-        if header.receipt_root != ChainRuntime::receipt_root_for(block_receipts)? {
-            return Err("block receipt root does not match supplied receipts".into());
-        }
-        if header.state_root != runtime_after.state_root() {
+        if header.state_root != runtime_after.try_state_root()? {
             return Err("block state root does not match resulting runtime".into());
         }
         if runtime_after.receipts().len() < block_receipts.len()
@@ -111,6 +117,10 @@ impl BlockStore {
             return Err("block receipts are not the suffix of the resulting runtime log".into());
         }
         for envelope in transactions {
+            envelope.transaction.validate_for(self.chain_id, header.height)?;
+            envelope.transaction.verify_signature(&envelope.public_key)?;
+        }
+        for envelope in contract_transactions {
             envelope.transaction.validate_for(self.chain_id, header.height)?;
             envelope.transaction.verify_signature(&envelope.public_key)?;
         }
@@ -124,14 +134,11 @@ impl BlockStore {
         // instead of replaying the entire chain on every new block.
         let mut replayed = self.runtime.clone();
         let previous_header = self.blocks.last().map(|stored| stored.header.clone());
-        let replayed_receipts = execute_block(
-            &mut replayed,
-            header,
-            transactions,
-            self.chain_id,
-            previous_header.as_ref(),
+        let replayed_receipts = execute_block_with_contracts(
+            &mut replayed, header, transactions, contract_transactions,
+            self.chain_id, previous_header.as_ref(),
         )?;
-        if replayed.state_root() != runtime_after.state_root()
+        if replayed.try_state_root()? != runtime_after.try_state_root()?
             || replayed.receipts() != runtime_after.receipts()
         {
             return Err("runtime does not match independently replayed block execution".into());
@@ -140,7 +147,10 @@ impl BlockStore {
             return Err("supplied block receipts do not match independently executed transactions".into());
         }
 
-        self.blocks.push(StoredBlock { header: header.clone(), transactions: transactions.to_vec() });
+        self.blocks.push(StoredBlock {
+            header: header.clone(), transactions: transactions.to_vec(),
+            contract_transactions: contract_transactions.to_vec(),
+        });
         if let Err(error) = self.save_to_file(path) {
             self.blocks.pop();
             return Err(error);
@@ -174,6 +184,15 @@ impl BlockStore {
                         hex_encode(&envelope.public_key),
                         hex_encode(&transaction_bytes))
                         .map_err(|error| format!("cannot write transaction envelope: {error}"))?;
+                }
+                for (index, envelope) in block.contract_transactions.iter().enumerate() {
+                    let transaction_bytes = envelope.transaction.canonical_bytes()?;
+                    writeln!(file, "K\t{}\t{}\t{}\t{}",
+                        block.header.height,
+                        index,
+                        hex_encode(&envelope.public_key),
+                        hex_encode(&transaction_bytes))
+                        .map_err(|error| format!("cannot write contract transaction envelope: {error}"))?;
                 }
             }
             file.sync_all().map_err(|error| format!("cannot sync block store: {error}"))?;
@@ -252,7 +271,7 @@ impl BlockStore {
                     if header.chain_id != expected_chain_id {
                         return Err(format!("block-store line {line_number} has wrong chain ID"));
                     }
-                    blocks.push(StoredBlock { header, transactions: Vec::new() });
+                    blocks.push(StoredBlock { header, transactions: Vec::new(), contract_transactions: Vec::new() });
                 }
                 ["T", height, transaction_index, encoded_public_key, encoded_transaction]
                     if chain_id.is_some() && !blocks.is_empty() => {
@@ -268,8 +287,25 @@ impl BlockStore {
                     if public_key.len() != 32 {
                         return Err(format!("block-store line {line_number} has invalid public-key length"));
                     }
-                    let transaction = TransactionV1::from_canonical_bytes(&hex_decode(encoded_transaction)?)?;
+                    let transaction = super::chain_protocol::TransactionV1::from_canonical_bytes(&hex_decode(encoded_transaction)?)?;
                     current.transactions.push(SignedTransactionEnvelope { transaction, public_key });
+                }
+                ["K", height, transaction_index, encoded_public_key, encoded_transaction]
+                    if chain_id.is_some() && !blocks.is_empty() => {
+                    let current = blocks.last_mut().expect("checked non-empty block list");
+                    let parsed_height: u64 = height.parse()
+                        .map_err(|_| format!("block-store line {line_number} has invalid contract transaction height"))?;
+                    let parsed_index: usize = transaction_index.parse()
+                        .map_err(|_| format!("block-store line {line_number} has invalid contract transaction index"))?;
+                    if parsed_height != current.header.height || parsed_index != current.contract_transactions.len() {
+                        return Err(format!("block-store line {line_number} has non-contiguous contract transaction ordering"));
+                    }
+                    let public_key = hex_decode(encoded_public_key)?;
+                    if public_key.len() != 32 {
+                        return Err(format!("block-store line {line_number} has invalid contract public-key length"));
+                    }
+                    let transaction = ContractTransactionV1::from_canonical_bytes(&hex_decode(encoded_transaction)?)?;
+                    current.contract_transactions.push(SignedContractTransaction { transaction, public_key });
                 }
                 _ => return Err(format!("block-store line {line_number} has an invalid record or ordering")),
             }
@@ -286,12 +322,9 @@ impl BlockStore {
         }
         let mut previous_header: Option<BlockHeaderV1> = None;
         for block in &store.blocks {
-            execute_block(
-                &mut runtime,
-                &block.header,
-                &block.transactions,
-                expected_chain_id,
-                previous_header.as_ref(),
+            execute_block_with_contracts(
+                &mut runtime, &block.header, &block.transactions,
+                &block.contract_transactions, expected_chain_id, previous_header.as_ref(),
             )?;
             previous_header = Some(block.header.clone());
         }
