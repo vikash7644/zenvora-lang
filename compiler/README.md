@@ -1,49 +1,45 @@
-# QORVYNT — interpreter MVP
+# QORVYNT compiler workspace
 
-This folder contains an isolated line-based Rust interpreter used for syntax experiments and regression tests. The canonical bytecode compiler and VM live at the repository root (`src/main.rs`). GitHub Actions tests both implementations separately; no phone-local setup is required.
+This directory currently contains two distinct development components:
 
-## Implemented in this MVP
+1. **parser.qv** — the QORVYNT-language frontend. It parses source, builds and validates the compiler plan, executes plan-level regression cases, and exposes `compile_to_bytecode_v2(source)` to return canonical Bytecode v2 text for valid input. Invalid source returns an error stage and an empty bytecode string.
+2. **The Rust interpreter MVP** — an isolated line-based interpreter used for syntax experiments and its own regression suite. It is not the canonical bytecode compiler or VM.
+
+The canonical Bytecode v2 compiler, verifier, serializer, and VM implementation still live in the repository root under `src/`. GitHub Actions currently runs the QORVYNT frontend through the Rust reference host and checks its output. **This is not yet a Rust-independent bootstrap:** the QORVYNT frontend has not yet been proven to build and run its own compiler in a clean environment without the Rust host.
+
+## QORVYNT frontend coverage
+
+The frontend has regression coverage for:
+
+- Source-to-plan compilation and plan verification
+- Variables, expressions, control flow, loops, and collection operations
+- Function declarations, recursive calls, local-name validation, duplicate parameters, and call arity
+- Malformed instruction records and invalid jump targets
+- Plan-to-Bytecode-v2 emission, including source containing function declarations
+- The public `compile_to_bytecode_v2(source)` success and failure contract
+
+The CI PASS marker for the public API is `QORVYNT_SOURCE_TO_BYTECODE_V2_API_PASS`. A passing marker confirms the tested source cases through the current reference-host pipeline; it does not establish native standalone execution or full language completeness.
+
+## Rust interpreter MVP
+
+The separate interpreter supports:
 
 - `define name := expression` and reassignment with `name := expression`
 - `show expression`
-- Numbers, booleans, quoted strings, arithmetic and comparisons
+- Numbers, booleans, quoted strings, arithmetic, and comparisons
 - `if { ... } otherwise { ... }` and `otherwise if`
 - `repeat condition { ... }`, `break`, and `continue`
-- A one-million-iteration loop safety cap and nesting limit
-- `break` and `continue` are rejected outside loops with clear errors
-- Tests for expression precedence, booleans, strings, loop control, nested loops, and invalid loop-control statements
+- Loop safety and nesting limits, with regression tests for nested loop control
 
-## Automated verification
+GitHub Actions runs its regression suite independently from the canonical compiler/VM checks. No phone-local setup is required for these cloud checks.
 
-GitHub Actions runs `cargo test` in this folder and executes the shared hello example on every relevant push. The main bytecode VM has its own root-level test suite and also runs `examples/loops.qv` in CI. You do not need to run commands on your phone to keep these cloud checks working.
+## Remaining bootstrap work
 
-## Syntax
+Before calling QORVYNT self-hosted or Rust-independent, the project still needs to:
 
-```qv
-define count := 1
-repeat count <= 5 {
-    show count
-    if count == 3 {
-        break
-    }
-    count := count + 1
-}
-```
+1. Remove the Rust reference host from the required source-compiler execution path.
+2. Build a clean-environment bootstrap that can compile the QORVYNT compiler from QORVYNT source.
+3. Verify stage-by-stage reproducibility and compare bootstrap outputs.
+4. Run the complete compiler and Bytecode v2 regression suite through that bootstrapped executable.
 
-## Loop-control behavior
-
-- `break` exits only the nearest enclosing `repeat` loop.
-- `continue` skips the rest of the current loop body and reevaluates that loop's condition.
-- Using either statement outside a loop exits with a clear `QORVYNT error`.
-- Nested loops are tested to ensure an inner `break` does not terminate the outer loop.
-
-Run the regression suite with:
-
-```sh
-cd compiler
-cargo test
-```
-
-## Current limitations
-
-This is an early interpreter, not a native-code compiler, bytecode VM, blockchain runtime, or production-ready smart-contract language. Functions, collections, modules, static type checking, a formal lexer/parser AST, and bytecode are future work. Use test values only; do not use it to handle keys or funds.
+The current project is under development. Do not treat it as a production smart-contract platform or use it to handle keys or funds.
