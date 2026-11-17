@@ -147,6 +147,25 @@ impl ContractAccountState {
         })
     }
 
+    /// Execute a signed call against source registered by a prior verified deployment.
+    /// The caller cannot substitute different source for an already deployed contract ID.
+    pub fn execute_signed_registered_call(
+        &mut self,
+        tx: &ContractTransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<SignedCallReceipt, String> {
+        let contract_id = match &tx.operation {
+            ContractOperation::Call { contract_id, .. } => contract_id,
+            ContractOperation::Deploy { .. } => return Err("registered call executor requires a call operation".into()),
+        };
+        let deployed = self.deployed_contracts.get(contract_id)
+            .ok_or_else(|| "contract ID is not deployed on this state".to_string())?;
+        let source = deployed.source.clone();
+        self.execute_signed_call(tx, public_key, expected_chain_id, current_height, &source)
+    }
+
     /// Execute one signed call atomically against a candidate state. Failed VM calls consume
     /// the nonce and the full gas limit (bounded by max_fee), while contract storage rolls back.
     pub fn execute_signed_call(
@@ -413,6 +432,30 @@ mod tests {
         let restored = ContractAccountState::decode_snapshot(&encoded).unwrap();
         assert_eq!(restored, state);
         assert!(restored.deployed_contract(&receipt.contract_id).is_some());
+    }
+
+    #[test]
+    fn signed_call_uses_source_from_deployed_registry() {
+        let key = SigningKey::from_bytes(&[78; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 3_000_000).unwrap();
+        let deploy = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let deployed = state.execute_signed_deploy(&deploy, &key.verifying_key().to_bytes(), 9001, 100).unwrap();
+        let mut call = ContractTransactionV1 {
+            chain_id: 9001, sender: address.clone(), nonce: 1, gas_limit: 100_000,
+            max_fee: 500_000, gas_price: 1, valid_until_height: Some(200),
+            operation: ContractOperation::Call {
+                contract_id: deployed.contract_id.clone(), method: "increment".into(),
+                calldata: b"9".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        call.signature = key.sign(&call.signing_bytes().unwrap()).to_bytes().to_vec();
+        let receipt = state.execute_signed_registered_call(&call, &key.verifying_key().to_bytes(), 9001, 100).unwrap();
+        assert!(receipt.execution.is_ok());
+        assert_eq!(state.storage.get(&deployed.contract_id, "count").unwrap(), Some(&b"9"[..]));
     }
 
     #[test]
