@@ -118,3 +118,54 @@ impl ContractBlockStore {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ContractBlockStore;
+    use super::super::contract_block::{contract_block_hash, contract_receipt_root, contract_state_root, contract_transaction_root, ContractBlockHeaderV1};
+    use super::super::contract_executor::ContractAccountState;
+
+    fn temp_path(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("qorvynt-{label}-{}.json", std::process::id()))
+    }
+
+    #[test]
+    fn contract_block_store_persists_and_replays_genesis() {
+        let path = temp_path("block-store");
+        let _ = std::fs::remove_file(&path);
+        let state = ContractAccountState::new();
+        let mut store = ContractBlockStore::new(77, state.clone()).unwrap();
+        let header = ContractBlockHeaderV1 {
+            chain_id: 77, height: 0, timestamp_secs: 1, parent_hash: [0; 32],
+            transaction_root: contract_transaction_root(&[]).unwrap(),
+            receipt_root: contract_receipt_root(&[]).unwrap(),
+            state_root: contract_state_root(&state).unwrap(),
+        };
+        store.append_block(&path, &header, &[]).unwrap();
+        let restored = ContractBlockStore::load_from_file(&path).unwrap();
+        assert_eq!(restored.chain_id(), 77);
+        assert_eq!(restored.blocks(), store.blocks());
+        assert_eq!(restored.runtime().encode_snapshot().unwrap(), store.runtime().encode_snapshot().unwrap());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn contract_block_store_rejects_tampered_persisted_header_on_replay() {
+        let path = temp_path("tampered-store");
+        let _ = std::fs::remove_file(&path);
+        let state = ContractAccountState::new();
+        let mut store = ContractBlockStore::new(77, state.clone()).unwrap();
+        let header = ContractBlockHeaderV1 {
+            chain_id: 77, height: 0, timestamp_secs: 1, parent_hash: [0; 32],
+            transaction_root: contract_transaction_root(&[]).unwrap(),
+            receipt_root: contract_receipt_root(&[]).unwrap(),
+            state_root: contract_state_root(&state).unwrap(),
+        };
+        store.append_block(&path, &header, &[]).unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        value["blocks"][0]["header"]["state_root"][0] = serde_json::Value::from(1);
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(ContractBlockStore::load_from_file(&path).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+}
