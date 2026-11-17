@@ -122,7 +122,7 @@ impl ContractBlockStore {
 #[cfg(test)]
 mod tests {
     use super::ContractBlockStore;
-    use super::super::contract_block::{contract_block_hash, contract_receipt_root, contract_state_root, contract_transaction_root, ContractBlockHeaderV1};
+    use super::super::contract_block::{contract_receipt_root, contract_state_root, contract_transaction_root, ContractBlockHeaderV1};
     use super::super::contract_executor::ContractAccountState;
 
     fn temp_path(label: &str) -> std::path::PathBuf {
@@ -163,7 +163,8 @@ mod tests {
         };
         store.append_block(&path, &header, &[]).unwrap();
         let mut value: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        value["blocks"][0]["header"]["state_root"][0] = serde_json::Value::from(1);
+        let first = value["blocks"][0]["header"]["state_root"][0].as_u64().unwrap();
+        value["blocks"][0]["header"]["state_root"][0] = serde_json::Value::from((first + 1) % 256);
         std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
         assert!(ContractBlockStore::load_from_file(&path).is_err());
         std::fs::remove_file(path).unwrap();
