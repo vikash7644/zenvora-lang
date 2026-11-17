@@ -6,6 +6,7 @@ use super::contract_gas::{GasMeter, BASE_EXECUTION_GAS, STORAGE_WRITE_GAS};
 use super::contract_protocol::{ContractOperation, ContractTransactionV1};
 use super::contract_runtime::{execute, ExecutionReceipt};
 use super::contract_state::{AccessMode, ContractState};
+use super::token_standard::TokenLedger;
 
 const MAX_DEPLOYED_CONTRACTS: usize = 10_000;
 const MAX_DEPLOYED_SOURCE_BYTES: usize = 256 * 1024;
@@ -39,6 +40,7 @@ pub struct ContractAccountState {
     balances: BTreeMap<String, u64>,
     nonces: BTreeMap<String, u64>,
     deployed_contracts: BTreeMap<String, DeployedContract>,
+    pub tokens: TokenLedger,
     pub fees_collected: u64,
 }
 
@@ -68,7 +70,7 @@ pub struct SignedCallReceipt {
 
 impl Default for ContractAccountState {
     fn default() -> Self {
-        Self { storage: ContractState::new(), balances: BTreeMap::new(), nonces: BTreeMap::new(), deployed_contracts: BTreeMap::new(), fees_collected: 0 }
+        Self { storage: ContractState::new(), balances: BTreeMap::new(), nonces: BTreeMap::new(), deployed_contracts: BTreeMap::new(), tokens: TokenLedger::new(), fees_collected: 0 }
     }
 }
 
@@ -77,7 +79,8 @@ impl ContractAccountState {
 
     /// Deterministic commitment for this contract account/storage/registry snapshot.
     pub fn state_root(&self) -> Result<[u8; 32], String> {
-        let snapshot = self.encode_snapshot()?;
+        // Preserve pre-token state roots for existing chains until a token is actually created.
+        let snapshot = if self.tokens.is_empty() { self.encode_snapshot_v2()? } else { self.encode_snapshot()? };
         let mut hasher = Sha256::new();
         hasher.update(b"QORVYNT_CONTRACT_STATE_ROOT_V1\0");
         hasher.update(snapshot);
@@ -143,6 +146,26 @@ impl ContractAccountState {
 
     pub fn deployed_contract_count(&self) -> usize {
         self.deployed_contracts.len()
+    }
+
+    /// Native fungible-token operations are part of the same QVM contract account state.
+    pub fn create_token(&mut self, token_id: &str, name: &str, symbol: &str, decimals: u8, owner: &str, initial_supply: u128) -> Result<(), String> {
+        self.tokens.create(token_id, name, symbol, decimals, owner, initial_supply)
+    }
+    pub fn token_transfer(&mut self, token_id: &str, sender: &str, recipient: &str, amount: u128) -> Result<(), String> {
+        self.tokens.transfer(token_id, sender, recipient, amount)
+    }
+    pub fn token_approve(&mut self, token_id: &str, owner: &str, spender: &str, amount: u128) -> Result<(), String> {
+        self.tokens.approve(token_id, owner, spender, amount)
+    }
+    pub fn token_transfer_from(&mut self, token_id: &str, spender: &str, owner: &str, recipient: &str, amount: u128) -> Result<(), String> {
+        self.tokens.transfer_from(token_id, spender, owner, recipient, amount)
+    }
+    pub fn token_mint(&mut self, token_id: &str, caller: &str, recipient: &str, amount: u128) -> Result<(), String> {
+        self.tokens.mint(token_id, caller, recipient, amount)
+    }
+    pub fn token_burn(&mut self, token_id: &str, holder: &str, amount: u128) -> Result<(), String> {
+        self.tokens.burn(token_id, holder, amount)
     }
 
     pub fn deployed_contract_ids(&self) -> Vec<String> {
@@ -293,7 +316,7 @@ impl ContractAccountState {
 
     /// Canonical snapshot includes QVM contract storage, account balances, replay-protection
     /// nonces and accumulated fees. Chain replay/state-root validation remains the caller's duty.
-    pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
+    fn encode_snapshot_v2(&self) -> Result<Vec<u8>, String> {
         let storage = self.storage.encode_snapshot()?;
         let mut out = Vec::new();
         out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0");
@@ -302,12 +325,38 @@ impl ContractAccountState {
         put_map(&mut out, &self.balances)?;
         put_map(&mut out, &self.nonces)?;
         put_deployed_contracts(&mut out, &self.deployed_contracts)?;
-        if out.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        Ok(out)
+    }
+
+    pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V3\\0");
+        let legacy = self.encode_snapshot_v2()?;
+        put_bytes(&mut out, &legacy)?;
+        let tokens = self.tokens.encode_snapshot()?;
+        put_bytes(&mut out, &tokens)?;
+        if out.len() > 12 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
         Ok(out)
     }
 
     pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
-        if bytes.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        if bytes.len() > 12 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        if bytes.starts_with(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0") {
+            return Self::decode_snapshot_v2(bytes);
+        }
+        let mut reader = ExecutorReader { bytes, offset: 0 };
+        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V3\\0")?;
+        let legacy = reader.read_bytes(4 * 1024 * 1024)?;
+        let tokens = TokenLedger::decode_snapshot(reader.read_bytes(8 * 1024 * 1024)?)?;
+        reader.finish()?;
+        let mut state = Self::decode_snapshot_v2(legacy)?;
+        state.tokens = tokens;
+        if state.encode_snapshot()?.as_slice() != bytes { return Err("contract executor snapshot is not canonical".into()); }
+        Ok(state)
+    }
+
+    fn decode_snapshot_v2(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > 4 * 1024 * 1024 { return Err("legacy contract executor snapshot exceeds size limit".into()); }
         let mut reader = ExecutorReader { bytes, offset: 0 };
         reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0")?;
         let storage = ContractState::decode_snapshot(reader.read_bytes(2 * 1024 * 1024)?)?;
@@ -316,8 +365,8 @@ impl ContractAccountState {
         let nonces = reader.read_map()?;
         let deployed_contracts = reader.read_deployed_contracts()?;
         reader.finish()?;
-        let state = Self { storage, balances, nonces, deployed_contracts, fees_collected };
-        if state.encode_snapshot()? != bytes { return Err("contract executor snapshot is not canonical".into()); }
+        let state = Self { storage, balances, nonces, deployed_contracts, tokens: TokenLedger::new(), fees_collected };
+        if state.encode_snapshot_v2()?.as_slice() != bytes { return Err("legacy contract executor snapshot is not canonical".into()); }
         Ok(state)
     }
 
