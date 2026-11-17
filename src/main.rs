@@ -1438,7 +1438,13 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
             if *index < 0 {
                 return Err("char_at index out of bounds".into());
             }
-            value.chars().nth(*index as usize)
+            let index = usize::try_from(*index).map_err(|_| "char_at index out of bounds")?;
+            if value.is_ascii() {
+                let byte = value.as_bytes().get(index).copied()
+                    .ok_or_else(|| "char_at index out of bounds".to_string())?;
+                return Ok(Value::Str(char::from(byte).to_string()));
+            }
+            value.chars().nth(index)
                 .map(|character| Value::Str(character.to_string()))
                 .ok_or_else(|| "char_at index out of bounds".into())
         }
