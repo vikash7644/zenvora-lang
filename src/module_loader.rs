@@ -242,8 +242,8 @@ mod tests {
     #[test]
     fn expands_qv_modules() {
         let temp = TempDir::new();
-        fs::write(temp.0.join("main.qv"), "use \\"child.qv\\"\\nshow add(2, 3)\\n").unwrap();
-        fs::write(temp.0.join("child.qv"), "fn add(a, b) {\\n return a + b\\n}\\n").unwrap();
+        fs::write(temp.0.join("main.qv"), "use \"child.qv\"\nshow add(2, 3)\n").unwrap();
+        fs::write(temp.0.join("child.qv"), "fn add(a, b) {\n return a + b\n}\n").unwrap();
         let source = load(&temp.0.join("main.qv")).unwrap();
         assert!(source.contains("fn add(a, b)"));
         assert!(source.contains("show add(2, 3)"));
