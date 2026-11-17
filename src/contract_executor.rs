@@ -101,8 +101,118 @@ impl ContractAccountState {
         })
     }
 
-    pub fn save_contract_storage(&self, path: &std::path::Path) -> Result<(), String> {
-        self.storage.save_snapshot(path)
+    /// Canonical snapshot includes QVM contract storage, account balances, replay-protection
+    /// nonces and accumulated fees. Chain replay/state-root validation remains the caller's duty.
+    pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
+        let storage = self.storage.encode_snapshot()?;
+        let mut out = Vec::new();
+        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0");
+        put_bytes(&mut out, &storage)?;
+        out.extend_from_slice(&self.fees_collected.to_be_bytes());
+        put_map(&mut out, &self.balances)?;
+        put_map(&mut out, &self.nonces)?;
+        if out.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        Ok(out)
+    }
+
+    pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        let mut reader = ExecutorReader { bytes, offset: 0 };
+        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0")?;
+        let storage = ContractState::decode_snapshot(reader.read_bytes(2 * 1024 * 1024)?)?;
+        let fees_collected = reader.read_u64()?;
+        let balances = reader.read_map()?;
+        let nonces = reader.read_map()?;
+        reader.finish()?;
+        let state = Self { storage, balances, nonces, fees_collected };
+        if state.encode_snapshot()? != bytes { return Err("contract executor snapshot is not canonical".into()); }
+        Ok(state)
+    }
+
+    pub fn save_snapshot(&self, path: &std::path::Path) -> Result<(), String> {
+        use std::io::Write;
+        let bytes = self.encode_snapshot()?;
+        let name = path.file_name().ok_or_else(|| "snapshot path must name a file".to_string())?;
+        let mut temp_name = name.to_os_string();
+        temp_name.push(format!(".tmp-{}", std::process::id()));
+        let temp = path.with_file_name(temp_name);
+        let result = (|| {
+            let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)
+                .map_err(|e| format!("cannot create executor snapshot: {e}"))?;
+            file.write_all(&bytes).map_err(|e| format!("cannot write executor snapshot: {e}"))?;
+            file.sync_all().map_err(|e| format!("cannot sync executor snapshot: {e}"))?;
+            std::fs::rename(&temp, path).map_err(|e| format!("cannot install executor snapshot: {e}"))?;
+            Ok(())
+        })();
+        if result.is_err() { let _ = std::fs::remove_file(&temp); }
+        result
+    }
+
+    pub fn load_snapshot(path: &std::path::Path) -> Result<Self, String> {
+        use std::io::Read;
+        let metadata = std::fs::metadata(path).map_err(|e| format!("cannot stat executor snapshot: {e}"))?;
+        if metadata.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        let mut file = std::fs::File::open(path).map_err(|e| format!("cannot open executor snapshot: {e}"))?;
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes)
+            .map_err(|e| format!("cannot read executor snapshot: {e}"))?;
+        Self::decode_snapshot(&bytes)
+    }
+}
+
+
+fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
+    let len = u32::try_from(bytes.len()).map_err(|_| "snapshot field too large")?;
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(bytes);
+    Ok(())
+}
+
+fn put_map(out: &mut Vec<u8>, map: &BTreeMap<String, u64>) -> Result<(), String> {
+    out.extend_from_slice(&u32::try_from(map.len()).map_err(|_| "too many account records")?.to_be_bytes());
+    for (address, value) in map {
+        if address.is_empty() || address.len() > 64 || !address.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return Err("invalid account address in snapshot".into());
+        }
+        put_bytes(out, address.as_bytes())?;
+        out.extend_from_slice(&value.to_be_bytes());
+    }
+    Ok(())
+}
+
+struct ExecutorReader<'a> { bytes: &'a [u8], offset: usize }
+impl<'a> ExecutorReader<'a> {
+    fn take(&mut self, n: usize) -> Result<&'a [u8], String> {
+        let end = self.offset.checked_add(n).ok_or("snapshot offset overflow")?;
+        if end > self.bytes.len() { return Err("truncated executor snapshot".into()); }
+        let value = &self.bytes[self.offset..end]; self.offset = end; Ok(value)
+    }
+    fn expect(&mut self, tag: &[u8]) -> Result<(), String> {
+        if self.take(tag.len())? != tag { return Err("unsupported executor snapshot version".into()); } Ok(())
+    }
+    fn read_u32(&mut self) -> Result<u32, String> { Ok(u32::from_be_bytes(self.take(4)?.try_into().map_err(|_| "bad u32")?)) }
+    fn read_u64(&mut self) -> Result<u64, String> { Ok(u64::from_be_bytes(self.take(8)?.try_into().map_err(|_| "bad u64")?)) }
+    fn read_bytes(&mut self, max: usize) -> Result<&'a [u8], String> {
+        let len = self.read_u32()? as usize;
+        if len > max { return Err("executor snapshot field exceeds limit".into()); }
+        self.take(len)
+    }
+    fn read_map(&mut self) -> Result<BTreeMap<String, u64>, String> {
+        let count = self.read_u32()? as usize;
+        if count > 100_000 { return Err("too many account records in snapshot".into()); }
+        let mut map = BTreeMap::new();
+        let mut previous: Option<String> = None;
+        for _ in 0..count {
+            let address = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "account address is not UTF-8")?;
+            if address.is_empty() || !address.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') { return Err("invalid account address in snapshot".into()); }
+            if previous.as_ref().is_some_and(|p| p >= &address) { return Err("account records are not strictly sorted".into()); }
+            previous = Some(address.clone());
+            map.insert(address, self.read_u64()?);
+        }
+        Ok(map)
+    }
+    fn finish(&self) -> Result<(), String> {
+        if self.offset != self.bytes.len() { return Err("trailing bytes in executor snapshot".into()); } Ok(())
     }
 }
 
@@ -169,6 +279,22 @@ mod tests {
         assert_eq!(state.storage.get("counter", "count").unwrap(), None);
         assert_eq!(state.nonce(&address), 1);
         assert_eq!(receipt.fee_charged, tx.gas_limit * tx.gas_price);
+    }
+
+
+    #[test]
+    fn executor_snapshot_preserves_storage_balances_nonces_and_fees() {
+        let key = SigningKey::from_bytes(&[75; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 1_000_000).unwrap();
+        let tx = signed_call(&key, 0, "6");
+        state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, SOURCE).unwrap();
+        let encoded = state.encode_snapshot().unwrap();
+        let restored = ContractAccountState::decode_snapshot(&encoded).unwrap();
+        assert_eq!(restored, state);
+        assert_eq!(restored.storage.get("counter", "count").unwrap(), Some(&b"6"[..]));
+        assert_eq!(restored.nonce(&address), 1);
     }
 
     #[test]
