@@ -4043,6 +4043,53 @@ mod tests {
         }
     }
 
+    #[test]
+    fn contract_peer_quorum_cli_keeps_pools_and_state_unchanged_when_validator_unreachable() {
+        let suffix = std::process::id();
+        let base = std::env::temp_dir();
+        let key_path = base.join(format!("qorvynt-peer-quorum-key-{suffix}.zvk"));
+        let store_path = base.join(format!("qorvynt-peer-quorum-store-{suffix}.zvb"));
+        let source_path = base.join(format!("qorvynt-peer-quorum-{suffix}.qv"));
+        let artifact_path = base.join(format!("qorvynt-peer-quorum-{suffix}.json"));
+        let transfer_pool_path = base.join(format!("qorvynt-peer-quorum-{suffix}.transfers"));
+        let contract_pool_path = base.join(format!("qorvynt-peer-quorum-{suffix}.contracts"));
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+        let key = key_path.to_string_lossy().to_string();
+        let store = store_path.to_string_lossy().to_string();
+        let source = source_path.to_string_lossy().to_string();
+        let artifact = artifact_path.to_string_lossy().to_string();
+        let transfer_pool = transfer_pool_path.to_string_lossy().to_string();
+        let contract_pool = contract_pool_path.to_string_lossy().to_string();
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key.clone()]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store.clone(), "71".into(), key.clone(), "5000000".into(),
+        ]).unwrap();
+        std::fs::write(&source_path, "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\n}\n").unwrap();
+        super::write_contract_artifact(&source, &artifact).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-contract-deploy".into(), store.clone(), "71".into(),
+            key.clone(), artifact, contract_pool.clone(), "200000".into(), "1".into(), "200000".into(),
+        ]).unwrap();
+
+        let error = run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce-contracts-peer-quorum".into(),
+            store.clone(), "71".into(), transfer_pool.clone(), contract_pool.clone(),
+            key, "127.0.0.1:1".into(),
+        ]).unwrap_err();
+        assert!(error.contains("cannot connect to peer"), "{error}");
+        let (loaded, runtime) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 1, "failed quorum must not append a block");
+        let pending = crate::tx_pool::ContractTransactionPool::load_from_file(
+            &contract_pool, &runtime, 71, 1,
+        ).unwrap();
+        assert_eq!(pending.len(), 1, "failed quorum must preserve pending contract transactions");
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
         let mut output = Vec::new();
