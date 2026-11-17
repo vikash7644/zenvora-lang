@@ -42,7 +42,7 @@ When the contract pool is enabled, token state can be queried through:
 - chain_getTokenInfo with tokenId
 - chain_getTokenBalance with tokenId and account
 - chain_getTokenAllowance with tokenId, owner, and spender
-- chain_getTokenEvents with tokenId
+- chain_getTokenEvents with tokenId; optional limit (1–500, default 100) and offset (default 0) bound the response and support pagination. The response includes page count, total matching events, limit, and offset.
 
 Large integer values (total supply, balance, allowance) are returned as decimal strings to avoid JSON number precision loss. The local RPC server binds to loopback only; this is not a public RPC endpoint.
 
