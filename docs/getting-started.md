@@ -21,8 +21,8 @@ To run the compiler directly from the repository, prefix commands with `cargo ru
 
 Create `hello.qv` with this source:
 
-```zv
-define name := "Zenvora"
+```qorvynt
+define name := "QORVYNT"
 define answer := multiply(6, 7)
 
 show "Hello, " + name
@@ -43,7 +43,7 @@ cargo run -- --check hello.qv
 Expected output from the first command:
 
 ```text
-Hello, Zenvora
+Hello, QORVYNT
 42
 ```
 
@@ -71,7 +71,7 @@ Run an example with `cargo run -- examples/functions.qv`. GitHub Actions runs th
 
 ### Variables and expressions
 
-```zv
+```qorvynt
 define count := 3
 count := count + 1
 show count
@@ -82,7 +82,7 @@ Values include signed 64-bit integers, booleans, strings, arrays, and maps. Inte
 
 ### Conditions and loops
 
-```zv
+```qorvynt
 define n := 0
 repeat n < 4 {
     show n
@@ -94,7 +94,7 @@ Use `if condition { ... } otherwise { ... }` for branching. `break` exits the ne
 
 ### Functions
 
-```zv
+```qorvynt
 fn square(value) {
     return value * value
 }
@@ -105,7 +105,7 @@ Functions support parameters, expression calls, return values, and recursion. Ea
 
 ### Collections
 
-```zv
+```qorvynt
 define numbers := array(10, 20, 30)
 show numbers[1]
 show len(numbers)
