@@ -1,4 +1,4 @@
-name: Zenvora Lang CI
+name: QORVYNT CI
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
       - name: Validate distributable Rust package
         run: cargo package --locked
 
-      - name: Execute every Zenvora Lang example
+      - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
       - name: Test persistent contract CLI, gas, and rollback
@@ -56,61 +56,61 @@ jobs:
         run: ./target/release/zv --version
 
       - name: Smoke-test optimized release example
-        run: ./target/release/zv examples/hello.zv | grep -Fxq 35
+        run: ./target/release/zv examples/hello.qv | grep -Fxq 35
 
       - name: Run hello example
-        run: cargo run --locked -- examples/hello.zv
+        run: cargo run --locked -- examples/hello.qv
 
-      - name: Run Zenvora Lang language tour
-        run: cargo run --locked -- examples/zenvora-language-tour.zv
+      - name: Run QORVYNT language tour
+        run: cargo run --locked -- examples/zenvora-language-tour.qv
 
       - name: Run loop-control example
-        run: cargo run --locked -- examples/loops.zv
+        run: cargo run --locked -- examples/loops.qv
 
       - name: Run functions example
-        run: cargo run --locked -- examples/functions.zv
+        run: cargo run --locked -- examples/functions.qv
 
       - name: Run basic functions example #35
-        run: cargo run --locked -- examples/functions-basic.zv
+        run: cargo run --locked -- examples/functions-basic.qv
 
       - name: Run functions summary example #36
-        run: cargo run --locked -- examples/functions-summary.zv
+        run: cargo run --locked -- examples/functions-summary.qv
 
       - name: Run booleans example
-        run: cargo run --locked -- examples/booleans.zv
+        run: cargo run --locked -- examples/booleans.qv
 
       - name: Run strings example
-        run: cargo run --locked -- examples/strings.zv
+        run: cargo run --locked -- examples/strings.qv
 
       - name: Run collections example
-        run: cargo run --locked -- examples/collections.zv
+        run: cargo run --locked -- examples/collections.qv
 
       - name: Run direct indexing example
-        run: cargo run --locked -- examples/indexing.zv
+        run: cargo run --locked -- examples/indexing.qv
 
       - name: Run standard library example
-        run: cargo run --locked -- examples/stdlib.zv
+        run: cargo run --locked -- examples/stdlib.qv
 
       - name: Run string standard library example
-        run: cargo run --locked -- examples/stdlib-strings.zv
+        run: cargo run --locked -- examples/stdlib-strings.qv
 
       - name: Run contract DSL example
-        run: cargo run --locked -- examples/contracts.zv
+        run: cargo run --locked -- examples/contracts.qv
 
-      - name: Run Zenvora Lang transaction-rule checks
-        run: cargo run --locked -- examples/chain_transfer.zv
+      - name: Run QORVYNT transaction-rule checks
+        run: cargo run --locked -- examples/chain_transfer.qv
 
       - name: Run module import example
-        run: cargo run --locked -- examples/modules.zv
+        run: cargo run --locked -- examples/modules.qv
 
       - name: Compile example to bytecode v1
-        run: cargo run --locked -- --emit-bytecode examples/functions.zv /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/zenvora-functions.zvb
 
       - name: Execute compiled bytecode v1
         run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zvb
 
       - name: Compile example to experimental bytecode v2
-        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.zv /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/zenvora-functions.zv2b
 
       - name: Check bytecode v2 header
         run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.zv2b
@@ -176,10 +176,10 @@ jobs:
         run: cargo test --all-targets
 
       - name: Run shared hello example
-        run: cargo run -- ../examples/hello.zv
+        run: cargo run -- ../examples/hello.qv
 
   editor-support:
-    name: Validate Zenvora editor support
+    name: Validate QORVYNT editor support
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
