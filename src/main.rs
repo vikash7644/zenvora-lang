@@ -3881,6 +3881,65 @@ mod tests {
         }
     }
 
+    #[test]
+    fn contract_deploy_and_call_cli_commit_and_replay_on_chain() {
+        let suffix = std::process::id();
+        let base = std::env::temp_dir();
+        let key_path = base.join(format!("qorvynt-contract-cli-{suffix}.zvk"));
+        let store_path = base.join(format!("qorvynt-contract-cli-{suffix}.zvb"));
+        let source_path = base.join(format!("qorvynt-contract-cli-{suffix}.qv"));
+        let artifact_path = base.join(format!("qorvynt-contract-cli-{suffix}.json"));
+        let transfer_pool_path = base.join(format!("qorvynt-contract-cli-{suffix}.transfers"));
+        let contract_pool_path = base.join(format!("qorvynt-contract-cli-{suffix}.contracts"));
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+        let key = key_path.to_string_lossy().to_string();
+        let store = store_path.to_string_lossy().to_string();
+        let source = source_path.to_string_lossy().to_string();
+        let artifact = artifact_path.to_string_lossy().to_string();
+        let transfer_pool = transfer_pool_path.to_string_lossy().to_string();
+        let contract_pool = contract_pool_path.to_string_lossy().to_string();
+
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key.clone()]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store.clone(), "71".into(), key.clone(), "5000000".into(),
+        ]).unwrap();
+        std::fs::write(&source_path, "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n").unwrap();
+        super::write_contract_artifact(&source, &artifact).unwrap();
+
+        run_chain_command(&vec![
+            "zv".into(), "--chain-contract-deploy".into(), store.clone(), "71".into(),
+            key.clone(), artifact.clone(), contract_pool.clone(),
+            "200000".into(), "1".into(), "200000".into(),
+        ]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce-contracts".into(), store.clone(), "71".into(),
+            transfer_pool.clone(), contract_pool.clone(), key.clone(),
+        ]).unwrap();
+
+        let (_, after_deploy) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
+        let contract_id = after_deploy.contract_state().deployed_contract_ids().into_iter().next().unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-contract-call".into(), store.clone(), "71".into(),
+            key.clone(), contract_id.clone(), "increment".into(), "7".into(), contract_pool.clone(),
+            "100000".into(), "1".into(), "100000".into(),
+        ]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce-contracts".into(), store.clone(), "71".into(),
+            transfer_pool.clone(), contract_pool.clone(), key.clone(),
+        ]).unwrap();
+
+        let (loaded, restored) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 3);
+        assert_eq!(loaded.blocks()[1].contract_transactions.len(), 1);
+        assert_eq!(loaded.blocks()[2].contract_transactions.len(), 1);
+        assert_eq!(restored.contract_state().storage.get(&contract_id, "count").unwrap(), Some(&b"7"[..]));
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
         let mut output = Vec::new();
