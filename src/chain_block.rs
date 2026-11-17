@@ -160,11 +160,11 @@ fn combined_contract_transaction_root(
     for envelope in transactions {
         encoded.extend_from_slice(&envelope.transaction.transaction_id()?);
     }
-    let contract_root = hash_domain(b"QORVYNT_BLOCK_CONTRACT_TXS_V1\\0", &encoded);
+    let contract_root = hash_domain(b"QORVYNT_BLOCK_CONTRACT_TXS_V1\0", &encoded);
     let mut combined = Vec::with_capacity(64);
     combined.extend_from_slice(&transfer_root);
     combined.extend_from_slice(&contract_root);
-    Ok(hash_domain(b"QORVYNT_BLOCK_TX_ROOT_V1\\0", &combined))
+    Ok(hash_domain(b"QORVYNT_BLOCK_TX_ROOT_V1\0", &combined))
 }
 
 fn combined_contract_receipt_root(
@@ -208,11 +208,11 @@ fn combined_contract_receipt_root(
             }
         }
     }
-    let contract_root = hash_domain(b"QORVYNT_BLOCK_CONTRACT_RECEIPTS_V1\\0", &encoded);
+    let contract_root = hash_domain(b"QORVYNT_BLOCK_CONTRACT_RECEIPTS_V1\0", &encoded);
     let mut combined = Vec::with_capacity(64);
     combined.extend_from_slice(&transfer_root);
     combined.extend_from_slice(&contract_root);
-    Ok(hash_domain(b"QORVYNT_BLOCK_RECEIPT_ROOT_V1\\0", &combined))
+    Ok(hash_domain(b"QORVYNT_BLOCK_RECEIPT_ROOT_V1\0", &combined))
 }
 
 fn append_commitment_string(out: &mut Vec<u8>, value: &str) -> Result<(), String> {
