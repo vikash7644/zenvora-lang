@@ -1,5 +1,5 @@
 # QORVYNT language tour
-# This file is executable with: zv examples/zenvora-language-tour.zv
+# This file is executable with: zv examples/qorvynt-language-tour.qv
 
 define project := "QORVYNT"
 define version := 8
