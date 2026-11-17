@@ -441,7 +441,16 @@ mod tests {
         let key = SigningKey::from_bytes(&[81; 32]);
         let public = key.verifying_key().to_bytes();
         let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
-        let source = "contract Counter {\\nstate count := 0\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let source = r#"contract Counter {
+state count := 0
+action increment(amount) {
+count := count + amount
+}
+view current() {
+return count
+}
+}
+"#;
         let artifact = serde_json::to_vec(&super::super::contract_abi_and_artifact(source).unwrap()).unwrap();
         let mut tx = ContractTransactionV1 {
             chain_id: 9001, sender: address.clone(), nonce: 0, gas_limit: 100_000,
