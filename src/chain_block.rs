@@ -6,6 +6,8 @@
 use super::chain_protocol::{transaction_merkle_root, BlockHeaderV1, TransactionV1};
 use super::chain_consensus::verify_consensus_proof;
 use super::chain_runtime::{ChainRuntime, TransferReceipt};
+use super::contract_executor::{ContractExecutionReceipt, SignedContractTransaction};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignedTransactionEnvelope {
@@ -24,7 +26,20 @@ pub fn execute_block(
     expected_chain_id: u64,
     previous_header: Option<&BlockHeaderV1>,
 ) -> Result<Vec<TransferReceipt>, String> {
-    execute_block_inner(runtime, header, transactions, expected_chain_id, previous_header, true)
+    execute_block_inner(runtime, header, transactions, &[], expected_chain_id, previous_header, true)
+}
+
+/// Execute a block containing ordinary transfers followed by signed QORVYNT deploy/call
+/// transactions. Contract transaction and receipt commitments are folded into the header roots.
+pub fn execute_block_with_contracts(
+    runtime: &mut ChainRuntime,
+    header: &BlockHeaderV1,
+    transactions: &[SignedTransactionEnvelope],
+    contract_transactions: &[SignedContractTransaction],
+    expected_chain_id: u64,
+    previous_header: Option<&BlockHeaderV1>,
+) -> Result<Vec<TransferReceipt>, String> {
+    execute_block_inner(runtime, header, transactions, contract_transactions, expected_chain_id, previous_header, true)
 }
 
 /// Validate and execute a candidate without requiring quorum yet. Callers must use a cloned
@@ -36,13 +51,14 @@ pub fn execute_block_candidate(
     expected_chain_id: u64,
     previous_header: Option<&BlockHeaderV1>,
 ) -> Result<Vec<TransferReceipt>, String> {
-    execute_block_inner(runtime, header, transactions, expected_chain_id, previous_header, false)
+    execute_block_inner(runtime, header, transactions, &[], expected_chain_id, previous_header, false)
 }
 
 fn execute_block_inner(
     runtime: &mut ChainRuntime,
     header: &BlockHeaderV1,
     transactions: &[SignedTransactionEnvelope],
+    contract_transactions: &[SignedContractTransaction],
     expected_chain_id: u64,
     previous_header: Option<&BlockHeaderV1>,
     require_consensus: bool,
@@ -84,9 +100,14 @@ fn execute_block_inner(
 
     let transactions_only: Vec<TransactionV1> =
         transactions.iter().map(|envelope| envelope.transaction.clone()).collect();
-    let computed_transaction_root = transaction_merkle_root(&transactions_only)?;
+    let transfer_transaction_root = transaction_merkle_root(&transactions_only)?;
+    let computed_transaction_root = if contract_transactions.is_empty() {
+        transfer_transaction_root
+    } else {
+        combined_contract_transaction_root(transfer_transaction_root, contract_transactions)?
+    };
     if header.transaction_root != computed_transaction_root {
-        return Err("block transaction root does not match its transactions".into());
+        return Err("block transaction root does not match its transfer and contract transactions".into());
     }
 
     let mut candidate = runtime.clone();
@@ -100,11 +121,19 @@ fn execute_block_inner(
         )?;
     }
     let block_receipts = candidate.receipts()[starting_receipt_count..].to_vec();
-    let computed_receipt_root = ChainRuntime::receipt_root_for(&block_receipts)?;
+    let transfer_receipt_root = ChainRuntime::receipt_root_for(&block_receipts)?;
+    let contract_receipts = candidate.apply_signed_contract_transactions(
+        contract_transactions, expected_chain_id, header.height,
+    )?;
+    let computed_receipt_root = if contract_transactions.is_empty() {
+        transfer_receipt_root
+    } else {
+        combined_contract_receipt_root(transfer_receipt_root, &contract_receipts)?
+    };
     if header.receipt_root != computed_receipt_root {
-        return Err("block receipt root does not match executed receipts".into());
+        return Err("block receipt root does not match executed transfer and contract receipts".into());
     }
-    if header.state_root != candidate.state_root() {
+    if header.state_root != candidate.try_state_root()? {
         return Err("block state root does not match resulting state".into());
     }
 
@@ -112,6 +141,85 @@ fn execute_block_inner(
     // and commitment checks above pass.
     *runtime = candidate;
     Ok(block_receipts)
+}
+
+
+fn hash_domain(domain: &[u8], bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(domain);
+    hasher.update(bytes);
+    hasher.finalize().into()
+}
+
+fn combined_contract_transaction_root(
+    transfer_root: [u8; 32],
+    transactions: &[SignedContractTransaction],
+) -> Result<[u8; 32], String> {
+    let mut encoded = Vec::with_capacity(32 + transactions.len() * 32 + 8);
+    encoded.extend_from_slice(&(transactions.len() as u64).to_be_bytes());
+    for envelope in transactions {
+        encoded.extend_from_slice(&envelope.transaction.transaction_id()?);
+    }
+    let contract_root = hash_domain(b"QORVYNT_BLOCK_CONTRACT_TXS_V1\\0", &encoded);
+    let mut combined = Vec::with_capacity(64);
+    combined.extend_from_slice(&transfer_root);
+    combined.extend_from_slice(&contract_root);
+    Ok(hash_domain(b"QORVYNT_BLOCK_TX_ROOT_V1\\0", &combined))
+}
+
+fn combined_contract_receipt_root(
+    transfer_root: [u8; 32],
+    receipts: &[ContractExecutionReceipt],
+) -> Result<[u8; 32], String> {
+    let mut encoded = Vec::new();
+    encoded.extend_from_slice(&(receipts.len() as u64).to_be_bytes());
+    for receipt in receipts {
+        match receipt {
+            ContractExecutionReceipt::Deploy(value) => {
+                encoded.push(0);
+                encoded.extend_from_slice(&value.transaction_id);
+                append_commitment_string(&mut encoded, &value.contract_id)?;
+                append_commitment_string(&mut encoded, &value.sender)?;
+                encoded.extend_from_slice(&value.nonce.to_be_bytes());
+                encoded.extend_from_slice(&value.gas_charged.to_be_bytes());
+                encoded.extend_from_slice(&value.fee_charged.to_be_bytes());
+                encoded.extend_from_slice(&value.sender_balance.to_be_bytes());
+                encoded.extend_from_slice(&value.next_nonce.to_be_bytes());
+            }
+            ContractExecutionReceipt::Call(value) => {
+                encoded.push(1);
+                encoded.extend_from_slice(&value.transaction_id);
+                append_commitment_string(&mut encoded, &value.sender)?;
+                encoded.extend_from_slice(&value.nonce.to_be_bytes());
+                encoded.extend_from_slice(&value.gas_charged.to_be_bytes());
+                encoded.extend_from_slice(&value.fee_charged.to_be_bytes());
+                encoded.extend_from_slice(&value.sender_balance.to_be_bytes());
+                encoded.extend_from_slice(&value.next_nonce.to_be_bytes());
+                match &value.execution {
+                    Ok(execution) => {
+                        encoded.push(1);
+                        encoded.extend_from_slice(&execution.state_root);
+                    }
+                    Err(message) => {
+                        encoded.push(0);
+                        append_commitment_string(&mut encoded, message)?;
+                    }
+                }
+            }
+        }
+    }
+    let contract_root = hash_domain(b"QORVYNT_BLOCK_CONTRACT_RECEIPTS_V1\\0", &encoded);
+    let mut combined = Vec::with_capacity(64);
+    combined.extend_from_slice(&transfer_root);
+    combined.extend_from_slice(&contract_root);
+    Ok(hash_domain(b"QORVYNT_BLOCK_RECEIPT_ROOT_V1\\0", &combined))
+}
+
+fn append_commitment_string(out: &mut Vec<u8>, value: &str) -> Result<(), String> {
+    let length = u32::try_from(value.len()).map_err(|_| "contract receipt field exceeds encoding limit")?;
+    out.extend_from_slice(&length.to_be_bytes());
+    out.extend_from_slice(value.as_bytes());
+    Ok(())
 }
 
 #[cfg(test)]
