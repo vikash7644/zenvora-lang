@@ -1,5 +1,5 @@
-# Zenvora Lang as the first executable transaction-rule prototype.
-# This runs in the Zenvora VM. It is NOT yet wired into the JavaScript node.
+# QORVYNT as the first executable transaction-rule prototype.
+# This runs in the QORVYNT VM. It is NOT yet wired into the JavaScript node.
 
 define alice := 1000
 define bob := 0
@@ -32,4 +32,4 @@ show assert(bob == 125, "failed transfer must not credit recipient")
 show assert(not transfer(0), "zero transfer must fail")
 show assert(not transfer(-1), "negative transfer must fail")
 
-show "Zenvora Lang transaction-rule checks passed"
+show "QORVYNT transaction-rule checks passed"

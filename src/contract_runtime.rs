@@ -2,7 +2,7 @@
 //! Version 1 deliberately supports integer state only; unsupported state types fail closed.
 use super::contract_gas::GasMeter;
 use super::contract_state::{AccessMode, ContractState};
-use super::{compile, run_with_gas};
+use super::{compile_with_layout, deserialize_bytecode_v2, run_with_gas, serialize_bytecode_v2};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionReceipt {
@@ -73,21 +73,34 @@ pub fn execute(
     for (name, _) in &state_vars {
         program.push_str(&format!("show {name}\n"));
     }
-    let code = compile(&program)?;
+    // Contract actions and views must execute the same verified QVM 2.0 artifact
+    // path as ordinary programs: compile -> canonical v2 serialization -> verifier/loader
+    // -> the existing QORVYNT VM. Never bypass bytecode-v2 verification here.
+    let (compiled, layout) = compile_with_layout(&program)?;
+    let artifact = serialize_bytecode_v2(&compiled, &layout)?;
+    let code = deserialize_bytecode_v2(&artifact)?;
     let mut output = Vec::new();
     let mut meter = GasMeter::new(gas_limit);
+    meter.charge(super::contract_gas::BASE_EXECUTION_GAS)?;
+    for _ in &state_vars {
+        meter.charge(super::contract_gas::STORAGE_READ_GAS)?;
+    }
     run_with_gas(&code, &mut |line| output.push(line), &mut meter)?;
     if output.len() < state_vars.len() {
         return Err("VM did not return all contract state values".into());
     }
     let state_output = output.split_off(output.len() - state_vars.len());
     let mut pending = state.begin(contract_id, mode)?;
-    for ((name, _), value) in state_vars.iter().zip(state_output) {
+    for ((name, previous), value) in state_vars.iter().zip(state_output) {
         let parsed: i64 = value.parse().map_err(|_| format!(
             "contract state '{name}' must evaluate to an integer in runtime v1"
         ))?;
         if mode == AccessMode::Action {
-            pending.set(name, parsed.to_string().into_bytes())?;
+            let canonical = parsed.to_string();
+            if canonical != *previous {
+                meter.charge(super::contract_gas::STORAGE_WRITE_GAS)?;
+            }
+            pending.set(name, canonical.into_bytes())?;
         }
     }
     if mode == AccessMode::Action {
@@ -229,6 +242,49 @@ mod tests {
     use super::super::contract_state::{AccessMode, ContractState};
 
     const COUNTER: &str = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+
+    #[test]
+    fn contract_execution_compiles_and_loads_verified_qvm2_bytecode() {
+        let mut state = ContractState::new();
+        let receipt = execute(
+            COUNTER,
+            "counter",
+            "call increment(9)",
+            AccessMode::Action,
+            &mut state,
+            100_000,
+        ).unwrap();
+        assert!(receipt.gas_used > 0);
+        assert_eq!(state.get("counter", "count").unwrap(), Some(&b"9"[..]));
+    }
+
+    #[test]
+    fn contract_gas_charges_persistent_reads_and_changed_writes() {
+        use super::super::contract_gas::{BASE_EXECUTION_GAS, STORAGE_READ_GAS, STORAGE_WRITE_GAS};
+        let mut state = ContractState::new();
+        let receipt = execute(COUNTER, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap();
+        assert!(receipt.gas_used >= BASE_EXECUTION_GAS + STORAGE_READ_GAS + STORAGE_WRITE_GAS);
+        let before = receipt.gas_used;
+        let view = execute(COUNTER, "counter", "show current()", AccessMode::View, &mut state, 100_000).unwrap();
+        assert!(view.gas_used >= BASE_EXECUTION_GAS + STORAGE_READ_GAS);
+        assert!(view.gas_used < before + STORAGE_WRITE_GAS);
+    }
+
+    #[test]
+    fn contract_execution_rejects_gas_limit_below_base_charge() {
+        use super::super::contract_gas::BASE_EXECUTION_GAS;
+        let mut state = ContractState::new();
+        let error = execute(
+            COUNTER,
+            "counter",
+            "show current()",
+            AccessMode::View,
+            &mut state,
+            BASE_EXECUTION_GAS - 1,
+        ).unwrap_err();
+        assert!(error.contains("out of gas"), "{error}");
+        assert!(state.is_empty());
+    }
 
     #[test]
     fn action_state_persists_across_vm_invocations_and_view_reads_it() {

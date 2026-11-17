@@ -1,0 +1,100 @@
+# QORVYNT-authored Bytecode v2 text reader foundation.
+# This first reader stage validates the canonical envelope and decodes scalar
+# instruction records without routing parsing through the Rust deserializer.
+
+fn reader_result(ok, value, error) {
+  return map("ok", ok, "value", value, "error", error)
+}
+
+fn parse_v2_instruction_record(line) {
+  define fields := split(trim(line), " ")
+  if len(fields) == 2 and get(fields, 0) == "PUSH" {
+    return reader_result(true, map("op", "push_const", "type", "number", "value", get(fields, 1)), "")
+  }
+  if len(fields) == 2 and get(fields, 0) == "PUSH_BOOL" and (get(fields, 1) == "true" or get(fields, 1) == "false") {
+    return reader_result(true, map("op", "push_const", "type", "boolean", "value", get(fields, 1)), "")
+  }
+  if len(fields) == 2 and get(fields, 0) == "LOAD" {
+    return reader_result(true, map("op", "load", "name", get(fields, 1)), "")
+  }
+  if len(fields) == 2 and get(fields, 0) == "DECLARE" {
+    return reader_result(true, map("op", "declare", "name", get(fields, 1)), "")
+  }
+  if len(fields) == 2 and get(fields, 0) == "STORE" {
+    return reader_result(true, map("op", "store", "name", get(fields, 1)), "")
+  }
+  if len(fields) == 1 {
+    define opcode := get(fields, 0)
+    if opcode == "ADD" or opcode == "SUB" or opcode == "MUL" or opcode == "DIV" or opcode == "EQ" or opcode == "NE" or opcode == "LT" or opcode == "LE" or opcode == "GT" or opcode == "GE" or opcode == "AND" or opcode == "OR" {
+      return reader_result(true, map("op", "binary", "operator", opcode), "")
+    }
+    if opcode == "NEG" or opcode == "NOT" {
+      return reader_result(true, map("op", "unary", "operator", opcode), "")
+    }
+    if opcode == "PRINT" {
+      return reader_result(true, map("op", "print"), "")
+    }
+    if opcode == "INDEX" {
+      return reader_result(true, map("op", "index"), "")
+    }
+  }
+  return reader_result(false, "", "unsupported or malformed Bytecode v2 instruction: " + line)
+}
+
+fn parse_v2_envelope(source) {
+  define lines := split(source, "\n")
+  if len(lines) < 3 or get(lines, 0) != "ZENVORA_BYTECODE 2" {
+    return reader_result(false, "", "invalid Bytecode v2 header")
+  }
+  define pos := 1
+  define program_line := ""
+  define code_line := -1
+  repeat pos < len(lines) and code_line < 0 {
+    define current := trim(get(lines, pos))
+    if starts_with(current, "PROGRAM ") {
+      if program_line != "" {
+        return reader_result(false, "", "duplicate PROGRAM record")
+      }
+      program_line := current
+    }
+    if current == "CODE" {
+      code_line := pos
+    }
+    pos := pos + 1
+  }
+  if program_line == "" or code_line < 0 {
+    return reader_result(false, "", "missing PROGRAM metadata or CODE section")
+  }
+  define fields := split(program_line, " ")
+  if len(fields) != 3 or get(fields, 0) != "PROGRAM" {
+    return reader_result(false, "", "malformed PROGRAM metadata")
+  }
+  if to_string(to_int(get(fields, 1))) != get(fields, 1) or to_string(to_int(get(fields, 2))) != get(fields, 2) {
+    return reader_result(false, "", "PROGRAM bounds must be canonical integers")
+  }
+  define main_start := to_int(get(fields, 1))
+  define main_end := to_int(get(fields, 2))
+  if main_start != 0 or main_end < 0 {
+    return reader_result(false, "", "invalid PROGRAM bounds")
+  }
+  return reader_result(true, map("main_start", main_start, "main_end", main_end, "code_line", code_line, "lines", lines), "")
+}
+
+define valid_sample := "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 42\nPRINT\n"
+define valid_envelope := parse_v2_envelope(valid_sample)
+define push_record := parse_v2_instruction_record("PUSH 42")
+define bool_record := parse_v2_instruction_record("PUSH_BOOL true")
+define add_record := parse_v2_instruction_record("ADD")
+define invalid_record := parse_v2_instruction_record("MAGIC")
+define bad_header := parse_v2_envelope("ZENVORA_BYTECODE 1\nPROGRAM 0 0\nCODE\n")
+if get(valid_envelope, "ok") and get(get(valid_envelope, "value"), "main_end") == 2 and get(push_record, "ok") and get(get(push_record, "value"), "type") == "number" and get(bool_record, "ok") and get(get(bool_record, "value"), "type") == "boolean" and get(add_record, "ok") and get(get(add_record, "value"), "operator") == "ADD" and not get(invalid_record, "ok") and not get(bad_header, "ok") {
+  show "QORVYNT_BYTECODE_V2_READER_STAGE1_PASS"
+} otherwise {
+  show "QORVYNT_BYTECODE_V2_READER_STAGE1_FAIL"
+  show valid_envelope
+  show push_record
+  show bool_record
+  show add_record
+  show invalid_record
+  show bad_header
+}

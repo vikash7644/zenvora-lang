@@ -7,7 +7,7 @@ static NEXT_FILE_ID: AtomicUsize = AtomicUsize::new(0);
 fn run_program(source: &str) -> std::process::Output {
     let dir = std::env::temp_dir();
     let id = NEXT_FILE_ID.fetch_add(1, Ordering::Relaxed);
-    let path = dir.join(format!("zenvora_test_{}_{}.zv", std::process::id(), id));
+    let path = dir.join(format!("zenvora_test_{}_{}.qv", std::process::id(), id));
     fs::write(&path, source).expect("write test program");
     let output = Command::new(env!("CARGO_BIN_EXE_zv"))
         .arg(&path)
