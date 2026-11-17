@@ -53,7 +53,7 @@ jobs:
           os.makedirs("website", exist_ok=True)
           with open(path, "w", encoding="utf-8") as handle:
               json.dump(history, handle, indent=2)
-              handle.write("\\n")
+              handle.write("\n")
           print(f"Saved {len(history['views'])} view days and {len(history['clones'])} clone days.")
           PY
       - name: Commit updated traffic history
