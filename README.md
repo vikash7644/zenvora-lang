@@ -28,7 +28,7 @@ These files describe proposals and a local-development prototype, not a producti
 
 The live implementation checklist, known limitations, and CI completion gates are tracked in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md). A queued workflow is not considered a passing check.
 
-The planned AI-native architecture (provider adapters, capability-secured tools, async tasks, bounded agents, and scoped memory) is documented in [docs/ai-native-runtime-design.md](docs/ai-native-runtime-design.md). This is a design proposal; those runtime capabilities are not implemented yet.
+The planned AI-native architecture (provider adapters, capability-secured tools, async tasks, bounded agents, and scoped memory) is documented in [docs/ai-native-runtime-design.md](docs/ai-native-runtime-design.md). This is a design proposal; those runtime capabilities are not implemented yet. The same design now covers an EVM/Web3 developer layer: contract ABI tooling, RPC adapters, wallet/signing boundaries, dApp SDKs, indexers, storage, and optional DAO/DeFi integrations. These are also planned capabilities, not implemented features.
 
 ## Repository contents
 
