@@ -18,6 +18,7 @@ mod tx_pool;
 mod bytecode_v2;
 mod contract_state;
 mod contract_runtime;
+mod contract_executor;
 mod contract_gas;
 pub mod contract_protocol;
 
