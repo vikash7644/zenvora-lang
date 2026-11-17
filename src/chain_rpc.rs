@@ -197,6 +197,58 @@ fn handle_json_rpc_with_pools(
             };
             json!({ "address": address, "balance": runtime.balance(address), "nonce": runtime.account_nonce(address) })
         }
+        "chain_getTokenInfo" => {
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let info = match runtime.contract_state().tokens.token(token_id) {
+                Some(value) => value, None => return rpc_error(id, -32602, "token ID not found"),
+            };
+            json!({"tokenId":token_id,"name":info.name,"symbol":info.symbol,"decimals":info.decimals,
+                "owner":info.owner,"totalSupply":info.total_supply.to_string()})
+        }
+        "chain_getTokenBalance" => {
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let account = match string_param(&params, "account", 1) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected account parameter"),
+            };
+            if runtime.contract_state().tokens.token(token_id).is_none() {
+                return rpc_error(id, -32602, "token ID not found");
+            }
+            json!({"tokenId":token_id,"account":account,
+                "balance":runtime.contract_state().tokens.balance_of(token_id, account).to_string()})
+        }
+        "chain_getTokenAllowance" => {
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let owner = match string_param(&params, "owner", 1) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected owner parameter"),
+            };
+            let spender = match string_param(&params, "spender", 2) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected spender parameter"),
+            };
+            if runtime.contract_state().tokens.token(token_id).is_none() {
+                return rpc_error(id, -32602, "token ID not found");
+            }
+            json!({"tokenId":token_id,"owner":owner,"spender":spender,
+                "allowance":runtime.contract_state().tokens.allowance(token_id, owner, spender).to_string()})
+        }
+        "chain_getTokenEvents" => {
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            if runtime.contract_state().tokens.token(token_id).is_none() {
+                return rpc_error(id, -32602, "token ID not found");
+            }
+            let events: Vec<Value> = runtime.contract_state().tokens.events().iter().filter(|event| match event {
+                super::token_standard::TokenEvent::Transfer { token_id: id, .. }
+                | super::token_standard::TokenEvent::Approval { token_id: id, .. } => id == token_id,
+            }).map(|event| serde_json::to_value(event).unwrap_or(Value::Null)).collect();
+            json!({"tokenId":token_id,"count":events.len(),"events":events})
+        }
         "chain_getBlock" => {
             let height = match number_param(&params, "height", 0) {
                 Some(value) => value,
