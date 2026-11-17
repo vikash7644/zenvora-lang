@@ -136,7 +136,7 @@ jobs:
             fi
             sleep 1
           done
-          grep -q '"service":"qorvynt-compiler-api"' /tmp/qorvynt-api-health.json
+          grep -q '"service":"zenvora-compiler-api"' /tmp/qorvynt-api-health.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
             --data '{"source":"define a := 10\ndefine b := 20\nshow a + b\nshow a * 2"}' \
