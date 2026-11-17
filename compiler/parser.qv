@@ -883,7 +883,7 @@ fn emit_statements(ir) {
 fn json_quote(value) {
   define escaped := replace(value, "\\", "\\\\")
   escaped := replace(escaped, "\"", "\\\"")
-  escaped := replace(escaped, "\n", "\\n")
+  escaped := replace(escaped, "\n", "\n")
   escaped := replace(escaped, "\r", "\\r")
   escaped := replace(escaped, "\t", "\\t")
   return "\"" + escaped + "\""
@@ -2413,10 +2413,10 @@ define valid_semantic_result := validate_program(get(valid_semantic_ast, "ast"))
 define bad_call_lexed := lex("fn one(a) {\nreturn a\n}\nshow missing(1)\n")
 define bad_call_ast := parse_program(get(bad_call_lexed, "tokens"))
 define bad_call_result := validate_program(get(bad_call_ast, "ast"))
-define bad_variable_lexed := lex("show missing_value\\n")
+define bad_variable_lexed := lex("show missing_value\n")
 define bad_variable_ast := parse_program(get(bad_variable_lexed, "tokens"))
 define bad_variable_result := validate_program(get(bad_variable_ast, "ast"))
-define bad_assignment_lexed := lex("ghost := 3\\n")
+define bad_assignment_lexed := lex("ghost := 3\n")
 define bad_assignment_ast := parse_program(get(bad_assignment_lexed, "tokens"))
 define bad_assignment_result := validate_program(get(bad_assignment_ast, "ast"))
 define builtin_call_lexed := lex("show len(array(1, 2))\nshow sum(array(3, 4))\nshow char_at(\"zv\", 1)\nshow starts_with(\"zenvora\", \"zen\")\nshow upper(\"zv\")\nshow char_count(\"zv\")\nshow index_of(\"zenvora\", \"v\")\nshow contains(array(1, 2, 3), 2)\nshow get(map(\"answer\", 42), \"answer\")\nshow len(push(array(1), 2))\n")
@@ -2507,7 +2507,7 @@ if get(extended_builtin_result, "ok") and len(extended_builtin_output) == 19 and
 }
  
 # Map indexing parity: the QORVYNT VM accepts string keys as well as array indexes.
-define map_index_source := "show map(\"answer\", 42)[\"answer\"]\\nshow array(7, 8)[1]\\n"
+define map_index_source := "show map(\"answer\", 42)[\"answer\"]\nshow array(7, 8)[1]\n"
 define map_index_lexed := lex(map_index_source)
 define map_index_ast := parse_program(get(map_index_lexed, "tokens"))
 define map_index_ir := lower_program(get(map_index_ast, "ast"))
@@ -2519,7 +2519,7 @@ if get(map_index_result, "ok") and len(map_index_output) == 2 and get(map_index_
 } otherwise {
   show "QORVYNT_VM_MAP_INDEX_FAIL"
 }
-define missing_map_key_source := "show map(\"answer\", 42)[\"missing\"]\\n"
+define missing_map_key_source := "show map(\"answer\", 42)[\"missing\"]\n"
 define missing_map_key_lexed := lex(missing_map_key_source)
 define missing_map_key_ast := parse_program(get(missing_map_key_lexed, "tokens"))
 define missing_map_key_ir := lower_program(get(missing_map_key_ast, "ast"))
