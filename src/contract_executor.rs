@@ -351,7 +351,14 @@ impl<'a> ExecutorReader<'a> {
             let source = String::from_utf8(self.read_bytes(MAX_DEPLOYED_SOURCE_BYTES)?.to_vec()).map_err(|_| "contract source is not UTF-8")?;
             let bytecode_v2 = String::from_utf8(self.read_bytes(1024 * 1024)?.to_vec()).map_err(|_| "contract bytecode is not UTF-8")?;
             let deployer = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "contract deployer is not UTF-8")?;
-            if name.is_empty() || deployer.is_empty() { return Err("invalid deployed contract metadata".into()); }
+            if name.is_empty() || deployer.is_empty() || source.len() > MAX_DEPLOYED_SOURCE_BYTES {
+                return Err("invalid deployed contract metadata".into());
+            }
+            let canonical = super::contract_abi_and_artifact(&source)?;
+            if canonical.get("contract").and_then(serde_json::Value::as_str) != Some(name.as_str())
+                || canonical.get("bytecode_v2").and_then(serde_json::Value::as_str) != Some(bytecode_v2.as_str()) {
+                return Err("deployed contract snapshot source and Bytecode v2 do not match".into());
+            }
             let transaction_id: [u8; 32] = self.take(32)?.try_into().map_err(|_| "invalid deployment transaction ID")?;
             let contract = DeployedContract { id: id.clone(), name, source, bytecode_v2, deployer, transaction_id };
             contracts.insert(id, contract);
