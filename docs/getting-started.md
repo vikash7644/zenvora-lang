@@ -53,7 +53,7 @@ The `--check` command parses and compiles the file and its relative imports with
 
 Start with these files in the repository:
 
-- [Language tour](../examples/zenvora-language-tour.qv) — variables, strings, arrays, conditionals, loops, and functions.
+- [Language tour](../examples/qorvynt-language-tour.qv) — variables, strings, arrays, conditionals, loops, and functions.
 - [Hello world and arithmetic](../examples/hello.qv).
 - [Loops and loop control](../examples/loops.qv).
 - [Functions](../examples/functions.qv).
