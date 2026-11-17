@@ -103,7 +103,7 @@ impl ContractAccountState {
         let next_fees = self.fees_collected.checked_add(fee_charged).ok_or_else(|| "fee collector balance overflow".to_string())?;
         let transaction_id = tx.transaction_id()?;
         let mut hasher = Sha256::new();
-        hasher.update(b"QORVYNT_CONTRACT_ADDRESS_V1\\0");
+        hasher.update(b"QORVYNT_CONTRACT_ADDRESS_V1\0");
         hasher.update(tx.sender.as_bytes());
         hasher.update(tx.nonce.to_be_bytes());
         hasher.update(transaction_id);
@@ -195,7 +195,7 @@ impl ContractAccountState {
     pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
         let storage = self.storage.encode_snapshot()?;
         let mut out = Vec::new();
-        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0");
+        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V2\0");
         put_bytes(&mut out, &storage)?;
         out.extend_from_slice(&self.fees_collected.to_be_bytes());
         put_contracts(&mut out, &self.deployed_contracts)?;
@@ -208,7 +208,7 @@ impl ContractAccountState {
     pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
         if bytes.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
         let mut reader = ExecutorReader { bytes, offset: 0 };
-        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0")?;
+        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V2\0")?;
         let storage = ContractState::decode_snapshot(reader.read_bytes(2 * 1024 * 1024)?)?;
         let fees_collected = reader.read_u64()?;
         let deployed_contracts = reader.read_contracts()?;
@@ -317,7 +317,7 @@ impl<'a> ExecutorReader<'a> {
             let (compiled, layout) = super::compile_with_layout(&source).map_err(|_| "deployed contract source is invalid")?;
             let canonical_bytecode = super::serialize_bytecode_v2(&compiled, &layout).map_err(|_| "cannot verify deployed contract bytecode")?;
             if canonical_bytecode != bytecode_v2 { return Err("deployed contract bytecode does not match canonical source".into()); }
-            let mut hasher = Sha256::new(); hasher.update(b"QORVYNT_CONTRACT_ADDRESS_V1\\0");
+            let mut hasher = Sha256::new(); hasher.update(b"QORVYNT_CONTRACT_ADDRESS_V1\0");
             hasher.update(deployer.as_bytes()); hasher.update(deployment_nonce.to_be_bytes()); hasher.update(transaction_id);
             let expected_id = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>();
             if id != expected_id { return Err("deployed contract ID does not match deployment metadata".into()); }
