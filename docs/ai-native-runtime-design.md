@@ -135,3 +135,78 @@ Before adding AI syntax, audit and complete:
 ## Definition of done for this design
 
 This document is a roadmap, not an implementation claim. A feature is complete only when its parser/compiler/VM implementation, security tests, docs, runnable \`.qv\` example, and CI checks all land together. A green documentation-only CI run does not prove that AI runtime capabilities exist.
+
+
+## Web3 and blockchain developer layer
+
+QORVYNT should also become a practical language for building Web3 applications. This is a **language SDK and developer-tooling layer**, not a second blockchain protocol hidden inside the language repository. Chain consensus, validators, native coin economics, and network operations belong to their own independently tested network repository.
+
+### 1. EVM-compatible contract development
+
+Provide a versioned EVM toolchain adapter with:
+- Solidity source import/build support initially, plus ABI and bytecode artifact inspection;
+- typed ABI bindings for contract calls, transactions, events, tuples, arrays, and custom errors;
+- deployment scripts, constructor arguments, deterministic artifact manifests, and verification metadata;
+- local development-network integration and reproducible contract tests;
+- explicit compiler version, optimizer settings, chain ID, and artifact hashes.
+
+QORVYNT should not claim to compile Solidity itself unless a compatible compiler is actually integrated and tested. Native QORVYNT-to-EVM compilation is a separate future compiler backend with its own compatibility and audit gates.
+
+### 2. Chain connectivity and RPC
+
+Define provider-neutral interfaces for:
+- JSON-RPC read calls and network/chain identity checks;
+- transaction simulation, fee estimation, nonce handling, submission, and receipt polling;
+- block, transaction, log, and event subscriptions where supported;
+- retry, timeout, rate-limit, and reorganization-aware confirmation policies.
+
+RPC endpoints are host configuration, not secrets committed to source. Every transaction must verify the expected chain ID and destination before signing.
+
+### 3. Wallet and signing boundary
+
+Support wallet adapters rather than storing private keys in QORVYNT source or bytecode:
+- browser wallet connection (for example, injected EIP-1193 providers);
+- hardware/external signer and hosted wallet adapters;
+- message and typed-data signing with clear domain/chain context;
+- transaction preview, explicit user approval, and structured signing results.
+
+Private keys, seed phrases, and raw signing secrets must never be printed, serialized into artifacts, or exposed to ordinary program code. Signing must be a separately granted capability and default to deny.
+
+### 4. QORVYNT dApp SDK
+
+Offer reusable, typed modules for:
+- contract clients and event listeners;
+- wallet connection state and account/network changes;
+- transaction lifecycle and human-readable status;
+- frontend integration helpers for web apps;
+- backend services, indexers, and event-driven jobs;
+- secure configuration and environment-specific deployments.
+
+The SDK should work with multiple EVM networks. A Fleur Network adapter can be added only after its actual RPC, chain ID, wallet compatibility, and EVM behavior are independently verified; do not assume compatibility from branding alone.
+
+### 5. Broader Web3 building blocks
+
+Design optional adapters for:
+- content-addressed storage and pinning services;
+- event indexers and query APIs;
+- token standards and NFT metadata;
+- multisig and DAO governance interfaces;
+- oracle data feeds;
+- DeFi protocol integrations such as swaps and liquidity pools.
+
+These are integrations, not built-in financial guarantees. No adapter should custody assets or submit irreversible transactions without explicit authorization and clear transaction previews.
+
+### 6. Web3 security and acceptance gates
+
+Required checks include chain-ID mismatch rejection, replay/domain separation, ABI bounds validation, malformed RPC response handling, transaction simulation, signer permission tests, secret redaction, event reorg handling, and deterministic local-chain integration tests. Contract code and dependencies require independent review before production use.
+
+## Expanded implementation sequence
+
+9. **Web3 host interfaces:** chain identity, JSON-RPC client abstraction, typed errors, timeout and rate limits. Acceptance: mock RPC tests and chain-ID mismatch rejection.
+10. **ABI and contract SDK:** ABI parser/encoder/decoder, typed contract calls, event decoding, custom errors. Acceptance: known Solidity fixture vectors and malformed ABI tests.
+11. **Wallet/signing adapters:** EIP-1193 connection plus external signer interface and approval boundary. Acceptance: no private key in source/artifacts/logs; user approval required for writes.
+12. **dApp tooling:** local-chain tests, deployment manifests, frontend bindings, event indexer adapters. Acceptance: end-to-end sample dApp can read state, request an approved transaction, and verify its receipt.
+13. **Web3 ecosystem adapters:** storage, tokens, NFT, DAO, oracle, and DeFi connectors. Each adapter gets separate permissions, compatibility tests, and security review.
+14. **QORVYNT-built Web3 assistant:** combine bounded AI agents with read-only chain research by default; transaction signing remains a separate user-approved capability.
+
+These items are proposals. None should be described as implemented until the corresponding QORVYNT syntax/API, runtime implementation, executable .qv sample, tests, documentation, and CI evidence exist.
