@@ -8,6 +8,14 @@ assert.equal(scripts.length, 1, "playground should have exactly one inline scrip
 assert.match(html, /data-example="functions"/, "functions example button exists");
 assert.match(html, /data-example="collections"/, "collections example button exists");
 assert.match(html, /data-example="stdlib"/, "standard library example button exists");
+assert.match(html, /id="terminal-command"/, "terminal command input exists");
+assert.match(html, /Zenvora Helper \(offline\)/, "offline helper limitation is disclosed");
+assert.match(html, /terminalNative/, "optional native Rust API integration exists");
+assert.match(html, /id="run-native"/, "direct Rust VM run button exists");
+assert.match(html, /runNativeFromEditor/, "direct Rust VM runner is wired to the editor");
+assert.match(html, /RUST VM UNAVAILABLE/, "local Rust API failure is reported honestly");
+assert.match(html, /127\.0\.0\.1:8787/, "native API uses the documented loopback endpoint");
+assert.match(html, /cargo run -- --compiler-api/, "native API startup instructions are present");
 
 class FakeElement {
   constructor(dataset = {}) {
@@ -23,7 +31,7 @@ class FakeElement {
   click() { assert.ok(this.listeners.click, "expected click handler"); return this.listeners.click(); }
 }
 
-const ids = ["code", "output", "status", "run", "reset", "copy"];
+const ids = ["code", "output", "status", "run", "run-native", "reset", "copy", "terminal-form", "terminal-command", "terminal-output"];
 const elements = Object.fromEntries(ids.map(id => [id, new FakeElement()]));
 const editorMatch = html.match(/<textarea id="code"[^>]*>([\s\S]*?)<\/textarea>/);
 assert.ok(editorMatch, "playground editor exists");
@@ -72,4 +80,19 @@ examples.find(button => button.dataset.example === "combined").click();
 run(elements.code.value, "Building with Zenvora\n3\n1\nBuild step\n3\n42", "combined demo with nested otherwise blocks");
 run('show factorial(5)\nfn factorial(n) {\n if n <= 1 {\n  return 1\n } otherwise {\n  return n * factorial(n - 1)\n }\n}', "120", "recursive function calls and return values");
 
-console.log("Playground tests passed: expressions, branching, nested otherwise blocks, loops, recursive functions, collections, standard library, and error handling.");
+
+function terminal(command) {
+  elements["terminal-command"].value = command;
+  elements["terminal-form"].listeners.submit({ preventDefault() {} });
+  return elements["terminal-output"].textContent;
+}
+assert.match(terminal("help"), /Available commands/, "terminal help command");
+assert.ok(terminal("help").split("\n").includes("  run              Run in the browser demo"), "terminal help uses real line breaks");
+assert.match(terminal("ls"), /hello.zv/, "terminal lists virtual workspace");
+assert.match(terminal("chat functions"), /Declare functions/, "offline helper answers language questions");
+assert.match(terminal("check"), /CHECK OK/, "terminal delimiter check");
+elements.code.value = "show 6 * 7";
+assert.match(terminal("run"), /42/, "terminal run command executes editor program");
+assert.match(terminal("version"), /browser demo/, "terminal clearly labels browser demo");
+
+console.log("Playground tests passed: interpreter features, terminal commands, optional native API wiring, offline helper, and error handling.");
