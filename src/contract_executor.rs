@@ -452,7 +452,7 @@ mod tests {
         let mut state = ContractAccountState::new();
         state.set_balance(&address, 1_000_000).unwrap();
         let receipt = state.execute_signed_deployment(&tx, &public, 9001, 100).unwrap();
-        let deployed = state.deployed_contract(&receipt.contract_id).unwrap();
+        let deployed = state.deployed_contract(&receipt.contract_id).cloned().unwrap();
         assert_eq!(deployed.name, "Counter");
         assert_eq!(deployed.source, source);
         assert!(deployed.bytecode_v2.starts_with("ZENVORA_BYTECODE 2"));
