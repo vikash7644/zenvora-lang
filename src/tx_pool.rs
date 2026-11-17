@@ -217,10 +217,10 @@ impl ContractTransactionPool {
             let mut file = std::fs::File::create(&temporary)
                 .map_err(|error| format!("cannot create contract pool temporary file: {error}"))?;
             writeln!(file, "QORVYNT_CONTRACT_TX_POOL_V1").map_err(|error| format!("cannot write contract pool: {error}"))?;
-            writeln!(file, "C\\t{}", self.chain_id).map_err(|error| format!("cannot write contract pool chain ID: {error}"))?;
-            writeln!(file, "H\\t{}", self.next_height).map_err(|error| format!("cannot write contract pool height: {error}"))?;
+            writeln!(file, "C\t{}", self.chain_id).map_err(|error| format!("cannot write contract pool chain ID: {error}"))?;
+            writeln!(file, "H\t{}", self.next_height).map_err(|error| format!("cannot write contract pool height: {error}"))?;
             for envelope in &self.entries {
-                writeln!(file, "K\\t{}\\t{}",
+                writeln!(file, "K\t{}\t{}",
                     hex_encode(&envelope.public_key),
                     hex_encode(&envelope.transaction.canonical_bytes()?))
                     .map_err(|error| format!("cannot write contract pool transaction: {error}"))?;
@@ -263,10 +263,10 @@ impl ContractTransactionPool {
             return Err("unsupported or missing contract transaction-pool version".into());
         }
         let chain_line = lines.next().ok_or_else(|| "contract pool is missing chain ID".to_string())?;
-        let stored_chain_id: u64 = chain_line.strip_prefix("C\\t").ok_or_else(|| "invalid contract pool chain-ID record".to_string())?
+        let stored_chain_id: u64 = chain_line.strip_prefix("C\t").ok_or_else(|| "invalid contract pool chain-ID record".to_string())?
             .parse().map_err(|_| "invalid contract pool chain ID")?;
         let height_line = lines.next().ok_or_else(|| "contract pool is missing next height".to_string())?;
-        let stored_height: u64 = height_line.strip_prefix("H\\t").ok_or_else(|| "invalid contract pool height record".to_string())?
+        let stored_height: u64 = height_line.strip_prefix("H\t").ok_or_else(|| "invalid contract pool height record".to_string())?
             .parse().map_err(|_| "invalid contract pool next height")?;
         if stored_chain_id != chain_id || stored_height != next_height {
             return Err("contract transaction pool context is stale; revalidate or recreate it for the current chain height".into());
@@ -277,7 +277,7 @@ impl ContractTransactionPool {
             if line.len() > MAX_POOL_LINE_BYTES {
                 return Err(format!("contract-pool line {line_number} exceeds maximum length"));
             }
-            let fields: Vec<&str> = line.split('\\t').collect();
+            let fields: Vec<&str> = line.split('\t').collect();
             let ["K", encoded_public_key, encoded_transaction] = fields.as_slice() else {
                 return Err(format!("contract-pool line {line_number} has an invalid record"));
             };
