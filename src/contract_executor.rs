@@ -43,6 +43,18 @@ pub struct ContractAccountState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedContractTransaction {
+    pub transaction: ContractTransactionV1,
+    pub public_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ContractExecutionReceipt {
+    Deploy(SignedDeployReceipt),
+    Call(SignedCallReceipt),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignedCallReceipt {
     pub transaction_id: [u8; 32],
     pub sender: String,
@@ -62,6 +74,56 @@ impl Default for ContractAccountState {
 
 impl ContractAccountState {
     pub fn new() -> Self { Self::default() }
+
+    /// Deterministic commitment for this contract account/storage/registry snapshot.
+    pub fn state_root(&self) -> Result<[u8; 32], String> {
+        let snapshot = self.encode_snapshot()?;
+        let mut hasher = Sha256::new();
+        hasher.update(b"QORVYNT_CONTRACT_STATE_ROOT_V1\\0");
+        hasher.update(snapshot);
+        Ok(hasher.finalize().into())
+    }
+
+    /// Apply one authenticated transaction using only the deployed-contract registry for calls.
+    pub fn apply_signed_transaction(
+        &mut self,
+        tx: &ContractTransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<ContractExecutionReceipt, String> {
+        match tx.operation {
+            ContractOperation::Deploy { .. } => self.execute_signed_deploy(
+                tx, public_key, expected_chain_id, current_height
+            ).map(ContractExecutionReceipt::Deploy),
+            ContractOperation::Call { .. } => self.execute_signed_registered_call(
+                tx, public_key, expected_chain_id, current_height
+            ).map(ContractExecutionReceipt::Call),
+        }
+    }
+
+    /// Execute a block's ordered contract transactions against a candidate state.
+    /// The entire batch commits atomically only if every transaction passes admission.
+    /// VM-level call failures remain valid receipts and consume their authorized gas/nonce.
+    pub fn apply_signed_batch(
+        &mut self,
+        transactions: &[SignedContractTransaction],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<Vec<ContractExecutionReceipt>, String> {
+        let mut candidate = self.clone();
+        let mut receipts = Vec::with_capacity(transactions.len());
+        for envelope in transactions {
+            receipts.push(candidate.apply_signed_transaction(
+                &envelope.transaction,
+                &envelope.public_key,
+                expected_chain_id,
+                current_height,
+            )?);
+        }
+        *self = candidate;
+        Ok(receipts)
+    }
 
     /// Genesis/faucet/test harness balance setter. Production issuance must be consensus-authorized.
     pub fn set_balance(&mut self, address: &str, amount: u64) -> Result<(), String> {
@@ -419,6 +481,49 @@ mod tests {
         };
         tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
         tx
+    }
+
+    #[test]
+    fn ordered_signed_batch_commits_deploy_and_state_root_is_stable_after_restore() {
+        use super::{ContractExecutionReceipt, SignedContractTransaction};
+        let key = SigningKey::from_bytes(&[79; 32]);
+        let public = key.verifying_key().to_bytes().to_vec();
+        let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
+        let artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        let deploy = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 2_000_000).unwrap();
+        let receipts = state.apply_signed_batch(&[
+            SignedContractTransaction { transaction: deploy, public_key: public },
+        ], 9001, 100).unwrap();
+        let contract_id = match &receipts[0] {
+            ContractExecutionReceipt::Deploy(receipt) => receipt.contract_id.clone(),
+            _ => panic!("expected deployment receipt"),
+        };
+        let root = state.state_root().unwrap();
+        let restored = ContractAccountState::decode_snapshot(&state.encode_snapshot().unwrap()).unwrap();
+        assert_eq!(restored.state_root().unwrap(), root);
+        assert!(restored.deployed_contract(&contract_id).is_some());
+    }
+
+    #[test]
+    fn signed_batch_rolls_back_all_transactions_when_admission_fails() {
+        use super::SignedContractTransaction;
+        let key = SigningKey::from_bytes(&[80; 32]);
+        let public = key.verifying_key().to_bytes().to_vec();
+        let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
+        let artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        let deploy = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let invalid = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 2_000_000).unwrap();
+        let before = state.encode_snapshot().unwrap();
+        let result = state.apply_signed_batch(&[
+            SignedContractTransaction { transaction: deploy, public_key: public.clone() },
+            SignedContractTransaction { transaction: invalid, public_key: public },
+        ], 9001, 100);
+        assert!(result.is_err());
+        assert_eq!(state.encode_snapshot().unwrap(), before);
     }
 
     #[test]
