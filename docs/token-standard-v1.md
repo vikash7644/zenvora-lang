@@ -36,6 +36,16 @@ For a token ID returned by the factory, signed calls support:
 
 Amounts are unsigned integer base units; decimals controls display precision only. The current calldata encoding is a bounded UTF-8 comma-separated form, so names/accounts containing commas are not supported by this interface.
 
+## Loopback JSON-RPC queries
+
+When the contract pool is enabled, token state can be queried through:
+- chain_getTokenInfo with tokenId
+- chain_getTokenBalance with tokenId and account
+- chain_getTokenAllowance with tokenId, owner, and spender
+- chain_getTokenEvents with tokenId
+
+Large integer values (total supply, balance, allowance) are returned as decimal strings to avoid JSON number precision loss. The local RPC server binds to loopback only; this is not a public RPC endpoint.
+
 ## Important boundaries
 
 - This is an experimental QORVYNT-native fungible-token interface, not a claim of complete ERC-20 conformance or an Ethereum deployment path.
