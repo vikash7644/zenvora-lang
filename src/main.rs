@@ -2607,6 +2607,13 @@ pub(crate) fn validate_contract_artifact(bytes: &[u8]) -> Result<(String, String
     if serialize_bytecode_v2(&verified, &layout)? != canonical_bytecode {
         return Err("contract artifact Bytecode v2 does not match its source".into());
     }
+    let canonical_artifact = contract_abi_and_artifact(source)?;
+    if canonical_artifact.get("contract") != artifact.get("contract") {
+        return Err("contract artifact name does not match its source".into());
+    }
+    if canonical_artifact.get("abi") != artifact.get("abi") {
+        return Err("contract artifact ABI does not match its source".into());
+    }
     Ok((name.to_string(), source.to_string(), canonical_bytecode))
 }
 
@@ -4384,6 +4391,16 @@ mod tests {
         assert_eq!(name, "Counter");
         assert_eq!(decoded_source, source);
         assert!(super::deserialize_bytecode_v2(&bytecode).is_ok());
+    }
+
+    #[test]
+    fn contract_artifact_rejects_abi_tampering_even_when_source_hash_and_bytecode_match() {
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\n}\n";
+        let mut artifact = super::contract_abi_and_artifact(source).unwrap();
+        artifact["abi"]["methods"][0]["name"] = serde_json::Value::String("withdraw_all".into());
+        let encoded = serde_json::to_vec(&artifact).unwrap();
+        let error = super::validate_contract_artifact(&encoded).unwrap_err();
+        assert!(error.contains("ABI does not match its source"), "{error}");
     }
 
     #[test]
