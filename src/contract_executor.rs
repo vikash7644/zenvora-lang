@@ -772,6 +772,50 @@ mod tests {
     }
 
     #[test]
+    fn signed_token_transfer_approve_and_transfer_from_use_nonce_fee_and_same_state() {
+        let alice_key = SigningKey::from_bytes(&[101; 32]);
+        let bob_key = SigningKey::from_bytes(&[102; 32]);
+        let alice_public = alice_key.verifying_key().to_bytes();
+        let bob_public = bob_key.verifying_key().to_bytes();
+        let alice = super::super::chain_protocol::address_from_public_key(&alice_public).unwrap();
+        let bob = super::super::chain_protocol::address_from_public_key(&bob_public).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&alice, 1_000_000).unwrap();
+        state.set_balance(&bob, 1_000_000).unwrap();
+        state.create_token("qvc", "QORVYNT Coin", "QVC", 18, &alice, 1_000).unwrap();
+
+        let make_tx = |key: &SigningKey, nonce: u64, method: &str, args: &str| {
+            let public = key.verifying_key().to_bytes();
+            let mut tx = ContractTransactionV1 {
+                chain_id: 9001,
+                sender: super::super::chain_protocol::address_from_public_key(&public).unwrap(),
+                nonce, gas_limit: 100_000, max_fee: 100_000, gas_price: 1,
+                valid_until_height: Some(200),
+                operation: ContractOperation::Call { contract_id: "qvc".into(), method: method.into(), calldata: args.as_bytes().to_vec() },
+                signature: Vec::new(),
+            };
+            tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
+            tx
+        };
+        let transfer = make_tx(&alice_key, 0, "transfer", &format!("{bob},100"));
+        let first = state.execute_signed_registered_call(&transfer, &alice_public, 9001, 100).unwrap();
+        assert!(first.execution.is_ok());
+        let approve = make_tx(&alice_key, 1, "approve", &format!("{bob},60"));
+        let second = state.execute_signed_registered_call(&approve, &alice_public, 9001, 100).unwrap();
+        assert!(second.execution.is_ok());
+        let transfer_from = make_tx(&bob_key, 0, "transfer_from", &format!("{alice},dave,25"));
+        let third = state.execute_signed_registered_call(&transfer_from, &bob_public, 9001, 100).unwrap();
+        assert!(third.execution.is_ok());
+        assert_eq!(state.tokens.balance_of("qvc", &alice), 900);
+        assert_eq!(state.tokens.balance_of("qvc", &bob), 100);
+        assert_eq!(state.tokens.balance_of("qvc", "dave"), 25);
+        assert_eq!(state.tokens.allowance("qvc", &alice, &bob), 35);
+        assert_eq!(state.nonce(&alice), 2);
+        assert_eq!(state.nonce(&bob), 1);
+        assert!(state.fees_collected >= first.fee_charged + second.fee_charged + third.fee_charged);
+    }
+
+    #[test]
     fn native_token_state_is_committed_and_persisted_with_qvm_contract_state() {
         let mut state = ContractAccountState::new();
         let legacy_root = state.state_root().unwrap();
