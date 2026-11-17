@@ -49,6 +49,7 @@ run('define count := 2\ncount := count + 3\nshow count', "5", "variable assignme
 run('define name := "QORVYNT"\nshow "Hello, " + name', "Hello, QORVYNT", "strings and concatenation");
 run('if true {\n  show "yes"\n} otherwise {\n  show "no"\n}', "yes", "if branch");
 run('if false {\n  show "yes"\n} otherwise {\n  show "no"\n}', "no", "otherwise branch");
+run('define profit := 24176\nif profit > 20000\n  show "QORVYNT MILLIONAIRE"\notherwise\n  show "ABHI MEHNAT KARO"', "QORVYNT MILLIONAIRE", "indentation-based if/otherwise without braces");
 run('define count := 0\nrepeat count < 5 {\n count := count + 1\n if count == 2 {\n  continue\n }\n show count\n if count == 4 {\n  break\n }\n}', "1\n3\n4", "repeat, break, and continue");
 run('show multiply(6, 7)\nfn multiply(a, b) {\n return a * b\n}', "42", "function declaration and return");
 run('define items := array(10, 20, 30)\nshow get(items, 1)\nshow len(items)\ndefine user := map("name", "QORVYNT", "level", 8)\nshow get(user, "name")\nshow keys(user)', "20\n3\nQORVYNT\n[level, name]", "arrays and maps");
