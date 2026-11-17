@@ -50,4 +50,4 @@ jobs:
         run: cargo test --all-targets
 
       - name: Execute shared hello example
-        run: cargo run -- ../examples/hello.zv
+        run: cargo run -- ../examples/hello.qv
