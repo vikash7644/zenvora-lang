@@ -10,9 +10,11 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::block_store::BlockStore;
-use super::chain_block::{execute_block, execute_block_candidate, SignedTransactionEnvelope};
+use super::chain_block::{execute_block, execute_block_candidate, execute_block_candidate_with_contracts, execute_block_with_contracts, SignedTransactionEnvelope};
 use super::chain_consensus::{add_validator_signature, verify_partial_consensus_proof};
 use super::chain_protocol::{BlockHeaderV1, TransactionV1};
+use super::contract_executor::SignedContractTransaction;
+use super::contract_protocol::ContractTransactionV1;
 use super::tx_pool::TransactionPool;
 
 const PROTOCOL_VERSION: u64 = 1;
@@ -148,12 +150,26 @@ pub fn sync_from_peer(store_path: &str, chain_id: u64, peer: &str) -> Result<usi
             let transaction = TransactionV1::from_canonical_bytes(&transaction_bytes)?;
             transactions.push(SignedTransactionEnvelope { transaction, public_key });
         }
+        let contract_values = response.get("contractTransactions").and_then(Value::as_array)
+            .cloned().unwrap_or_default();
+        let mut contract_transactions = Vec::with_capacity(contract_values.len());
+        for item in contract_values {
+            let public_key = hex_decode(item.get("publicKey").and_then(Value::as_str)
+                .ok_or_else(|| "peer contract transaction is missing public key".to_string())?)?;
+            let transaction_bytes = hex_decode(item.get("transaction").and_then(Value::as_str)
+                .ok_or_else(|| "peer contract transaction is missing canonical bytes".to_string())?)?;
+            let transaction = ContractTransactionV1::from_canonical_bytes(&transaction_bytes)?;
+            contract_transactions.push(SignedContractTransaction { transaction, public_key });
+        }
         let previous = store.blocks().last().cloned()
             .ok_or_else(|| "local store has no previous block".to_string())?;
-        let receipts = execute_block(
-            &mut runtime, &header, &transactions, chain_id, Some(&previous.header),
+        let receipts = execute_block_with_contracts(
+            &mut runtime, &header, &transactions, &contract_transactions,
+            chain_id, Some(&previous.header),
         )?;
-        store.append_executed_block(store_path, &runtime, &header, &transactions, &receipts)?;
+        store.append_executed_block_with_contracts(
+            store_path, &runtime, &header, &transactions, &contract_transactions, &receipts,
+        )?;
         synced += 1;
         height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
     }
@@ -286,7 +302,22 @@ fn handle_message_with_pool(
                     "transaction":hex_encode(&transaction_bytes)
                 }));
             }
-            json!({"ok":true,"result":{"header":hex_encode(&header),"transactions":transactions}})
+            let mut contract_transactions: Vec<Value> = Vec::with_capacity(block.contract_transactions.len());
+            for envelope in &block.contract_transactions {
+                let transaction_bytes = match envelope.transaction.canonical_bytes() {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":format!("cannot encode stored contract transaction: {error}")}),
+                };
+                contract_transactions.push(json!({
+                    "publicKey":hex_encode(&envelope.public_key),
+                    "transaction":hex_encode(&transaction_bytes)
+                }));
+            }
+            json!({"ok":true,"result":{
+                "header":hex_encode(&header),
+                "transactions":transactions,
+                "contractTransactions":contract_transactions
+            }})
         }
         Some("sign_block") => {
             let key_path = match validator_key_path {
@@ -321,6 +352,24 @@ fn handle_message_with_pool(
                 };
                 transactions.push(SignedTransactionEnvelope { transaction, public_key });
             }
+            let contract_values = request.get("contractTransactions").and_then(Value::as_array)
+                .cloned().unwrap_or_default();
+            let mut contract_transactions = Vec::with_capacity(contract_values.len());
+            for item in contract_values {
+                let public_key = match item.get("publicKey").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                    Some(value) => value,
+                    None => return json!({"ok":false,"error":"proposal contract transaction is missing public key"}),
+                };
+                let transaction_bytes = match item.get("transaction").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                    Some(value) => value,
+                    None => return json!({"ok":false,"error":"proposal contract transaction is missing canonical bytes"}),
+                };
+                let transaction = match ContractTransactionV1::from_canonical_bytes(&transaction_bytes) {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":error}),
+                };
+                contract_transactions.push(SignedContractTransaction { transaction, public_key });
+            }
             let (store, runtime) = match BlockStore::load_from_file(store_path, expected_chain_id) {
                 Ok(value) => value,
                 Err(error) => return json!({"ok":false,"error":format!("local block store failed verification: {error}")}),
@@ -341,8 +390,9 @@ fn handle_message_with_pool(
                 return json!({"ok":false,"error":format!("invalid existing proposal signatures: {error}")});
             }
             let mut candidate = runtime.clone();
-            if let Err(error) = execute_block_candidate(
-                &mut candidate, &header, &transactions, expected_chain_id, Some(&previous.header),
+            if let Err(error) = execute_block_candidate_with_contracts(
+                &mut candidate, &header, &transactions, &contract_transactions,
+                expected_chain_id, Some(&previous.header),
             ) {
                 return json!({"ok":false,"error":format!("candidate block validation failed: {error}")});
             }
