@@ -363,6 +363,63 @@ mod tests {
     }
 
     #[test]
+    fn contract_pool_admits_ordered_deploy_and_call_and_round_trips() {
+        use super::ContractTransactionPool;
+        use super::super::contract_executor::{ContractExecutionReceipt, SignedContractTransaction};
+        use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
+
+        let key = SigningKey::from_bytes(&[141; 32]);
+        let public = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public).unwrap();
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&address, 5_000_000).unwrap();
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let mut deploy = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 0,
+            gas_limit: 200_000, max_fee: 200_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Deploy { artifact: serde_json::to_vec(&artifact).unwrap() },
+            signature: Vec::new(),
+        };
+        deploy.signature = key.sign(&deploy.signing_bytes().unwrap()).to_bytes().to_vec();
+        let deploy_envelope = SignedContractTransaction { transaction: deploy, public_key: public.to_vec() };
+        let mut candidate = runtime.clone();
+        let deploy_receipts = candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&deploy_envelope), 71, 1,
+        ).unwrap();
+        let contract_id = match &deploy_receipts[0] {
+            ContractExecutionReceipt::Deploy(receipt) => receipt.contract_id.clone(),
+            _ => panic!("expected deployment receipt"),
+        };
+        let mut call = ContractTransactionV1 {
+            chain_id: 71, sender: address, nonce: 1,
+            gas_limit: 100_000, max_fee: 100_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Call {
+                contract_id, method: "increment".into(), calldata: b"3".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        call.signature = key.sign(&call.signing_bytes().unwrap()).to_bytes().to_vec();
+        let call_envelope = SignedContractTransaction { transaction: call, public_key: public.to_vec() };
+
+        let mut pool = ContractTransactionPool::new(71, 1).unwrap();
+        pool.submit(&runtime, deploy_envelope.clone()).unwrap();
+        pool.submit(&runtime, call_envelope.clone()).unwrap();
+        assert_eq!(pool.len(), 2);
+        assert!(pool.submit(&runtime, call_envelope).is_err());
+
+        let path = std::env::temp_dir().join(format!("qorvynt-contract-pool-{}.zvp", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        pool.save_to_file(&path).unwrap();
+        let restored = ContractTransactionPool::load_from_file(&path, &runtime, 71, 1).unwrap();
+        assert_eq!(restored.len(), 2);
+        assert!(ContractTransactionPool::load_from_file(&path, &runtime, 71, 2).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn pool_file_round_trips_and_rejects_stale_context() {
         let key = SigningKey::from_bytes(&[132; 32]);
         let runtime = runtime(&key);
