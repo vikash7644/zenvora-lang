@@ -2569,9 +2569,45 @@ fn contract_abi_and_artifact(source: &str) -> Result<serde_json::Value, String> 
         "compiler_version": env!("CARGO_PKG_VERSION"),
         "contract": name,
         "source_sha256": source_hash,
+        "source": source,
         "abi": {"version": 1, "states": states, "methods": methods},
         "bytecode_v2": bytecode
     }))
+}
+
+
+pub(crate) fn validate_contract_artifact(bytes: &[u8]) -> Result<(String, String, String), String> {
+    if bytes.is_empty() || bytes.len() > 1024 * 1024 {
+        return Err("contract artifact size is outside the permitted range".into());
+    }
+    let artifact: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|error| format!("invalid contract artifact JSON: {error}"))?;
+    if artifact.get("format").and_then(serde_json::Value::as_str) != Some("ZENVORA_CONTRACT_ARTIFACT_V1") {
+        return Err("unsupported contract artifact format".into());
+    }
+    let name = artifact.get("contract").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing its contract name".to_string())?;
+    if !valid_identifier(name) {
+        return Err("contract artifact contains an invalid contract name".into());
+    }
+    let source = artifact.get("source").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing its source payload".to_string())?;
+    let expected_hash = artifact.get("source_sha256").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing its source hash".to_string())?;
+    let actual_hash = Sha256::digest(source.as_bytes()).iter()
+        .map(|byte| format!("{byte:02x}")).collect::<String>();
+    if expected_hash != actual_hash {
+        return Err("contract artifact source hash mismatch".into());
+    }
+    let (code, layout) = compile_with_layout(source)?;
+    let canonical_bytecode = serialize_bytecode_v2(&code, &layout)?;
+    let supplied_bytecode = artifact.get("bytecode_v2").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing Bytecode v2".to_string())?;
+    let verified = deserialize_bytecode_v2(supplied_bytecode)?;
+    if serialize_bytecode_v2(&verified, &layout)? != canonical_bytecode {
+        return Err("contract artifact Bytecode v2 does not match its source".into());
+    }
+    Ok((name.to_string(), source.to_string(), canonical_bytecode))
 }
 
 fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), String> {
