@@ -20,6 +20,14 @@ pub struct TokenLedger {
     allowances: BTreeMap<(String, String, String), u128>,
     events: Vec<TokenEvent>,
 }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct TokenLedgerSnapshot {
+    tokens: BTreeMap<String, TokenInfo>,
+    balances: Vec<(String, String, u128)>,
+    allowances: Vec<(String, String, String, u128)>,
+    events: Vec<TokenEvent>,
+}
+
 impl TokenLedger {
     pub fn new() -> Self { Self::default() }
     pub fn token(&self, id: &str) -> Option<&TokenInfo> { self.tokens.get(id) }
@@ -110,20 +118,35 @@ impl TokenLedger {
         self.events.push(TokenEvent::Transfer { token_id: id.into(), from: Some(from.into()), to: Some(to.into()), amount }); Ok(())
     }
     pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
-        let bytes = serde_json::to_vec(self).map_err(|e| e.to_string())?;
+        let snapshot = TokenLedgerSnapshot {
+            tokens: self.tokens.clone(),
+            balances: self.balances.iter().map(|((id, account), amount)| (id.clone(), account.clone(), *amount)).collect(),
+            allowances: self.allowances.iter().map(|((id, owner, spender), amount)| (id.clone(), owner.clone(), spender.clone(), *amount)).collect(),
+            events: self.events.clone(),
+        };
+        let bytes = serde_json::to_vec(&snapshot).map_err(|e| e.to_string())?;
         if bytes.len() > 8 * 1024 * 1024 { return Err("token ledger snapshot exceeds size limit".into()); }
         Ok(bytes)
     }
     pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
         if bytes.len() > 8 * 1024 * 1024 { return Err("token ledger snapshot exceeds size limit".into()); }
-        let value: Self = serde_json::from_slice(bytes).map_err(|e| format!("invalid token snapshot: {e}"))?;
-        if value.tokens.len() > MAX_TOKENS || value.events.len() > MAX_EVENTS { return Err("token snapshot record limit exceeded".into()); }
+        let snapshot: TokenLedgerSnapshot = serde_json::from_slice(bytes).map_err(|e| format!("invalid token snapshot: {e}"))?;
+        if snapshot.tokens.len() > MAX_TOKENS || snapshot.events.len() > MAX_EVENTS { return Err("token snapshot record limit exceeded".into()); }
+        let mut value = Self { tokens: snapshot.tokens, balances: BTreeMap::new(), allowances: BTreeMap::new(), events: snapshot.events };
+        for (id, account, amount) in snapshot.balances {
+            if !value.tokens.contains_key(&id) { return Err("balance references unknown token".into()); }
+            valid_id(&id)?; valid_account(&account)?;
+            if value.balances.insert((id, account), amount).is_some() { return Err("duplicate token balance entry".into()); }
+        }
+        for (id, owner, spender, amount) in snapshot.allowances {
+            if !value.tokens.contains_key(&id) { return Err("allowance references unknown token".into()); }
+            valid_id(&id)?; valid_account(&owner)?; valid_account(&spender)?;
+            if value.allowances.insert((id, owner, spender), amount).is_some() { return Err("duplicate token allowance entry".into()); }
+        }
         for (id, info) in &value.tokens {
             valid_id(id)?; valid_account(&info.owner)?;
             if info.name.trim().is_empty() || info.name.len() > 64 || info.symbol.is_empty() || info.symbol.len() > 16 || info.decimals > 18 { return Err("invalid token metadata in snapshot".into()); }
         }
-        for ((id, account), _) in &value.balances { if !value.tokens.contains_key(id) { return Err("balance references unknown token".into()); } valid_account(account)?; }
-        for ((id, owner, spender), _) in &value.allowances { if !value.tokens.contains_key(id) { return Err("allowance references unknown token".into()); } valid_account(owner)?; valid_account(spender)?; }
         if value.encode_snapshot()?.as_slice() != bytes { return Err("token snapshot is not canonical".into()); }
         Ok(value)
     }
