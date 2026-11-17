@@ -8,6 +8,8 @@ use super::contract_runtime::{execute, ExecutionReceipt};
 use super::contract_state::{AccessMode, ContractState};
 use super::token_standard::TokenLedger;
 
+pub const TOKEN_FACTORY_ID: &str = "qorvynt_token_factory";
+
 const MAX_DEPLOYED_CONTRACTS: usize = 10_000;
 const MAX_DEPLOYED_SOURCE_BYTES: usize = 256 * 1024;
 
@@ -253,7 +255,7 @@ impl ContractAccountState {
             ContractOperation::Call { contract_id, .. } => contract_id,
             ContractOperation::Deploy { .. } => return Err("registered call executor requires a call operation".into()),
         };
-        if self.tokens.token(contract_id).is_some() {
+        if contract_id == TOKEN_FACTORY_ID || self.tokens.token(contract_id).is_some() {
             return self.execute_signed_token_call(tx, public_key, expected_chain_id, current_height);
         }
         let deployed = self.deployed_contracts.get(contract_id)
@@ -274,15 +276,22 @@ impl ContractAccountState {
         if tx.nonce != expected_nonce { return Err("contract transaction nonce mismatch or replay".into()); }
         let balance = self.balance(&tx.sender);
         if balance < tx.max_fee { return Err("insufficient balance for maximum authorized fee reserve".into()); }
-        let (token_id, method, calldata) = match &tx.operation {
+        let (contract_id, method, calldata) = match &tx.operation {
             ContractOperation::Call { contract_id, method, calldata } => (contract_id.as_str(), method.as_str(), calldata.as_slice()),
             ContractOperation::Deploy { .. } => return Err("token call requires a call operation".into()),
         };
         let args_text = std::str::from_utf8(calldata).map_err(|_| "token calldata must be UTF-8")?;
         if args_text.contains('\n') || args_text.contains('\r') { return Err("token calldata must be one line".into()); }
         let args: Vec<&str> = if args_text.trim().is_empty() { Vec::new() } else { args_text.split(',').map(str::trim).collect() };
+        let transaction_id = tx.transaction_id()?;
+        let token_id = if contract_id == TOKEN_FACTORY_ID {
+            let mut hasher = Sha256::new();
+            hasher.update(b"QORVYNT_TOKEN_ID_V1\0");
+            hasher.update(transaction_id);
+            hasher.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>()
+        } else { contract_id.to_owned() };
         let mut candidate = self.tokens.clone();
-        let operation = (|| -> Result<(), String> {
+        let operation = (|| -> Result<String, String> {
             let amount = |index: usize| -> Result<u128, String> {
                 args.get(index).ok_or_else(|| "missing token amount argument".to_string())?
                     .parse::<u128>().map_err(|_| "token amount must be an unsigned integer".into())
@@ -290,20 +299,27 @@ impl ContractAccountState {
             let account = |index: usize| -> Result<&str, String> {
                 args.get(index).copied().filter(|v| !v.is_empty()).ok_or_else(|| "missing token account argument".into())
             };
-            match method {
-                "transfer" if args.len() == 2 => candidate.transfer(token_id, &tx.sender, account(0)?, amount(1)?),
-                "approve" if args.len() == 2 => candidate.approve(token_id, &tx.sender, account(0)?, amount(1)?),
-                "transfer_from" if args.len() == 3 => candidate.transfer_from(token_id, &tx.sender, account(0)?, account(1)?, amount(2)?),
-                "mint" if args.len() == 2 => candidate.mint(token_id, &tx.sender, account(0)?, amount(1)?),
-                "burn" if args.len() == 1 => candidate.burn(token_id, &tx.sender, amount(0)?),
-                _ => Err("unsupported token action or incorrect token arguments".into()),
+            if contract_id == TOKEN_FACTORY_ID {
+                if method != "create" || args.len() != 4 { return Err("token factory expects create(name,symbol,decimals,initial_supply)".into()); }
+                let decimals = args[2].parse::<u8>().map_err(|_| "token decimals must be an integer from 0 to 18")?;
+                candidate.create(&token_id, args[0], args[1], decimals, &tx.sender, amount(3)?)?;
+                return Ok(token_id.clone());
             }
+            let result = match method {
+                "transfer" if args.len() == 2 => candidate.transfer(&token_id, &tx.sender, account(0)?, amount(1)?),
+                "approve" if args.len() == 2 => candidate.approve(&token_id, &tx.sender, account(0)?, amount(1)?),
+                "transfer_from" if args.len() == 3 => candidate.transfer_from(&token_id, &tx.sender, account(0)?, account(1)?, amount(2)?),
+                "mint" if args.len() == 2 => candidate.mint(&token_id, &tx.sender, account(0)?, amount(1)?),
+                "burn" if args.len() == 1 => candidate.burn(&token_id, &tx.sender, amount(0)?),
+                _ => Err("unsupported token action or incorrect token arguments".into()),
+            };
+            result.map(|()| "true".into())
         })();
         let mut meter = GasMeter::new(tx.gas_limit);
         let result = (|| -> Result<(), String> {
             meter.charge(BASE_EXECUTION_GAS)?;
             meter.charge(super::contract_gas::STORAGE_READ_GAS)?;
-            operation?;
+            operation.as_ref().map(|_| ()).map_err(Clone::clone)?;
             meter.charge(STORAGE_WRITE_GAS)?;
             Ok(())
         })();
@@ -316,13 +332,13 @@ impl ContractAccountState {
         let next_nonce = expected_nonce.checked_add(1).ok_or("account nonce overflow")?;
         let sender_balance = balance.checked_sub(fee_charged).ok_or("sender fee balance underflow")?;
         let next_fees = self.fees_collected.checked_add(fee_charged).ok_or("fee collector balance overflow")?;
-        let transaction_id = tx.transaction_id()?;
+        let output = operation.ok();
         if execution.is_ok() { self.tokens = candidate; }
         self.balances.insert(tx.sender.clone(), sender_balance);
         self.nonces.insert(tx.sender.clone(), next_nonce);
         self.fees_collected = next_fees;
         let execution = execution.map(|()| ExecutionReceipt {
-            output: vec!["true".into()], gas_used: gas_charged, state_root: self.state_root().unwrap_or([0; 32]),
+            output: vec![output.unwrap_or_else(|| "true".into())], gas_used: gas_charged, state_root: self.state_root().unwrap_or([0; 32]),
         });
         Ok(SignedCallReceipt {
             transaction_id, sender: tx.sender.clone(), nonce: tx.nonce, execution,
