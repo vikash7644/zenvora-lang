@@ -1,0 +1,895 @@
+//! Authenticated contract-call admission and execution on the existing QVM 2.0 runtime.
+use std::collections::BTreeMap;
+use ed25519_dalek::SigningKey;
+use sha2::{Digest, Sha256};
+use super::contract_gas::{GasMeter, BASE_EXECUTION_GAS, STORAGE_WRITE_GAS};
+use super::contract_protocol::{ContractOperation, ContractTransactionV1};
+use super::contract_runtime::{execute, ExecutionReceipt};
+use super::contract_state::{AccessMode, ContractState};
+use super::token_standard::TokenLedger;
+
+pub const TOKEN_FACTORY_ID: &str = "qorvynt_token_factory";
+
+const MAX_DEPLOYED_CONTRACTS: usize = 10_000;
+const MAX_DEPLOYED_SOURCE_BYTES: usize = 256 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployedContract {
+    pub id: String,
+    pub name: String,
+    pub source: String,
+    pub bytecode_v2: String,
+    pub deployer: String,
+    pub transaction_id: [u8; 32],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedDeployReceipt {
+    pub transaction_id: [u8; 32],
+    pub contract_id: String,
+    pub contract_name: String,
+    pub sender: String,
+    pub nonce: u64,
+    pub gas_charged: u64,
+    pub fee_charged: u64,
+    pub sender_balance: u64,
+    pub next_nonce: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractAccountState {
+    pub storage: ContractState,
+    balances: BTreeMap<String, u64>,
+    nonces: BTreeMap<String, u64>,
+    deployed_contracts: BTreeMap<String, DeployedContract>,
+    pub tokens: TokenLedger,
+    pub fees_collected: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedContractTransaction {
+    pub transaction: ContractTransactionV1,
+    pub public_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ContractExecutionReceipt {
+    Deploy(SignedDeployReceipt),
+    Call(SignedCallReceipt),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedCallReceipt {
+    pub transaction_id: [u8; 32],
+    pub sender: String,
+    pub nonce: u64,
+    pub execution: Result<ExecutionReceipt, String>,
+    pub gas_charged: u64,
+    pub fee_charged: u64,
+    pub sender_balance: u64,
+    pub next_nonce: u64,
+}
+
+impl Default for ContractAccountState {
+    fn default() -> Self {
+        Self { storage: ContractState::new(), balances: BTreeMap::new(), nonces: BTreeMap::new(), deployed_contracts: BTreeMap::new(), tokens: TokenLedger::new(), fees_collected: 0 }
+    }
+}
+
+impl ContractAccountState {
+    pub fn new() -> Self { Self::default() }
+
+    /// Deterministic commitment for this contract account/storage/registry snapshot.
+    pub fn state_root(&self) -> Result<[u8; 32], String> {
+        // Preserve pre-token state roots for existing chains until a token is actually created.
+        let snapshot = if self.tokens.is_empty() { self.encode_snapshot_v2()? } else { self.encode_snapshot()? };
+        let mut hasher = Sha256::new();
+        hasher.update(b"QORVYNT_CONTRACT_STATE_ROOT_V1\0");
+        hasher.update(snapshot);
+        Ok(hasher.finalize().into())
+    }
+
+    /// Apply one authenticated transaction using only the deployed-contract registry for calls.
+    pub fn apply_signed_transaction(
+        &mut self,
+        tx: &ContractTransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<ContractExecutionReceipt, String> {
+        match &tx.operation {
+            ContractOperation::Deploy { .. } => self.execute_signed_deploy(
+                tx, public_key, expected_chain_id, current_height
+            ).map(ContractExecutionReceipt::Deploy),
+            ContractOperation::Call { .. } => self.execute_signed_registered_call(
+                tx, public_key, expected_chain_id, current_height
+            ).map(ContractExecutionReceipt::Call),
+        }
+    }
+
+    /// Execute a block's ordered contract transactions against a candidate state.
+    /// The entire batch commits atomically only if every transaction passes admission.
+    /// VM-level call failures remain valid receipts and consume their authorized gas/nonce.
+    pub fn apply_signed_batch(
+        &mut self,
+        transactions: &[SignedContractTransaction],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<Vec<ContractExecutionReceipt>, String> {
+        let mut candidate = self.clone();
+        let mut receipts = Vec::with_capacity(transactions.len());
+        for envelope in transactions {
+            receipts.push(candidate.apply_signed_transaction(
+                &envelope.transaction,
+                &envelope.public_key,
+                expected_chain_id,
+                current_height,
+            )?);
+        }
+        *self = candidate;
+        Ok(receipts)
+    }
+
+    /// Genesis/faucet/test harness balance setter. Production issuance must be consensus-authorized.
+    pub fn set_balance(&mut self, address: &str, amount: u64) -> Result<(), String> {
+        if address.is_empty() || address.len() > 64 || !address.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return Err("invalid account address".into());
+        }
+        self.balances.insert(address.to_owned(), amount);
+        Ok(())
+    }
+
+    pub fn balance(&self, address: &str) -> u64 { self.balances.get(address).copied().unwrap_or(0) }
+    pub fn nonce(&self, address: &str) -> u64 { self.nonces.get(address).copied().unwrap_or(0) }
+
+    pub fn deployed_contract(&self, contract_id: &str) -> Option<&DeployedContract> {
+        self.deployed_contracts.get(contract_id)
+    }
+
+    pub fn deployed_contract_count(&self) -> usize {
+        self.deployed_contracts.len()
+    }
+
+    /// Native fungible-token operations are part of the same QVM contract account state.
+    pub fn create_token(&mut self, token_id: &str, name: &str, symbol: &str, decimals: u8, owner: &str, initial_supply: u128) -> Result<(), String> {
+        self.tokens.create(token_id, name, symbol, decimals, owner, initial_supply)
+    }
+    pub fn token_transfer(&mut self, token_id: &str, sender: &str, recipient: &str, amount: u128) -> Result<(), String> {
+        self.tokens.transfer(token_id, sender, recipient, amount)
+    }
+    pub fn token_approve(&mut self, token_id: &str, owner: &str, spender: &str, amount: u128) -> Result<(), String> {
+        self.tokens.approve(token_id, owner, spender, amount)
+    }
+    pub fn token_transfer_from(&mut self, token_id: &str, spender: &str, owner: &str, recipient: &str, amount: u128) -> Result<(), String> {
+        self.tokens.transfer_from(token_id, spender, owner, recipient, amount)
+    }
+    pub fn token_mint(&mut self, token_id: &str, caller: &str, recipient: &str, amount: u128) -> Result<(), String> {
+        self.tokens.mint(token_id, caller, recipient, amount)
+    }
+    pub fn token_burn(&mut self, token_id: &str, holder: &str, amount: u128) -> Result<(), String> {
+        self.tokens.burn(token_id, holder, amount)
+    }
+
+    pub fn deployed_contract_ids(&self) -> Vec<String> {
+        self.deployed_contracts.keys().cloned().collect()
+    }
+
+    /// Verify and register a signed artifact on the existing QVM 2.0 contract state.
+    /// Contract IDs are deterministic and domain-separated from transaction IDs.
+    pub fn execute_signed_deploy(
+        &mut self,
+        tx: &ContractTransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<SignedDeployReceipt, String> {
+        tx.verify_signature(public_key)?;
+        let maximum_fee = tx.validate_for(expected_chain_id, current_height)?;
+        let artifact = match &tx.operation {
+            ContractOperation::Deploy { artifact } => artifact,
+            ContractOperation::Call { .. } => return Err("deployment executor requires a deploy operation".into()),
+        };
+        let (name, source, bytecode_v2) = super::validate_contract_artifact(artifact)?;
+        if source.len() > MAX_DEPLOYED_SOURCE_BYTES {
+            return Err("contract source exceeds deployed source size limit".into());
+        }
+        if self.deployed_contracts.len() >= MAX_DEPLOYED_CONTRACTS {
+            return Err("deployed contract registry is full".into());
+        }
+        let expected_nonce = self.nonce(&tx.sender);
+        if tx.nonce != expected_nonce {
+            return Err("contract transaction nonce mismatch or replay".into());
+        }
+        let balance = self.balance(&tx.sender);
+        if balance < tx.max_fee {
+            return Err("insufficient balance for maximum authorized fee reserve".into());
+        }
+        let transaction_id = tx.transaction_id()?;
+        let mut hasher = Sha256::new();
+        hasher.update(b"QORVYNT_CONTRACT_ADDRESS_V1\\0");
+        hasher.update(tx.chain_id.to_be_bytes());
+        hasher.update(tx.sender.as_bytes());
+        hasher.update(tx.nonce.to_be_bytes());
+        hasher.update(transaction_id);
+        let contract_id = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>();
+        if self.deployed_contracts.contains_key(&contract_id) {
+            return Err("deterministic contract ID already exists".into());
+        }
+        let mut meter = GasMeter::new(tx.gas_limit);
+        meter.charge(BASE_EXECUTION_GAS)?;
+        meter.charge(STORAGE_WRITE_GAS)?;
+        meter.charge(u64::try_from(artifact.len()).map_err(|_| "artifact gas size overflow")?)?;
+        let gas_charged = meter.used();
+        let fee_charged = gas_charged.checked_mul(tx.gas_price)
+            .ok_or_else(|| "actual contract fee overflow".to_string())?;
+        if fee_charged > maximum_fee || fee_charged > tx.max_fee {
+            return Err("actual deployment fee exceeds authorized maximum".into());
+        }
+        let next_nonce = expected_nonce.checked_add(1).ok_or_else(|| "account nonce overflow".to_string())?;
+        let sender_balance = balance.checked_sub(fee_charged).ok_or_else(|| "sender fee balance underflow".to_string())?;
+        let next_fees = self.fees_collected.checked_add(fee_charged).ok_or_else(|| "fee collector balance overflow".to_string())?;
+        let deployed = DeployedContract {
+            id: contract_id.clone(), name: name.clone(), source, bytecode_v2,
+            deployer: tx.sender.clone(), transaction_id,
+        };
+        self.deployed_contracts.insert(contract_id.clone(), deployed);
+        self.balances.insert(tx.sender.clone(), sender_balance);
+        self.nonces.insert(tx.sender.clone(), next_nonce);
+        self.fees_collected = next_fees;
+        Ok(SignedDeployReceipt {
+            transaction_id, contract_id, contract_name: name, sender: tx.sender.clone(),
+            nonce: tx.nonce, gas_charged, fee_charged, sender_balance, next_nonce,
+        })
+    }
+
+    /// Execute a signed call against source registered by a prior verified deployment.
+    /// The caller cannot substitute different source for an already deployed contract ID.
+    pub fn execute_signed_registered_call(
+        &mut self,
+        tx: &ContractTransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<SignedCallReceipt, String> {
+        let contract_id = match &tx.operation {
+            ContractOperation::Call { contract_id, .. } => contract_id,
+            ContractOperation::Deploy { .. } => return Err("registered call executor requires a call operation".into()),
+        };
+        if contract_id == TOKEN_FACTORY_ID || self.tokens.token(contract_id).is_some() {
+            return self.execute_signed_token_call(tx, public_key, expected_chain_id, current_height);
+        }
+        let deployed = self.deployed_contracts.get(contract_id)
+            .ok_or_else(|| "contract ID is not deployed on this state".to_string())?;
+        let source = deployed.source.clone();
+        self.execute_signed_call(tx, public_key, expected_chain_id, current_height, &source)
+    }
+
+    /// Signed token actions use the same contract transaction envelope, nonce and fee settlement
+    /// as QVM calls. The token ledger is committed into the same contract account state root.
+    fn execute_signed_token_call(
+        &mut self, tx: &ContractTransactionV1, public_key: &[u8],
+        expected_chain_id: u64, current_height: u64,
+    ) -> Result<SignedCallReceipt, String> {
+        tx.verify_signature(public_key)?;
+        let maximum_fee = tx.validate_for(expected_chain_id, current_height)?;
+        let expected_nonce = self.nonce(&tx.sender);
+        if tx.nonce != expected_nonce { return Err("contract transaction nonce mismatch or replay".into()); }
+        let balance = self.balance(&tx.sender);
+        if balance < tx.max_fee { return Err("insufficient balance for maximum authorized fee reserve".into()); }
+        let (contract_id, method, calldata) = match &tx.operation {
+            ContractOperation::Call { contract_id, method, calldata } => (contract_id.as_str(), method.as_str(), calldata.as_slice()),
+            ContractOperation::Deploy { .. } => return Err("token call requires a call operation".into()),
+        };
+        let args_text = std::str::from_utf8(calldata).map_err(|_| "token calldata must be UTF-8")?;
+        if args_text.contains('\n') || args_text.contains('\r') { return Err("token calldata must be one line".into()); }
+        let args: Vec<&str> = if args_text.trim().is_empty() { Vec::new() } else { args_text.split(',').map(str::trim).collect() };
+        let transaction_id = tx.transaction_id()?;
+        let token_id = if contract_id == TOKEN_FACTORY_ID {
+            let mut hasher = Sha256::new();
+            hasher.update(b"QORVYNT_TOKEN_ID_V1\0");
+            hasher.update(transaction_id);
+            hasher.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>()
+        } else { contract_id.to_owned() };
+        let mut candidate = self.tokens.clone();
+        let operation = (|| -> Result<String, String> {
+            let amount = |index: usize| -> Result<u128, String> {
+                args.get(index).ok_or_else(|| "missing token amount argument".to_string())?
+                    .parse::<u128>().map_err(|_| "token amount must be an unsigned integer".into())
+            };
+            let account = |index: usize| -> Result<&str, String> {
+                args.get(index).copied().filter(|v| !v.is_empty()).ok_or_else(|| "missing token account argument".into())
+            };
+            if contract_id == TOKEN_FACTORY_ID {
+                if method != "create" || args.len() != 4 { return Err("token factory expects create(name,symbol,decimals,initial_supply)".into()); }
+                let decimals = args[2].parse::<u8>().map_err(|_| "token decimals must be an integer from 0 to 18")?;
+                candidate.create(&token_id, args[0], args[1], decimals, &tx.sender, amount(3)?)?;
+                return Ok(token_id.clone());
+            }
+            let result = match method {
+                "transfer" if args.len() == 2 => candidate.transfer(&token_id, &tx.sender, account(0)?, amount(1)?),
+                "approve" if args.len() == 2 => candidate.approve(&token_id, &tx.sender, account(0)?, amount(1)?),
+                "transfer_from" if args.len() == 3 => candidate.transfer_from(&token_id, &tx.sender, account(0)?, account(1)?, amount(2)?),
+                "mint" if args.len() == 2 => candidate.mint(&token_id, &tx.sender, account(0)?, amount(1)?),
+                "burn" if args.len() == 1 => candidate.burn(&token_id, &tx.sender, amount(0)?),
+                _ => Err("unsupported token action or incorrect token arguments".into()),
+            };
+            result.map(|()| "true".into())
+        })();
+        let mut meter = GasMeter::new(tx.gas_limit);
+        let result = (|| -> Result<(), String> {
+            meter.charge(BASE_EXECUTION_GAS)?;
+            meter.charge(super::contract_gas::STORAGE_READ_GAS)?;
+            operation.as_ref().map(|_| ()).map_err(Clone::clone)?;
+            meter.charge(STORAGE_WRITE_GAS)?;
+            Ok(())
+        })();
+        let (execution, gas_charged) = match result {
+            Ok(()) => (Ok(()), meter.used()),
+            Err(error) => (Err(error), tx.gas_limit),
+        };
+        let fee_charged = gas_charged.checked_mul(tx.gas_price).ok_or("actual token fee overflow")?;
+        if fee_charged > maximum_fee || fee_charged > tx.max_fee { return Err("actual token fee exceeds authorized maximum".into()); }
+        let next_nonce = expected_nonce.checked_add(1).ok_or("account nonce overflow")?;
+        let sender_balance = balance.checked_sub(fee_charged).ok_or("sender fee balance underflow")?;
+        let next_fees = self.fees_collected.checked_add(fee_charged).ok_or("fee collector balance overflow")?;
+        let output = operation.ok();
+        if execution.is_ok() { self.tokens = candidate; }
+        self.balances.insert(tx.sender.clone(), sender_balance);
+        self.nonces.insert(tx.sender.clone(), next_nonce);
+        self.fees_collected = next_fees;
+        let execution = execution.map(|()| ExecutionReceipt {
+            output: vec![output.unwrap_or_else(|| "true".into())], gas_used: gas_charged, state_root: self.state_root().unwrap_or([0; 32]),
+        });
+        Ok(SignedCallReceipt {
+            transaction_id, sender: tx.sender.clone(), nonce: tx.nonce, execution,
+            gas_charged, fee_charged, sender_balance, next_nonce,
+        })
+    }
+
+    /// Execute one signed call atomically against a candidate state. Failed VM calls consume
+    /// the nonce and the full gas limit (bounded by max_fee), while contract storage rolls back.
+    pub fn execute_signed_call(
+        &mut self,
+        tx: &ContractTransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+        contract_source: &str,
+    ) -> Result<SignedCallReceipt, String> {
+        tx.verify_signature(public_key)?;
+        let maximum_fee = tx.validate_for(expected_chain_id, current_height)?;
+        let expected_nonce = self.nonce(&tx.sender);
+        if tx.nonce != expected_nonce {
+            return Err("contract transaction nonce mismatch or replay".into());
+        }
+        let balance = self.balance(&tx.sender);
+        if balance < tx.max_fee {
+            return Err("insufficient balance for maximum authorized fee reserve".into());
+        }
+        let (contract_id, method, calldata) = match &tx.operation {
+            ContractOperation::Call { contract_id, method, calldata } => (contract_id, method, calldata),
+            ContractOperation::Deploy { .. } => return Err("use execute_signed_deploy for a deployment transaction".into()),
+        };
+        let args = std::str::from_utf8(calldata).map_err(|_| "call calldata must be UTF-8 QORVYNT argument text")?;
+        if args.contains('\n') || args.contains('\r') {
+            return Err("call calldata must be a single-line argument list".into());
+        }
+        let invocation = format!("call {method}({args})");
+        let mut candidate_storage = self.storage.clone();
+        let result = execute(contract_source, contract_id, &invocation, AccessMode::Action, &mut candidate_storage, tx.gas_limit);
+        let (execution, gas_charged) = match result {
+            Ok(receipt) => (Ok(receipt.clone()), receipt.gas_used),
+            Err(error) => (Err(error), tx.gas_limit),
+        };
+        let fee_charged = gas_charged.checked_mul(tx.gas_price)
+            .ok_or_else(|| "actual contract fee overflow".to_string())?;
+        if fee_charged > maximum_fee || fee_charged > tx.max_fee {
+            return Err("actual contract fee exceeds authorized maximum".into());
+        }
+        let next_nonce = expected_nonce.checked_add(1).ok_or_else(|| "account nonce overflow".to_string())?;
+        let sender_balance = balance.checked_sub(fee_charged).ok_or_else(|| "sender fee balance underflow".to_string())?;
+        let next_fees = self.fees_collected.checked_add(fee_charged).ok_or_else(|| "fee collector balance overflow".to_string())?;
+        let transaction_id = tx.transaction_id()?;
+
+        if execution.is_ok() { self.storage = candidate_storage; }
+        self.balances.insert(tx.sender.clone(), sender_balance);
+        self.nonces.insert(tx.sender.clone(), next_nonce);
+        self.fees_collected = next_fees;
+        Ok(SignedCallReceipt {
+            transaction_id, sender: tx.sender.clone(), nonce: tx.nonce, execution,
+            gas_charged, fee_charged, sender_balance, next_nonce,
+        })
+    }
+
+    /// Canonical snapshot includes QVM contract storage, account balances, replay-protection
+    /// nonces and accumulated fees. Chain replay/state-root validation remains the caller's duty.
+    fn encode_snapshot_v2(&self) -> Result<Vec<u8>, String> {
+        let storage = self.storage.encode_snapshot()?;
+        let mut out = Vec::new();
+        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0");
+        put_bytes(&mut out, &storage)?;
+        out.extend_from_slice(&self.fees_collected.to_be_bytes());
+        put_map(&mut out, &self.balances)?;
+        put_map(&mut out, &self.nonces)?;
+        put_deployed_contracts(&mut out, &self.deployed_contracts)?;
+        Ok(out)
+    }
+
+    pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V3\\0");
+        let legacy = self.encode_snapshot_v2()?;
+        put_bytes(&mut out, &legacy)?;
+        let tokens = self.tokens.encode_snapshot()?;
+        put_bytes(&mut out, &tokens)?;
+        if out.len() > 12 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        Ok(out)
+    }
+
+    pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > 12 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        if bytes.starts_with(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0") {
+            return Self::decode_snapshot_v2(bytes);
+        }
+        let mut reader = ExecutorReader { bytes, offset: 0 };
+        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V3\\0")?;
+        let legacy = reader.read_bytes(4 * 1024 * 1024)?;
+        let tokens = TokenLedger::decode_snapshot(reader.read_bytes(8 * 1024 * 1024)?)?;
+        reader.finish()?;
+        let mut state = Self::decode_snapshot_v2(legacy)?;
+        state.tokens = tokens;
+        if state.encode_snapshot()?.as_slice() != bytes { return Err("contract executor snapshot is not canonical".into()); }
+        Ok(state)
+    }
+
+    fn decode_snapshot_v2(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > 4 * 1024 * 1024 { return Err("legacy contract executor snapshot exceeds size limit".into()); }
+        let mut reader = ExecutorReader { bytes, offset: 0 };
+        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0")?;
+        let storage = ContractState::decode_snapshot(reader.read_bytes(2 * 1024 * 1024)?)?;
+        let fees_collected = reader.read_u64()?;
+        let balances = reader.read_map()?;
+        let nonces = reader.read_map()?;
+        let deployed_contracts = reader.read_deployed_contracts()?;
+        reader.finish()?;
+        let state = Self { storage, balances, nonces, deployed_contracts, tokens: TokenLedger::new(), fees_collected };
+        if state.encode_snapshot_v2()?.as_slice() != bytes { return Err("legacy contract executor snapshot is not canonical".into()); }
+        Ok(state)
+    }
+
+    pub fn save_snapshot(&self, path: &std::path::Path) -> Result<(), String> {
+        use std::io::Write;
+        let bytes = self.encode_snapshot()?;
+        let name = path.file_name().ok_or_else(|| "snapshot path must name a file".to_string())?;
+        let mut temp_name = name.to_os_string();
+        temp_name.push(format!(".tmp-{}", std::process::id()));
+        let temp = path.with_file_name(temp_name);
+        let result = (|| {
+            let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)
+                .map_err(|e| format!("cannot create executor snapshot: {e}"))?;
+            file.write_all(&bytes).map_err(|e| format!("cannot write executor snapshot: {e}"))?;
+            file.sync_all().map_err(|e| format!("cannot sync executor snapshot: {e}"))?;
+            std::fs::rename(&temp, path).map_err(|e| format!("cannot install executor snapshot: {e}"))?;
+            Ok(())
+        })();
+        if result.is_err() { let _ = std::fs::remove_file(&temp); }
+        result
+    }
+
+    pub fn load_snapshot(path: &std::path::Path) -> Result<Self, String> {
+        use std::io::Read;
+        let metadata = std::fs::metadata(path).map_err(|e| format!("cannot stat executor snapshot: {e}"))?;
+        if metadata.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
+        let mut file = std::fs::File::open(path).map_err(|e| format!("cannot open executor snapshot: {e}"))?;
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes)
+            .map_err(|e| format!("cannot read executor snapshot: {e}"))?;
+        Self::decode_snapshot(&bytes)
+    }
+}
+
+
+fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
+    let len = u32::try_from(bytes.len()).map_err(|_| "snapshot field too large")?;
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(bytes);
+    Ok(())
+}
+
+fn put_deployed_contracts(out: &mut Vec<u8>, contracts: &BTreeMap<String, DeployedContract>) -> Result<(), String> {
+    out.extend_from_slice(&u32::try_from(contracts.len()).map_err(|_| "too many deployed contracts")?.to_be_bytes());
+    for (id, contract) in contracts {
+        if id != &contract.id || id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("invalid deployed contract ID in registry".into());
+        }
+        put_bytes(out, id.as_bytes())?;
+        put_bytes(out, contract.name.as_bytes())?;
+        put_bytes(out, contract.source.as_bytes())?;
+        put_bytes(out, contract.bytecode_v2.as_bytes())?;
+        put_bytes(out, contract.deployer.as_bytes())?;
+        out.extend_from_slice(&contract.transaction_id);
+    }
+    Ok(())
+}
+
+fn put_map(out: &mut Vec<u8>, map: &BTreeMap<String, u64>) -> Result<(), String> {
+    out.extend_from_slice(&u32::try_from(map.len()).map_err(|_| "too many account records")?.to_be_bytes());
+    for (address, value) in map {
+        if address.is_empty() || address.len() > 64 || !address.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return Err("invalid account address in snapshot".into());
+        }
+        put_bytes(out, address.as_bytes())?;
+        out.extend_from_slice(&value.to_be_bytes());
+    }
+    Ok(())
+}
+
+struct ExecutorReader<'a> { bytes: &'a [u8], offset: usize }
+impl<'a> ExecutorReader<'a> {
+    fn take(&mut self, n: usize) -> Result<&'a [u8], String> {
+        let end = self.offset.checked_add(n).ok_or("snapshot offset overflow")?;
+        if end > self.bytes.len() { return Err("truncated executor snapshot".into()); }
+        let value = &self.bytes[self.offset..end]; self.offset = end; Ok(value)
+    }
+    fn expect(&mut self, tag: &[u8]) -> Result<(), String> {
+        if self.take(tag.len())? != tag { return Err("unsupported executor snapshot version".into()); } Ok(())
+    }
+    fn read_u32(&mut self) -> Result<u32, String> { Ok(u32::from_be_bytes(self.take(4)?.try_into().map_err(|_| "bad u32")?)) }
+    fn read_u64(&mut self) -> Result<u64, String> { Ok(u64::from_be_bytes(self.take(8)?.try_into().map_err(|_| "bad u64")?)) }
+    fn read_bytes(&mut self, max: usize) -> Result<&'a [u8], String> {
+        let len = self.read_u32()? as usize;
+        if len > max { return Err("executor snapshot field exceeds limit".into()); }
+        self.take(len)
+    }
+    fn read_deployed_contracts(&mut self) -> Result<BTreeMap<String, DeployedContract>, String> {
+        let count = self.read_u32()? as usize;
+        if count > MAX_DEPLOYED_CONTRACTS { return Err("too many deployed contracts in snapshot".into()); }
+        let mut contracts = BTreeMap::new();
+        let mut previous: Option<String> = None;
+        for _ in 0..count {
+            let id = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "contract ID is not UTF-8")?;
+            if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err("invalid deployed contract ID in snapshot".into());
+            }
+            if previous.as_ref().is_some_and(|p| p >= &id) { return Err("deployed contracts are not strictly sorted".into()); }
+            previous = Some(id.clone());
+            let name = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "contract name is not UTF-8")?;
+            let source = String::from_utf8(self.read_bytes(MAX_DEPLOYED_SOURCE_BYTES)?.to_vec()).map_err(|_| "contract source is not UTF-8")?;
+            let bytecode_v2 = String::from_utf8(self.read_bytes(1024 * 1024)?.to_vec()).map_err(|_| "contract bytecode is not UTF-8")?;
+            let deployer = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "contract deployer is not UTF-8")?;
+            if name.is_empty() || deployer.is_empty() || source.len() > MAX_DEPLOYED_SOURCE_BYTES {
+                return Err("invalid deployed contract metadata".into());
+            }
+            let canonical = super::contract_abi_and_artifact(&source)?;
+            if canonical.get("contract").and_then(serde_json::Value::as_str) != Some(name.as_str())
+                || canonical.get("bytecode_v2").and_then(serde_json::Value::as_str) != Some(bytecode_v2.as_str()) {
+                return Err("deployed contract snapshot source and Bytecode v2 do not match".into());
+            }
+            let transaction_id: [u8; 32] = self.take(32)?.try_into().map_err(|_| "invalid deployment transaction ID")?;
+            let contract = DeployedContract { id: id.clone(), name, source, bytecode_v2, deployer, transaction_id };
+            contracts.insert(id, contract);
+        }
+        Ok(contracts)
+    }
+
+    fn read_map(&mut self) -> Result<BTreeMap<String, u64>, String> {
+        let count = self.read_u32()? as usize;
+        if count > 100_000 { return Err("too many account records in snapshot".into()); }
+        let mut map = BTreeMap::new();
+        let mut previous: Option<String> = None;
+        for _ in 0..count {
+            let address = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "account address is not UTF-8")?;
+            if address.is_empty() || !address.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') { return Err("invalid account address in snapshot".into()); }
+            if previous.as_ref().is_some_and(|p| p >= &address) { return Err("account records are not strictly sorted".into()); }
+            previous = Some(address.clone());
+            map.insert(address, self.read_u64()?);
+        }
+        Ok(map)
+    }
+    fn finish(&self) -> Result<(), String> {
+        if self.offset != self.bytes.len() { return Err("trailing bytes in executor snapshot".into()); } Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ContractAccountState;
+    use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
+    use ed25519_dalek::{Signer, SigningKey};
+
+    const SOURCE: &str = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+
+    fn signed_call(key: &SigningKey, nonce: u64, args: &str) -> ContractTransactionV1 {
+        let public = key.verifying_key().to_bytes();
+        let mut tx = ContractTransactionV1 {
+            chain_id: 9001,
+            sender: super::super::chain_protocol::address_from_public_key(&public).unwrap(),
+            nonce, gas_limit: 100_000, max_fee: 500_000, gas_price: 2,
+            valid_until_height: Some(200),
+            operation: ContractOperation::Call { contract_id: "counter".into(), method: "increment".into(), calldata: args.as_bytes().to_vec() },
+            signature: Vec::new(),
+        };
+        tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
+        tx
+    }
+
+    fn signed_deploy(key: &SigningKey, nonce: u64, artifact: Vec<u8>) -> ContractTransactionV1 {
+        let public = key.verifying_key().to_bytes();
+        let mut tx = ContractTransactionV1 {
+            chain_id: 9001,
+            sender: super::super::chain_protocol::address_from_public_key(&public).unwrap(),
+            nonce, gas_limit: 200_000, max_fee: 1_000_000, gas_price: 1,
+            valid_until_height: Some(200),
+            operation: ContractOperation::Deploy { artifact },
+            signature: Vec::new(),
+        };
+        tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
+        tx
+    }
+
+    #[test]
+    fn ordered_signed_batch_commits_deploy_and_state_root_is_stable_after_restore() {
+        use super::{ContractExecutionReceipt, SignedContractTransaction};
+        let key = SigningKey::from_bytes(&[79; 32]);
+        let public = key.verifying_key().to_bytes().to_vec();
+        let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
+        let artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        let deploy = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 2_000_000).unwrap();
+        let receipts = state.apply_signed_batch(&[
+            SignedContractTransaction { transaction: deploy, public_key: public },
+        ], 9001, 100).unwrap();
+        let contract_id = match &receipts[0] {
+            ContractExecutionReceipt::Deploy(receipt) => receipt.contract_id.clone(),
+            _ => panic!("expected deployment receipt"),
+        };
+        let root = state.state_root().unwrap();
+        let restored = ContractAccountState::decode_snapshot(&state.encode_snapshot().unwrap()).unwrap();
+        assert_eq!(restored.state_root().unwrap(), root);
+        assert!(restored.deployed_contract(&contract_id).is_some());
+    }
+
+    #[test]
+    fn signed_batch_rolls_back_all_transactions_when_admission_fails() {
+        use super::SignedContractTransaction;
+        let key = SigningKey::from_bytes(&[80; 32]);
+        let public = key.verifying_key().to_bytes().to_vec();
+        let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
+        let artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        let deploy = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let invalid = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 2_000_000).unwrap();
+        let before = state.encode_snapshot().unwrap();
+        let result = state.apply_signed_batch(&[
+            SignedContractTransaction { transaction: deploy, public_key: public.clone() },
+            SignedContractTransaction { transaction: invalid, public_key: public },
+        ], 9001, 100);
+        assert!(result.is_err());
+        assert_eq!(state.encode_snapshot().unwrap(), before);
+    }
+
+    #[test]
+    fn signed_deployment_verifies_artifact_registers_deterministic_contract_and_persists_it() {
+        let key = SigningKey::from_bytes(&[76; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        let artifact = serde_json::to_vec(&artifact).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 2_000_000).unwrap();
+        let tx = signed_deploy(&key, 0, artifact);
+        let receipt = state.execute_signed_deploy(&tx, &key.verifying_key().to_bytes(), 9001, 100).unwrap();
+        assert_eq!(receipt.contract_name, "Counter");
+        assert_eq!(state.deployed_contract(&receipt.contract_id).unwrap().source, SOURCE);
+        assert_eq!(state.nonce(&address), 1);
+        assert_eq!(state.balance(&address), 2_000_000 - receipt.fee_charged);
+        let encoded = state.encode_snapshot().unwrap();
+        let restored = ContractAccountState::decode_snapshot(&encoded).unwrap();
+        assert_eq!(restored, state);
+        assert!(restored.deployed_contract(&receipt.contract_id).is_some());
+    }
+
+    #[test]
+    fn signed_call_uses_source_from_deployed_registry() {
+        let key = SigningKey::from_bytes(&[78; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 3_000_000).unwrap();
+        let deploy = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let deployed = state.execute_signed_deploy(&deploy, &key.verifying_key().to_bytes(), 9001, 100).unwrap();
+        let mut call = ContractTransactionV1 {
+            chain_id: 9001, sender: address.clone(), nonce: 1, gas_limit: 100_000,
+            max_fee: 500_000, gas_price: 1, valid_until_height: Some(200),
+            operation: ContractOperation::Call {
+                contract_id: deployed.contract_id.clone(), method: "increment".into(),
+                calldata: b"9".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        call.signature = key.sign(&call.signing_bytes().unwrap()).to_bytes().to_vec();
+        let receipt = state.execute_signed_registered_call(&call, &key.verifying_key().to_bytes(), 9001, 100).unwrap();
+        assert!(receipt.execution.is_ok());
+        assert_eq!(state.storage.get(&deployed.contract_id, "count").unwrap(), Some(&b"9"[..]));
+    }
+
+    #[test]
+    fn signed_deployment_rejects_tampered_artifact_without_consuming_nonce() {
+        let key = SigningKey::from_bytes(&[77; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let mut artifact = super::super::contract_abi_and_artifact(SOURCE).unwrap();
+        artifact["abi"]["methods"][0]["name"] = serde_json::Value::String("drain".into());
+        let tx = signed_deploy(&key, 0, serde_json::to_vec(&artifact).unwrap());
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 2_000_000).unwrap();
+        assert!(state.execute_signed_deploy(&tx, &key.verifying_key().to_bytes(), 9001, 100).is_err());
+        assert_eq!(state.nonce(&address), 0);
+        assert!(state.deployed_contracts.is_empty());
+    }
+
+    #[test]
+    fn signed_call_checks_signature_nonce_executes_qvm2_and_settles_actual_fee() {
+        let key = SigningKey::from_bytes(&[71; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 1_000_000).unwrap();
+        let tx = signed_call(&key, 0, "7");
+        let receipt = state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, SOURCE).unwrap();
+        assert!(receipt.execution.is_ok());
+        assert_eq!(state.storage.get("counter", "count").unwrap(), Some(&b"7"[..]));
+        assert_eq!(state.nonce(&address), 1);
+        assert_eq!(receipt.fee_charged, receipt.gas_charged * 2);
+        assert_eq!(state.balance(&address), 1_000_000 - receipt.fee_charged);
+        assert_eq!(state.fees_collected, receipt.fee_charged);
+    }
+
+    #[test]
+    fn replayed_or_wrong_nonce_transactions_are_rejected_without_charging() {
+        let key = SigningKey::from_bytes(&[72; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 1_000_000).unwrap();
+        let tx = signed_call(&key, 0, "1");
+        state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, SOURCE).unwrap();
+        let balance = state.balance(&address);
+        assert!(state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, SOURCE).is_err());
+        assert_eq!(state.balance(&address), balance);
+    }
+
+    #[test]
+    fn failed_execution_charges_gas_but_rolls_back_contract_storage() {
+        let key = SigningKey::from_bytes(&[73; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 1_000_000).unwrap();
+        let tx = signed_call(&key, 0, "1");
+        let receipt = state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, "not a contract").unwrap();
+        assert!(receipt.execution.is_err());
+        assert_eq!(state.storage.get("counter", "count").unwrap(), None);
+        assert_eq!(state.nonce(&address), 1);
+        assert_eq!(receipt.fee_charged, tx.gas_limit * tx.gas_price);
+    }
+
+
+    #[test]
+    fn executor_snapshot_preserves_storage_balances_nonces_and_fees() {
+        let key = SigningKey::from_bytes(&[75; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 1_000_000).unwrap();
+        let tx = signed_call(&key, 0, "6");
+        state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, SOURCE).unwrap();
+        let encoded = state.encode_snapshot().unwrap();
+        let restored = ContractAccountState::decode_snapshot(&encoded).unwrap();
+        assert_eq!(restored, state);
+        assert_eq!(restored.storage.get("counter", "count").unwrap(), Some(&b"6"[..]));
+        assert_eq!(restored.nonce(&address), 1);
+    }
+
+    #[test]
+    fn signed_token_factory_creates_deterministic_token_inside_qvm_state() {
+        let key = SigningKey::from_bytes(&[103; 32]);
+        let public = key.verifying_key().to_bytes();
+        let owner = super::super::chain_protocol::address_from_public_key(&public).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&owner, 1_000_000).unwrap();
+        let mut tx = ContractTransactionV1 {
+            chain_id: 9001, sender: owner.clone(), nonce: 0, gas_limit: 100_000,
+            max_fee: 100_000, gas_price: 1, valid_until_height: Some(200),
+            operation: ContractOperation::Call {
+                contract_id: super::TOKEN_FACTORY_ID.into(), method: "create".into(),
+                calldata: b"QORVYNT Coin,QVC,18,1000".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
+        let receipt = state.execute_signed_registered_call(&tx, &public, 9001, 100).unwrap();
+        let output = receipt.execution.unwrap().output;
+        let token_id = output.first().unwrap();
+        let info = state.tokens.token(token_id).unwrap();
+        assert_eq!(info.name, "QORVYNT Coin");
+        assert_eq!(info.symbol, "QVC");
+        assert_eq!(info.total_supply, 1_000);
+        assert_eq!(state.tokens.balance_of(token_id, &owner), 1_000);
+        assert_eq!(state.nonce(&owner), 1);
+    }
+
+    #[test]
+    fn signed_token_transfer_approve_and_transfer_from_use_nonce_fee_and_same_state() {
+        let alice_key = SigningKey::from_bytes(&[101; 32]);
+        let bob_key = SigningKey::from_bytes(&[102; 32]);
+        let alice_public = alice_key.verifying_key().to_bytes();
+        let bob_public = bob_key.verifying_key().to_bytes();
+        let alice = super::super::chain_protocol::address_from_public_key(&alice_public).unwrap();
+        let bob = super::super::chain_protocol::address_from_public_key(&bob_public).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&alice, 1_000_000).unwrap();
+        state.set_balance(&bob, 1_000_000).unwrap();
+        state.create_token("qvc", "QORVYNT Coin", "QVC", 18, &alice, 1_000).unwrap();
+
+        let make_tx = |key: &SigningKey, nonce: u64, method: &str, args: &str| {
+            let public = key.verifying_key().to_bytes();
+            let mut tx = ContractTransactionV1 {
+                chain_id: 9001,
+                sender: super::super::chain_protocol::address_from_public_key(&public).unwrap(),
+                nonce, gas_limit: 100_000, max_fee: 100_000, gas_price: 1,
+                valid_until_height: Some(200),
+                operation: ContractOperation::Call { contract_id: "qvc".into(), method: method.into(), calldata: args.as_bytes().to_vec() },
+                signature: Vec::new(),
+            };
+            tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
+            tx
+        };
+        let transfer = make_tx(&alice_key, 0, "transfer", &format!("{bob},100"));
+        let first = state.execute_signed_registered_call(&transfer, &alice_public, 9001, 100).unwrap();
+        assert!(first.execution.is_ok());
+        let approve = make_tx(&alice_key, 1, "approve", &format!("{bob},60"));
+        let second = state.execute_signed_registered_call(&approve, &alice_public, 9001, 100).unwrap();
+        assert!(second.execution.is_ok());
+        let transfer_from = make_tx(&bob_key, 0, "transfer_from", &format!("{alice},dave,25"));
+        let third = state.execute_signed_registered_call(&transfer_from, &bob_public, 9001, 100).unwrap();
+        assert!(third.execution.is_ok());
+        assert_eq!(state.tokens.balance_of("qvc", &alice), 875);
+        assert_eq!(state.tokens.balance_of("qvc", &bob), 100);
+        assert_eq!(state.tokens.balance_of("qvc", "dave"), 25);
+        assert_eq!(state.tokens.allowance("qvc", &alice, &bob), 35);
+        assert_eq!(state.nonce(&alice), 2);
+        assert_eq!(state.nonce(&bob), 1);
+        assert!(state.fees_collected >= first.fee_charged + second.fee_charged + third.fee_charged);
+    }
+
+    #[test]
+    fn native_token_state_is_committed_and_persisted_with_qvm_contract_state() {
+        let mut state = ContractAccountState::new();
+        let legacy_root = state.state_root().unwrap();
+        state.create_token("qvc", "QORVYNT Coin", "QVC", 18, "alice", 1_000).unwrap();
+        assert_ne!(state.state_root().unwrap(), legacy_root);
+        state.token_transfer("qvc", "alice", "bob", 250).unwrap();
+        state.token_approve("qvc", "bob", "carol", 100).unwrap();
+        state.token_transfer_from("qvc", "carol", "bob", "dave", 40).unwrap();
+        state.token_mint("qvc", "alice", "bob", 10).unwrap();
+        state.token_burn("qvc", "dave", 5).unwrap();
+        assert_eq!(state.tokens.balance_of("qvc", "alice"), 750);
+        assert_eq!(state.tokens.balance_of("qvc", "bob"), 220);
+        assert_eq!(state.tokens.balance_of("qvc", "dave"), 35);
+        assert_eq!(state.tokens.allowance("qvc", "bob", "carol"), 60);
+        assert_eq!(state.tokens.token("qvc").unwrap().total_supply, 1_005);
+        let root = state.state_root().unwrap();
+        let encoded = state.encode_snapshot().unwrap();
+        let restored = ContractAccountState::decode_snapshot(&encoded).unwrap();
+        assert_eq!(restored, state);
+        assert_eq!(restored.state_root().unwrap(), root);
+    }
+
+    #[test]
+    fn invalid_signature_and_underfunded_reserve_do_not_consume_nonce() {
+        let key = SigningKey::from_bytes(&[74; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 1).unwrap();
+        let tx = signed_call(&key, 0, "1");
+        assert!(state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, SOURCE).is_err());
+        assert_eq!(state.nonce(&address), 0);
+    }
+}

@@ -6,9 +6,11 @@
 
 use std::collections::BTreeMap;
 
-use super::chain_block::{execute_block, SignedTransactionEnvelope};
+use super::chain_block::{execute_block_with_contracts, SignedTransactionEnvelope};
+use super::contract_executor::SignedContractTransaction;
+use super::contract_protocol::ContractTransactionV1;
 use super::chain_consensus::verify_consensus_proof;
-use super::chain_protocol::{transaction_merkle_root, BlockHeaderV1, TransactionV1};
+use super::chain_protocol::BlockHeaderV1;
 use super::chain_runtime::{ChainRuntime, TransferReceipt};
 
 const STORE_VERSION: &str = "ZENVORA_BLOCK_STORE_V1";
@@ -20,6 +22,7 @@ const MAX_GENESIS_ACCOUNTS: usize = 100_000;
 pub struct StoredBlock {
     pub header: BlockHeaderV1,
     pub transactions: Vec<SignedTransactionEnvelope>,
+    pub contract_transactions: Vec<SignedContractTransaction>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +67,18 @@ impl BlockStore {
         transactions: &[SignedTransactionEnvelope],
         block_receipts: &[TransferReceipt],
     ) -> Result<(), String> {
+        self.append_executed_block_with_contracts(path, runtime_after, header, transactions, &[], block_receipts)
+    }
+
+    pub fn append_executed_block_with_contracts(
+        &mut self,
+        path: impl AsRef<std::path::Path>,
+        runtime_after: &ChainRuntime,
+        header: &BlockHeaderV1,
+        transactions: &[SignedTransactionEnvelope],
+        contract_transactions: &[SignedContractTransaction],
+        block_receipts: &[TransferReceipt],
+    ) -> Result<(), String> {
         if header.chain_id != self.chain_id {
             return Err("block chain ID does not match store".into());
         }
@@ -88,22 +103,13 @@ impl BlockStore {
                 }
             }
             None => {
-                if header.height != 0 || header.parent_hash != [0; 32] || !transactions.is_empty() {
+                if header.height != 0 || header.parent_hash != [0; 32] || !transactions.is_empty() || !contract_transactions.is_empty() {
                     return Err("first stored block must be an empty genesis block at height zero".into());
                 }
             }
         }
 
-        let txs: Vec<TransactionV1> = transactions.iter()
-            .map(|envelope| envelope.transaction.clone())
-            .collect();
-        if header.transaction_root != transaction_merkle_root(&txs)? {
-            return Err("block transaction root does not match supplied transactions".into());
-        }
-        if header.receipt_root != ChainRuntime::receipt_root_for(block_receipts)? {
-            return Err("block receipt root does not match supplied receipts".into());
-        }
-        if header.state_root != runtime_after.state_root() {
+        if header.state_root != runtime_after.try_state_root()? {
             return Err("block state root does not match resulting runtime".into());
         }
         if runtime_after.receipts().len() < block_receipts.len()
@@ -111,6 +117,10 @@ impl BlockStore {
             return Err("block receipts are not the suffix of the resulting runtime log".into());
         }
         for envelope in transactions {
+            envelope.transaction.validate_for(self.chain_id, header.height)?;
+            envelope.transaction.verify_signature(&envelope.public_key)?;
+        }
+        for envelope in contract_transactions {
             envelope.transaction.validate_for(self.chain_id, header.height)?;
             envelope.transaction.verify_signature(&envelope.public_key)?;
         }
@@ -124,14 +134,11 @@ impl BlockStore {
         // instead of replaying the entire chain on every new block.
         let mut replayed = self.runtime.clone();
         let previous_header = self.blocks.last().map(|stored| stored.header.clone());
-        let replayed_receipts = execute_block(
-            &mut replayed,
-            header,
-            transactions,
-            self.chain_id,
-            previous_header.as_ref(),
+        let replayed_receipts = execute_block_with_contracts(
+            &mut replayed, header, transactions, contract_transactions,
+            self.chain_id, previous_header.as_ref(),
         )?;
-        if replayed.state_root() != runtime_after.state_root()
+        if replayed.try_state_root()? != runtime_after.try_state_root()?
             || replayed.receipts() != runtime_after.receipts()
         {
             return Err("runtime does not match independently replayed block execution".into());
@@ -140,7 +147,10 @@ impl BlockStore {
             return Err("supplied block receipts do not match independently executed transactions".into());
         }
 
-        self.blocks.push(StoredBlock { header: header.clone(), transactions: transactions.to_vec() });
+        self.blocks.push(StoredBlock {
+            header: header.clone(), transactions: transactions.to_vec(),
+            contract_transactions: contract_transactions.to_vec(),
+        });
         if let Err(error) = self.save_to_file(path) {
             self.blocks.pop();
             return Err(error);
@@ -174,6 +184,15 @@ impl BlockStore {
                         hex_encode(&envelope.public_key),
                         hex_encode(&transaction_bytes))
                         .map_err(|error| format!("cannot write transaction envelope: {error}"))?;
+                }
+                for (index, envelope) in block.contract_transactions.iter().enumerate() {
+                    let transaction_bytes = envelope.transaction.canonical_bytes()?;
+                    writeln!(file, "K\t{}\t{}\t{}\t{}",
+                        block.header.height,
+                        index,
+                        hex_encode(&envelope.public_key),
+                        hex_encode(&transaction_bytes))
+                        .map_err(|error| format!("cannot write contract transaction envelope: {error}"))?;
                 }
             }
             file.sync_all().map_err(|error| format!("cannot sync block store: {error}"))?;
@@ -252,7 +271,7 @@ impl BlockStore {
                     if header.chain_id != expected_chain_id {
                         return Err(format!("block-store line {line_number} has wrong chain ID"));
                     }
-                    blocks.push(StoredBlock { header, transactions: Vec::new() });
+                    blocks.push(StoredBlock { header, transactions: Vec::new(), contract_transactions: Vec::new() });
                 }
                 ["T", height, transaction_index, encoded_public_key, encoded_transaction]
                     if chain_id.is_some() && !blocks.is_empty() => {
@@ -268,8 +287,25 @@ impl BlockStore {
                     if public_key.len() != 32 {
                         return Err(format!("block-store line {line_number} has invalid public-key length"));
                     }
-                    let transaction = TransactionV1::from_canonical_bytes(&hex_decode(encoded_transaction)?)?;
+                    let transaction = super::chain_protocol::TransactionV1::from_canonical_bytes(&hex_decode(encoded_transaction)?)?;
                     current.transactions.push(SignedTransactionEnvelope { transaction, public_key });
+                }
+                ["K", height, transaction_index, encoded_public_key, encoded_transaction]
+                    if chain_id.is_some() && !blocks.is_empty() => {
+                    let current = blocks.last_mut().expect("checked non-empty block list");
+                    let parsed_height: u64 = height.parse()
+                        .map_err(|_| format!("block-store line {line_number} has invalid contract transaction height"))?;
+                    let parsed_index: usize = transaction_index.parse()
+                        .map_err(|_| format!("block-store line {line_number} has invalid contract transaction index"))?;
+                    if parsed_height != current.header.height || parsed_index != current.contract_transactions.len() {
+                        return Err(format!("block-store line {line_number} has non-contiguous contract transaction ordering"));
+                    }
+                    let public_key = hex_decode(encoded_public_key)?;
+                    if public_key.len() != 32 {
+                        return Err(format!("block-store line {line_number} has invalid contract public-key length"));
+                    }
+                    let transaction = ContractTransactionV1::from_canonical_bytes(&hex_decode(encoded_transaction)?)?;
+                    current.contract_transactions.push(SignedContractTransaction { transaction, public_key });
                 }
                 _ => return Err(format!("block-store line {line_number} has an invalid record or ordering")),
             }
@@ -286,12 +322,9 @@ impl BlockStore {
         }
         let mut previous_header: Option<BlockHeaderV1> = None;
         for block in &store.blocks {
-            execute_block(
-                &mut runtime,
-                &block.header,
-                &block.transactions,
-                expected_chain_id,
-                previous_header.as_ref(),
+            execute_block_with_contracts(
+                &mut runtime, &block.header, &block.transactions,
+                &block.contract_transactions, expected_chain_id, previous_header.as_ref(),
             )?;
             previous_header = Some(block.header.clone());
         }
@@ -434,6 +467,116 @@ mod tests {
     }
 
     #[test]
+    fn block_store_persists_and_replays_signed_contract_deployment() {
+        use super::super::chain_block::{
+            combined_contract_receipt_root, combined_contract_transaction_root, execute_block_with_contracts,
+        };
+        use super::super::contract_executor::SignedContractTransaction;
+        use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
+
+        let key = SigningKey::from_bytes(&[99; 32]);
+        let public = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public).unwrap();
+        let mut allocations = BTreeMap::new();
+        allocations.insert(address.clone(), 5_000_000);
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&address, 5_000_000).unwrap();
+        let genesis_header = BlockHeaderV1 {
+            chain_id: 71, height: 0, timestamp_secs: 1_800_000_000,
+            parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(),
+            proposer: "validator_1".into(), consensus_proof: Vec::new(),
+        };
+        execute_block(&mut runtime, &genesis_header, &[], 71, None).unwrap();
+        let mut store = BlockStore::new(71, allocations).unwrap();
+        let path = std::env::temp_dir().join(format!("qorvynt-contract-block-store-{}.zvb", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        store.append_executed_block_with_contracts(&path, &runtime, &genesis_header, &[], &[], &[]).unwrap();
+
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let mut transaction = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 0,
+            gas_limit: 200_000, max_fee: 200_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Deploy { artifact: serde_json::to_vec(&artifact).unwrap() },
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = SignedContractTransaction { transaction, public_key: public.to_vec() };
+        let mut candidate = runtime.clone();
+        let contract_receipts = candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&envelope), 71, 1,
+        ).unwrap();
+        let deployed_contract_id = match &contract_receipts[0] {
+            super::super::contract_executor::ContractExecutionReceipt::Deploy(receipt) => receipt.contract_id.clone(),
+            _ => panic!("expected deploy receipt"),
+        };
+        let empty_tx_root = transaction_merkle_root(&[]).unwrap();
+        let empty_receipt_root = ChainRuntime::receipt_root_for(&[]).unwrap();
+        let mut header = BlockHeaderV1 {
+            chain_id: 71, height: 1, timestamp_secs: 1_800_000_001,
+            parent_hash: genesis_header.header_hash().unwrap(),
+            transaction_root: combined_contract_transaction_root(empty_tx_root, std::slice::from_ref(&envelope)).unwrap(),
+            receipt_root: combined_contract_receipt_root(empty_receipt_root, &contract_receipts).unwrap(),
+            state_root: candidate.try_state_root().unwrap(),
+            proposer: String::new(), consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut header, &key).unwrap();
+        execute_block_with_contracts(
+            &mut runtime, &header, &[], std::slice::from_ref(&envelope), 71, Some(&genesis_header),
+        ).unwrap();
+        store.append_executed_block_with_contracts(
+            &path, &runtime, &header, &[], std::slice::from_ref(&envelope), &[],
+        ).unwrap();
+
+        let mut call = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 1,
+            gas_limit: 100_000, max_fee: 100_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Call {
+                contract_id: deployed_contract_id.clone(),
+                method: "increment".into(),
+                calldata: b"7".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        call.signature = key.sign(&call.signing_bytes().unwrap()).to_bytes().to_vec();
+        let call_envelope = SignedContractTransaction { transaction: call, public_key: public.to_vec() };
+        let mut call_candidate = runtime.clone();
+        let call_receipts = call_candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&call_envelope), 71, 2,
+        ).unwrap();
+        let mut call_header = BlockHeaderV1 {
+            chain_id: 71, height: 2, timestamp_secs: 1_800_000_002,
+            parent_hash: header.header_hash().unwrap(),
+            transaction_root: combined_contract_transaction_root(empty_tx_root, std::slice::from_ref(&call_envelope)).unwrap(),
+            receipt_root: combined_contract_receipt_root(empty_receipt_root, &call_receipts).unwrap(),
+            state_root: call_candidate.try_state_root().unwrap(),
+            proposer: String::new(), consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut call_header, &key).unwrap();
+        execute_block_with_contracts(
+            &mut runtime, &call_header, &[], std::slice::from_ref(&call_envelope), 71, Some(&header),
+        ).unwrap();
+        store.append_executed_block_with_contracts(
+            &path, &runtime, &call_header, &[], std::slice::from_ref(&call_envelope), &[],
+        ).unwrap();
+
+        let (loaded, restored) = BlockStore::load_from_file(&path, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 3);
+        assert_eq!(loaded.blocks()[1].contract_transactions.len(), 1);
+        assert_eq!(loaded.blocks()[2].contract_transactions.len(), 1);
+        assert_eq!(restored.try_state_root().unwrap(), runtime.try_state_root().unwrap());
+        assert_eq!(restored.contract_state().deployed_contract_count(), 1);
+        assert_eq!(restored.contract_state().storage.get(&deployed_contract_id, "count").unwrap(), Some(&b"7"[..]));
+        assert_eq!(restored.contract_state().nonce(&address), 2);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn append_rejects_state_and_receipts_from_unrelated_transactions() {
         let key = SigningKey::from_bytes(&[83; 32]);
         let (runtime, mut store, genesis_header) = genesis(&key);
@@ -475,7 +618,12 @@ mod tests {
         let error = store.append_executed_block(
             &path, &fake_runtime, &header, &[supplied], &[fake_receipt],
         ).unwrap_err();
-        assert!(error.contains("block receipt root does not match executed receipts") || error.contains("independently replayed") || error.contains("independently executed"));
+        assert!(
+            error.contains("block receipt root does not match executed transfer and contract receipts")
+                || error.contains("independently replayed")
+                || error.contains("independently executed"),
+            "unexpected rejection reason: {error}"
+        );
         assert_eq!(store.blocks().len(), 1);
         let (loaded, replayed) = BlockStore::load_from_file(&path, 71).unwrap();
         assert_eq!(loaded.blocks().len(), 1);

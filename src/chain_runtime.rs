@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::chain_protocol::TransactionV1;
+use super::contract_executor::{ContractAccountState, ContractExecutionReceipt, SignedContractTransaction};
 use sha2::{Digest, Sha256};
 
 use super::{compile, run_with_output};
@@ -72,6 +73,7 @@ pub struct ChainRuntime {
     receipts: Vec<TransferReceipt>,
     account_nonces: BTreeMap<String, u64>,
     seen_transaction_ids: BTreeSet<String>,
+    contract_state: ContractAccountState,
 }
 
 impl ChainRuntime {
@@ -93,6 +95,7 @@ impl ChainRuntime {
         if self.genesis_balances.len() >= MAX_ACCOUNTS && !self.genesis_balances.contains_key(address) {
             return Err("genesis account limit exceeded".into());
         }
+        self.contract_state.set_balance(address, amount as u64)?;
         self.genesis_balances.insert(address.to_string(), amount);
         self.balances.insert(address.to_string(), amount);
         Ok(())
@@ -116,8 +119,23 @@ impl ChainRuntime {
         *self.account_nonces.get(address).unwrap_or(&0)
     }
 
-    /// Deterministic state commitment over sorted balances and account nonces.
-    pub fn state_root(&self) -> [u8; 32] {
+    /// Access the consensus-bound QORVYNT contract account/storage state.
+    pub fn contract_state(&self) -> &ContractAccountState {
+        &self.contract_state
+    }
+
+    /// Apply signed deploy/call transactions to the chain-owned contract state.
+    pub fn apply_signed_contract_transactions(
+        &mut self,
+        transactions: &[SignedContractTransaction],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<Vec<ContractExecutionReceipt>, String> {
+        self.contract_state.apply_signed_batch(transactions, expected_chain_id, current_height)
+    }
+
+    /// Fallible deterministic state commitment over transfer balances/nonces and QORVYNT contract state.
+    pub fn try_state_root(&self) -> Result<[u8; 32], String> {
         let addresses: BTreeSet<&str> = self.balances.keys()
             .chain(self.account_nonces.keys())
             .map(String::as_str)
@@ -131,7 +149,17 @@ impl ChainRuntime {
             encoded.extend_from_slice(&self.balance(address).to_be_bytes());
             encoded.extend_from_slice(&self.account_nonce(address).to_be_bytes());
         }
-        hash_tagged(b"ZENVORA_STATE_ROOT_V1\0", &encoded)
+        let transfer_root = hash_tagged(b"ZENVORA_STATE_ROOT_V1\0", &encoded);
+        let contract_root = self.contract_state.state_root()?;
+        let mut combined = Vec::with_capacity(64);
+        combined.extend_from_slice(&transfer_root);
+        combined.extend_from_slice(&contract_root);
+        Ok(hash_tagged(b"QORVYNT_CHAIN_STATE_ROOT_V1\0", &combined))
+    }
+
+    /// Compatibility wrapper for callers that operate on already validated in-memory state.
+    pub fn state_root(&self) -> [u8; 32] {
+        self.try_state_root().expect("chain runtime state must have a canonical contract snapshot")
     }
 
     /// Deterministic Merkle commitment for an ordered set of execution receipts.

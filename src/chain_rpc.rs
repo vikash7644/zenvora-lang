@@ -12,18 +12,25 @@ use serde_json::{json, Value};
 use super::block_store::BlockStore;
 use super::chain_block::SignedTransactionEnvelope;
 use super::chain_protocol::TransactionV1;
-use super::tx_pool::TransactionPool;
+use super::tx_pool::{ContractTransactionPool, TransactionPool};
+use super::contract_executor::SignedContractTransaction;
+use super::contract_protocol::ContractTransactionV1;
 
 const MAX_HTTP_REQUEST_BYTES: usize = 64 * 1024;
 const READ_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub fn serve(store_path: String, chain_id: u64, port: u16) -> Result<(), String> {
-    serve_inner(store_path, chain_id, port, None)
+    serve_inner(store_path, chain_id, port, None, None)
 }
 
 /// Start loopback RPC with a persisted transaction pool enabled.
 pub fn serve_with_pool(store_path: String, chain_id: u64, pool_path: String, port: u16) -> Result<(), String> {
-    serve_inner(store_path, chain_id, port, Some(pool_path))
+    serve_inner(store_path, chain_id, port, Some(pool_path), None)
+}
+
+/// Start loopback RPC with transfer and contract transaction pools enabled.
+pub fn serve_with_pools(store_path: String, chain_id: u64, transfer_pool_path: String, contract_pool_path: String, port: u16) -> Result<(), String> {
+    serve_inner(store_path, chain_id, port, Some(transfer_pool_path), Some(contract_pool_path))
 }
 
 fn serve_inner(
@@ -31,6 +38,7 @@ fn serve_inner(
     chain_id: u64,
     port: u16,
     pool_path: Option<String>,
+    contract_pool_path: Option<String>,
 ) -> Result<(), String> {
     if chain_id == 0 {
         return Err("chain ID must be nonzero".into());
@@ -52,8 +60,8 @@ fn serve_inner(
                 let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
                 match read_http_body(&mut stream) {
                     Ok(body) => {
-                        let response = handle_json_rpc_with_pool(
-                            &body, &store_path, chain_id, pool_path.as_deref(),
+                        let response = handle_json_rpc_with_pools(
+                            &body, &store_path, chain_id, pool_path.as_deref(), contract_pool_path.as_deref(),
                         ).to_string();
                         if let Err(error) = write_http_response(&mut stream, "200 OK", &response) {
                             // A client that disconnects while reading must not stop the RPC listener.
@@ -137,14 +145,16 @@ fn write_http_response(stream: &mut TcpStream, status: &str, body: &str) -> Resu
 }
 
 pub fn handle_json_rpc(body: &[u8], store_path: &str, expected_chain_id: u64) -> Value {
-    handle_json_rpc_with_pool(body, store_path, expected_chain_id, None)
+    handle_json_rpc_with_pools(body, store_path, expected_chain_id, None, None)
 }
 
-fn handle_json_rpc_with_pool(
-    body: &[u8],
-    store_path: &str,
-    expected_chain_id: u64,
-    pool_path: Option<&str>,
+fn handle_json_rpc_with_pool(body: &[u8], store_path: &str, expected_chain_id: u64, pool_path: Option<&str>) -> Value {
+    handle_json_rpc_with_pools(body, store_path, expected_chain_id, pool_path, None)
+}
+
+fn handle_json_rpc_with_pools(
+    body: &[u8], store_path: &str, expected_chain_id: u64,
+    pool_path: Option<&str>, contract_pool_path: Option<&str>,
 ) -> Value {
     let request: Value = match serde_json::from_slice(body) {
         Ok(value) => value,
@@ -187,6 +197,74 @@ fn handle_json_rpc_with_pool(
             };
             json!({ "address": address, "balance": runtime.balance(address), "nonce": runtime.account_nonce(address) })
         }
+        "chain_getTokenInfo" => {
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let info = match runtime.contract_state().tokens.token(token_id) {
+                Some(value) => value, None => return rpc_error(id, -32602, "token ID not found"),
+            };
+            json!({"tokenId":token_id,"name":info.name,"symbol":info.symbol,"decimals":info.decimals,
+                "owner":info.owner,"totalSupply":info.total_supply.to_string()})
+        }
+        "chain_getTokenBalance" => {
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let account = match string_param(&params, "account", 1) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected account parameter"),
+            };
+            if runtime.contract_state().tokens.token(token_id).is_none() {
+                return rpc_error(id, -32602, "token ID not found");
+            }
+            json!({"tokenId":token_id,"account":account,
+                "balance":runtime.contract_state().tokens.balance_of(token_id, account).to_string()})
+        }
+        "chain_getTokenAllowance" => {
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let owner = match string_param(&params, "owner", 1) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected owner parameter"),
+            };
+            let spender = match string_param(&params, "spender", 2) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected spender parameter"),
+            };
+            if runtime.contract_state().tokens.token(token_id).is_none() {
+                return rpc_error(id, -32602, "token ID not found");
+            }
+            json!({"tokenId":token_id,"owner":owner,"spender":spender,
+                "allowance":runtime.contract_state().tokens.allowance(token_id, owner, spender).to_string()})
+        }
+        "chain_getTokenEvents" => {
+            const DEFAULT_LIMIT: u64 = 100;
+            const MAX_LIMIT: u64 = 500;
+            let token_id = match string_param(&params, "tokenId", 0) {
+                Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let limit = match number_param(&params, "limit", 1) {
+                Some(value) if value > 0 && value <= MAX_LIMIT => value,
+                Some(_) => return rpc_error(id, -32602, "limit must be between 1 and 500"),
+                None => DEFAULT_LIMIT,
+            };
+            let offset = match number_param(&params, "offset", 2) {
+                Some(value) => value,
+                None => 0,
+            };
+            if runtime.contract_state().tokens.token(token_id).is_none() {
+                return rpc_error(id, -32602, "token ID not found");
+            }
+            let matching: Vec<Value> = runtime.contract_state().tokens.events().iter().filter(|event| match event {
+                super::token_standard::TokenEvent::Transfer { token_id: event_token, .. }
+                | super::token_standard::TokenEvent::Approval { token_id: event_token, .. } => event_token == token_id,
+            }).map(|event| serde_json::to_value(event).unwrap_or(Value::Null)).collect();
+            let total = matching.len();
+            let start = usize::try_from(offset).unwrap_or(usize::MAX).min(total);
+            let end = start.saturating_add(limit as usize).min(total);
+            let events = &matching[start..end];
+            json!({"tokenId":token_id,"count":events.len(),"total":total,
+                "limit":limit,"offset":offset,"events":events})
+        }
         "chain_getBlock" => {
             let height = match number_param(&params, "height", 0) {
                 Some(value) => value,
@@ -206,6 +284,24 @@ fn handle_json_rpc_with_pool(
                     "maxFee": envelope.transaction.max_fee
                 })
             }).collect();
+            let contract_transactions: Vec<Value> = block.contract_transactions.iter().map(|envelope| {
+                let operation = match &envelope.transaction.operation {
+                    super::contract_protocol::ContractOperation::Deploy { .. } => json!({"type":"deploy"}),
+                    super::contract_protocol::ContractOperation::Call { contract_id, method, calldata } => json!({
+                        "type":"call", "contractId":contract_id, "method":method,
+                        "calldata":hex_encode(calldata)
+                    }),
+                };
+                json!({
+                    "transactionId": envelope.transaction.transaction_id().map(|id| hex_encode(&id)).unwrap_or_default(),
+                    "sender": envelope.transaction.sender,
+                    "nonce": envelope.transaction.nonce,
+                    "gasLimit": envelope.transaction.gas_limit,
+                    "maxFee": envelope.transaction.max_fee,
+                    "gasPrice": envelope.transaction.gas_price,
+                    "operation": operation
+                })
+            }).collect();
             json!({
                 "chainId": block.header.chain_id,
                 "height": block.header.height,
@@ -215,7 +311,8 @@ fn handle_json_rpc_with_pool(
                 "receiptRoot": hex_encode(&block.header.receipt_root),
                 "stateRoot": hex_encode(&block.header.state_root),
                 "proposer": block.header.proposer,
-                "transactions": transactions
+                "transactions": transactions,
+                "contractTransactions": contract_transactions
             })
         }
         "chain_submitTransaction" => {
@@ -262,6 +359,58 @@ fn handle_json_rpc_with_pool(
                 "poolSize": pool.len(),
                 "nextBlockHeight": next_height
             })
+        }
+        "chain_submitContractTransaction" => {
+            let pool_path = match contract_pool_path {
+                Some(value) => value,
+                None => return rpc_error(id, -32601, "contract transaction submission is disabled on this RPC"),
+            };
+            let public_key = match string_param(&params, "publicKey", 0) {
+                Some(value) => match hex_decode(value) { Ok(bytes) => bytes, Err(error) => return rpc_error(id, -32602, &error) },
+                None => return rpc_error(id, -32602, "expected publicKey hex parameter"),
+            };
+            let transaction_bytes = match string_param(&params, "transaction", 1) {
+                Some(value) => match hex_decode(value) { Ok(bytes) => bytes, Err(error) => return rpc_error(id, -32602, &error) },
+                None => return rpc_error(id, -32602, "expected canonical contract transaction hex parameter"),
+            };
+            let transaction = match ContractTransactionV1::from_canonical_bytes(&transaction_bytes) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32602, &error),
+            };
+            let envelope = SignedContractTransaction { transaction, public_key };
+            let next_height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value, None => return rpc_error(id, -32000, "cannot determine next block height"),
+            };
+            let mut pool = match ContractTransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, next_height) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32000, &error),
+            };
+            let transaction_id = match pool.submit(&runtime, envelope) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32011, &error),
+            };
+            if let Err(error) = pool.save_to_file(pool_path) { return rpc_error(id, -32000, &error); }
+            json!({"transactionId": hex_encode(&transaction_id), "poolSize": pool.len(), "nextBlockHeight": next_height})
+        }
+        "chain_getPendingContractTransactions" => {
+            let pool_path = match contract_pool_path {
+                Some(value) => value,
+                None => return rpc_error(id, -32601, "contract transaction pool is disabled on this RPC"),
+            };
+            let next_height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value, None => return rpc_error(id, -32000, "cannot determine next block height"),
+            };
+            let pool = match ContractTransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, next_height) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32000, &error),
+            };
+            let transactions: Vec<Value> = pool.pending().iter().map(|envelope| {
+                let operation = match &envelope.transaction.operation {
+                    super::contract_protocol::ContractOperation::Deploy { artifact } => json!({"type":"deploy","artifactBytes":artifact.len()}),
+                    super::contract_protocol::ContractOperation::Call { contract_id, method, calldata } => json!({"type":"call","contractId":contract_id,"method":method,"calldata":hex_encode(calldata)}),
+                };
+                json!({"transactionId":envelope.transaction.transaction_id().map(|id|hex_encode(&id)).unwrap_or_default(),
+                    "sender":envelope.transaction.sender,"nonce":envelope.transaction.nonce,
+                    "gasLimit":envelope.transaction.gas_limit,"maxFee":envelope.transaction.max_fee,
+                    "gasPrice":envelope.transaction.gas_price,"operation":operation})
+            }).collect();
+            json!({"count":pool.len(),"transactions":transactions})
         }
         "chain_getPendingTransactions" => {
             let pool_path = match pool_path {
@@ -357,11 +506,13 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle_json_rpc, handle_json_rpc_with_pool, hex_encode, read_http_body};
+    use super::{handle_json_rpc, handle_json_rpc_with_pool, handle_json_rpc_with_pools, hex_encode, read_http_body};
     use super::super::block_store::BlockStore;
     use super::super::chain_block::execute_block;
     use super::super::chain_protocol::{address_from_public_key, transaction_merkle_root, BlockHeaderV1, TransactionV1};
     use super::super::chain_runtime::ChainRuntime;
+    use super::super::contract_executor::SignedContractTransaction;
+    use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
     use serde_json::{json, Value};
     use ed25519_dalek::{Signer, SigningKey};
     use std::collections::BTreeMap;
@@ -442,6 +593,109 @@ mod tests {
         assert_eq!(runtime.balance("bob"), 0);
         std::fs::remove_file(store_path).unwrap();
         std::fs::remove_file(pool_path).unwrap();
+    }
+
+    #[test]
+    fn contract_rpc_submission_persists_signed_deployment_and_lists_pending() {
+        let key = SigningKey::from_bytes(&[173; 32]);
+        let public_key = key.verifying_key().to_bytes();
+        let sender = address_from_public_key(&public_key).unwrap();
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let store_path = std::env::temp_dir().join(format!("qorvynt-rpc-contract-store-{unique}.zvb"));
+        let pool_path = std::env::temp_dir().join(format!("qorvynt-rpc-contract-pool-{unique}.zvp"));
+        let store_text = store_path.to_string_lossy().to_string();
+        let pool_text = pool_path.to_string_lossy().to_string();
+
+        let mut allocations = BTreeMap::new();
+        allocations.insert(sender.clone(), 5_000_000);
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&sender, 5_000_000).unwrap();
+        let genesis = BlockHeaderV1 {
+            chain_id: 71, height: 0, timestamp_secs: 0, parent_hash: [0; 32],
+            transaction_root: transaction_merkle_root(&[]).unwrap(),
+            receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+            state_root: runtime.state_root(), proposer: sender.clone(), consensus_proof: Vec::new(),
+        };
+        super::super::chain_block::execute_block(&mut runtime, &genesis, &[], 71, None).unwrap();
+        let mut store = BlockStore::new(71, allocations).unwrap();
+        store.append_executed_block(&store_text, &runtime, &genesis, &[], &[]).unwrap();
+
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let artifact_bytes = serde_json::to_vec(&artifact).unwrap();
+        let mut transaction = ContractTransactionV1 {
+            chain_id: 71, sender: sender.clone(), nonce: 0, gas_limit: 200_000,
+            max_fee: 200_000, gas_price: 1, valid_until_height: Some(20),
+            operation: ContractOperation::Deploy { artifact: artifact_bytes }, signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let request = json!({
+            "jsonrpc":"2.0", "id":21, "method":"chain_submitContractTransaction",
+            "params":{"publicKey":hex_encode(&public_key),"transaction":hex_encode(&transaction.canonical_bytes().unwrap())}
+        });
+        let response = handle_json_rpc_with_pools(
+            request.to_string().as_bytes(), &store_text, 71, None, Some(&pool_text),
+        );
+        assert!(response.get("error").is_none(), "{response}");
+        assert_eq!(response["result"]["poolSize"], 1);
+        let pending = handle_json_rpc_with_pools(
+            br#"{"jsonrpc":"2.0","id":22,"method":"chain_getPendingContractTransactions","params":[]}"#,
+            &store_text, 71, None, Some(&pool_text),
+        );
+        assert_eq!(pending["result"]["count"], 1);
+        let pool = super::super::tx_pool::ContractTransactionPool::load_from_file(
+            &pool_text, &runtime, 71, 1,
+        ).unwrap();
+        assert_eq!(pool.len(), 1);
+        let envelope = SignedContractTransaction {
+            transaction: pool.pending()[0].transaction.clone(),
+            public_key: pool.pending()[0].public_key.clone(),
+        };
+        assert_eq!(envelope.transaction.sender, sender);
+        std::fs::remove_file(store_path).unwrap();
+        std::fs::remove_file(pool_path).unwrap();
+    }
+
+    #[test]
+    fn contract_rpc_rejects_submission_when_contract_pool_is_disabled() {
+        let (path, cleanup_path) = test_store();
+        let response = handle_json_rpc(
+            br#"{"jsonrpc":"2.0","id":23,"method":"chain_submitContractTransaction","params":[]}"#,
+            &path, 71,
+        );
+        assert_eq!(response["error"]["code"], -32601);
+        assert_eq!(response["error"]["message"], "contract transaction submission is disabled on this RPC");
+        std::fs::remove_file(cleanup_path).unwrap();
+    }
+
+    #[test]
+    fn token_rpc_queries_fail_closed_for_unknown_token_ids() {
+        let (path, cleanup_path) = test_store();
+        let requests = [
+            br#"{"jsonrpc":"2.0","id":31,"method":"chain_getTokenInfo","params":{"tokenId":"missing"}}"#.as_slice(),
+            br#"{"jsonrpc":"2.0","id":32,"method":"chain_getTokenBalance","params":{"tokenId":"missing","account":"alice"}}"#.as_slice(),
+            br#"{"jsonrpc":"2.0","id":33,"method":"chain_getTokenAllowance","params":{"tokenId":"missing","owner":"alice","spender":"bob"}}"#.as_slice(),
+            br#"{"jsonrpc":"2.0","id":34,"method":"chain_getTokenEvents","params":{"tokenId":"missing"}}"#.as_slice(),
+        ];
+        for request in requests {
+            let response = handle_json_rpc(request, &path, 71);
+            assert_eq!(response["error"]["code"], -32602);
+            assert_eq!(response["error"]["message"], "token ID not found");
+        }
+        std::fs::remove_file(cleanup_path).unwrap();
+    }
+
+    #[test]
+    fn token_event_rpc_rejects_zero_or_oversized_page_limits() {
+        let (path, cleanup_path) = test_store();
+        for limit in [0, 501] {
+            let request = json!({"jsonrpc":"2.0","id":40,"method":"chain_getTokenEvents",
+                "params":{"tokenId":"missing","limit":limit}});
+            let response = handle_json_rpc(request.to_string().as_bytes(), &path, 71);
+            assert_eq!(response["error"]["code"], -32602);
+            assert_eq!(response["error"]["message"], "limit must be between 1 and 500");
+        }
+        std::fs::remove_file(cleanup_path).unwrap();
     }
 
     #[test]

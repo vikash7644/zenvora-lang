@@ -8,6 +8,8 @@ use std::io::Write;
 use super::chain_block::SignedTransactionEnvelope;
 use super::chain_protocol::TransactionV1;
 use super::chain_runtime::ChainRuntime;
+use super::contract_executor::SignedContractTransaction;
+use super::contract_protocol::ContractTransactionV1;
 
 const POOL_VERSION: &str = "ZENVORA_TX_POOL_V1";
 const MAX_POOL_TRANSACTIONS: usize = 10_000;
@@ -164,6 +166,132 @@ impl TransactionPool {
     }
 }
 
+/// Separate bounded pool for authenticated QORVYNT deploy/call transactions.
+/// Admission replays the complete ordered contract pool on a cloned chain runtime.
+#[derive(Debug, Clone)]
+pub struct ContractTransactionPool {
+    chain_id: u64,
+    next_height: u64,
+    entries: Vec<SignedContractTransaction>,
+}
+
+impl ContractTransactionPool {
+    pub fn new(chain_id: u64, next_height: u64) -> Result<Self, String> {
+        if chain_id == 0 { return Err("chain ID must be nonzero".into()); }
+        Ok(Self { chain_id, next_height, entries: Vec::new() })
+    }
+
+    pub fn pending(&self) -> &[SignedContractTransaction] { &self.entries }
+    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+
+    pub fn submit(
+        &mut self,
+        runtime: &ChainRuntime,
+        envelope: SignedContractTransaction,
+    ) -> Result<[u8; 32], String> {
+        if self.entries.len() >= MAX_POOL_TRANSACTIONS {
+            return Err("contract transaction pool is full".into());
+        }
+        if envelope.public_key.len() != 32 {
+            return Err("contract transaction public key must be 32 bytes".into());
+        }
+        envelope.transaction.validate_for(self.chain_id, self.next_height)?;
+        envelope.transaction.verify_signature(&envelope.public_key)?;
+        let transaction_id = envelope.transaction.transaction_id()?;
+        if self.entries.iter().any(|entry| entry.transaction.transaction_id().ok() == Some(transaction_id)) {
+            return Err("contract transaction is already in the pool".into());
+        }
+        let mut candidate_entries = self.entries.clone();
+        candidate_entries.push(envelope);
+        let mut candidate = runtime.clone();
+        candidate.apply_signed_contract_transactions(&candidate_entries, self.chain_id, self.next_height)?;
+        self.entries = candidate_entries;
+        Ok(transaction_id)
+    }
+
+    pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> Result<(), String> {
+        let path = path.as_ref();
+        let temporary = path.with_extension("zcontract-pool.tmp");
+        let result = (|| -> Result<(), String> {
+            let mut file = std::fs::File::create(&temporary)
+                .map_err(|error| format!("cannot create contract pool temporary file: {error}"))?;
+            writeln!(file, "QORVYNT_CONTRACT_TX_POOL_V1").map_err(|error| format!("cannot write contract pool: {error}"))?;
+            writeln!(file, "C\t{}", self.chain_id).map_err(|error| format!("cannot write contract pool chain ID: {error}"))?;
+            writeln!(file, "H\t{}", self.next_height).map_err(|error| format!("cannot write contract pool height: {error}"))?;
+            for envelope in &self.entries {
+                writeln!(file, "K\t{}\t{}",
+                    hex_encode(&envelope.public_key),
+                    hex_encode(&envelope.transaction.canonical_bytes()?))
+                    .map_err(|error| format!("cannot write contract pool transaction: {error}"))?;
+            }
+            file.sync_all().map_err(|error| format!("cannot sync contract transaction pool: {error}"))?;
+            if file.metadata().map_err(|error| error.to_string())?.len() > MAX_POOL_BYTES {
+                return Err("contract transaction pool exceeds maximum file size".into());
+            }
+            std::fs::rename(&temporary, path)
+                .map_err(|error| format!("cannot replace contract transaction pool: {error}"))?;
+            Ok(())
+        })();
+        if result.is_err() { let _ = std::fs::remove_file(&temporary); }
+        result
+    }
+
+    pub fn load_from_file(
+        path: impl AsRef<std::path::Path>,
+        runtime: &ChainRuntime,
+        chain_id: u64,
+        next_height: u64,
+    ) -> Result<Self, String> {
+        let path = path.as_ref();
+        let metadata = match std::fs::metadata(path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Self::new(chain_id, next_height),
+            Err(error) => return Err(format!("cannot inspect contract transaction pool: {error}")),
+        };
+        if metadata.len() > MAX_POOL_BYTES { return Err("contract transaction pool exceeds maximum file size".into()); }
+        use std::io::Read;
+        let mut content = String::new();
+        std::fs::File::open(path)
+            .map_err(|error| format!("cannot open contract transaction pool: {error}"))?
+            .take(MAX_POOL_BYTES + 1)
+            .read_to_string(&mut content)
+            .map_err(|error| format!("cannot read contract transaction pool: {error}"))?;
+        if content.len() as u64 > MAX_POOL_BYTES { return Err("contract transaction pool exceeds maximum file size".into()); }
+        let mut lines = content.lines();
+        if lines.next() != Some("QORVYNT_CONTRACT_TX_POOL_V1") {
+            return Err("unsupported or missing contract transaction-pool version".into());
+        }
+        let chain_line = lines.next().ok_or_else(|| "contract pool is missing chain ID".to_string())?;
+        let stored_chain_id: u64 = chain_line.strip_prefix("C\t").ok_or_else(|| "invalid contract pool chain-ID record".to_string())?
+            .parse().map_err(|_| "invalid contract pool chain ID")?;
+        let height_line = lines.next().ok_or_else(|| "contract pool is missing next height".to_string())?;
+        let stored_height: u64 = height_line.strip_prefix("H\t").ok_or_else(|| "invalid contract pool height record".to_string())?
+            .parse().map_err(|_| "invalid contract pool next height")?;
+        if stored_chain_id != chain_id || stored_height != next_height {
+            return Err("contract transaction pool context is stale; revalidate or recreate it for the current chain height".into());
+        }
+        let mut pool = Self::new(chain_id, next_height)?;
+        for (index, line) in lines.enumerate() {
+            let line_number = index + 4;
+            if line.len() > MAX_POOL_LINE_BYTES {
+                return Err(format!("contract-pool line {line_number} exceeds maximum length"));
+            }
+            let fields: Vec<&str> = line.split('\t').collect();
+            let ["K", encoded_public_key, encoded_transaction] = fields.as_slice() else {
+                return Err(format!("contract-pool line {line_number} has an invalid record"));
+            };
+            let public_key = hex_decode(encoded_public_key)?;
+            if public_key.len() != 32 {
+                return Err(format!("contract-pool line {line_number} has invalid public-key length"));
+            }
+            let transaction = ContractTransactionV1::from_canonical_bytes(&hex_decode(encoded_transaction)?)?;
+            pool.submit(runtime, SignedContractTransaction { transaction, public_key })?;
+        }
+        Ok(pool)
+    }
+}
+
 fn hex_encode(bytes: &[u8]) -> String {
     let mut output = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -232,6 +360,63 @@ mod tests {
         assert!(pool.submit(&runtime, transaction(&key, 2, 100)).is_err());
         assert!(pool.submit(&runtime, transaction(&key, 1, 10_000)).is_err());
         assert_eq!(runtime.balance("bob"), 0);
+    }
+
+    #[test]
+    fn contract_pool_admits_ordered_deploy_and_call_and_round_trips() {
+        use super::ContractTransactionPool;
+        use super::super::contract_executor::{ContractExecutionReceipt, SignedContractTransaction};
+        use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
+
+        let key = SigningKey::from_bytes(&[141; 32]);
+        let public = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public).unwrap();
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance(&address, 5_000_000).unwrap();
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let mut deploy = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 0,
+            gas_limit: 200_000, max_fee: 200_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Deploy { artifact: serde_json::to_vec(&artifact).unwrap() },
+            signature: Vec::new(),
+        };
+        deploy.signature = key.sign(&deploy.signing_bytes().unwrap()).to_bytes().to_vec();
+        let deploy_envelope = SignedContractTransaction { transaction: deploy, public_key: public.to_vec() };
+        let mut candidate = runtime.clone();
+        let deploy_receipts = candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&deploy_envelope), 71, 1,
+        ).unwrap();
+        let contract_id = match &deploy_receipts[0] {
+            ContractExecutionReceipt::Deploy(receipt) => receipt.contract_id.clone(),
+            _ => panic!("expected deployment receipt"),
+        };
+        let mut call = ContractTransactionV1 {
+            chain_id: 71, sender: address, nonce: 1,
+            gas_limit: 100_000, max_fee: 100_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Call {
+                contract_id, method: "increment".into(), calldata: b"3".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        call.signature = key.sign(&call.signing_bytes().unwrap()).to_bytes().to_vec();
+        let call_envelope = SignedContractTransaction { transaction: call, public_key: public.to_vec() };
+
+        let mut pool = ContractTransactionPool::new(71, 1).unwrap();
+        pool.submit(&runtime, deploy_envelope.clone()).unwrap();
+        pool.submit(&runtime, call_envelope.clone()).unwrap();
+        assert_eq!(pool.len(), 2);
+        assert!(pool.submit(&runtime, call_envelope).is_err());
+
+        let path = std::env::temp_dir().join(format!("qorvynt-contract-pool-{}.zvp", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        pool.save_to_file(&path).unwrap();
+        let restored = ContractTransactionPool::load_from_file(&path, &runtime, 71, 1).unwrap();
+        assert_eq!(restored.len(), 2);
+        assert!(ContractTransactionPool::load_from_file(&path, &runtime, 71, 2).is_err());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

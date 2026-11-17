@@ -87,3 +87,22 @@ A failed replay rejects the stored chain. A versioned snapshot may later acceler
 ## Release gate
 
 This design is not a release. The implementation must land in small reviewed changes, with unit/integration/fuzz tests and green GitHub Actions. Contract deployment, general contract storage, charged gas, a public testnet, and mainnet must not be advertised until their respective gates pass.
+
+
+---
+
+## Implementation status addendum — 2026-11-17
+
+This section supersedes earlier status statements above where they describe features as not yet wired. The code and CI now include:
+
+- Signed contract deployment and calls using canonical ContractTransactionV1 envelopes, Ed25519 sender binding, chain/expiry checks, nonce replay protection, gas limits, and fee settlement.
+- Contract source is compiled, serialized as Bytecode v2, verified/loaded, and executed by the existing QORVYNT QVM 2.0 runtime.
+- Deployed contract registry, persistent storage, executor snapshots, deterministic state roots, block execution/replay, transaction pools, loopback JSON-RPC submission, and peer block synchronization.
+- A native fungible-token ledger integrated into the same contract account state: balances, allowances, transfer/approve/transfer_from, owner mint, holder burn, deterministic events, signed token calls, snapshot persistence, and state-root commitment.
+- A signed token factory call target named qorvynt_token_factory. Its create call returns a deterministic token ID. See docs/token-standard-v1.md for the current calldata interface.
+
+Latest confirmed contract-runtime CI for the token factory change: 61 tests passed, 0 failed. Local-chain and multi-node sync smoke tests also passed on the same code commit. The self-hosted compiler/Bytecode v2 validation and fuzz workflows were still running at the time of this addendum.
+
+### Remaining release gates
+
+This implementation is still experimental. It is not a production decentralized network or mainnet. Token calls are QORVYNT-native host operations, not EVM bytecode or full Ethereum ERC-20 ABI compatibility. The current token calldata is comma-separated UTF-8; public wallet UX, explorer/API surfaces, robust governance/consensus, public testnet hardening, and a production fee-activation policy remain separate work. Do not use development keys or this prototype for real funds.

@@ -18,7 +18,10 @@ mod tx_pool;
 mod bytecode_v2;
 mod contract_state;
 mod contract_runtime;
+mod contract_executor;
 mod contract_gas;
+mod token_standard;
+pub mod contract_protocol;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -2567,9 +2570,52 @@ fn contract_abi_and_artifact(source: &str) -> Result<serde_json::Value, String> 
         "compiler_version": env!("CARGO_PKG_VERSION"),
         "contract": name,
         "source_sha256": source_hash,
+        "source": source,
         "abi": {"version": 1, "states": states, "methods": methods},
         "bytecode_v2": bytecode
     }))
+}
+
+
+pub(crate) fn validate_contract_artifact(bytes: &[u8]) -> Result<(String, String, String), String> {
+    if bytes.is_empty() || bytes.len() > 1024 * 1024 {
+        return Err("contract artifact size is outside the permitted range".into());
+    }
+    let artifact: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|error| format!("invalid contract artifact JSON: {error}"))?;
+    if artifact.get("format").and_then(serde_json::Value::as_str) != Some("ZENVORA_CONTRACT_ARTIFACT_V1") {
+        return Err("unsupported contract artifact format".into());
+    }
+    let name = artifact.get("contract").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing its contract name".to_string())?;
+    if !valid_identifier(name) {
+        return Err("contract artifact contains an invalid contract name".into());
+    }
+    let source = artifact.get("source").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing its source payload".to_string())?;
+    let expected_hash = artifact.get("source_sha256").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing its source hash".to_string())?;
+    let actual_hash = Sha256::digest(source.as_bytes()).iter()
+        .map(|byte| format!("{byte:02x}")).collect::<String>();
+    if expected_hash != actual_hash {
+        return Err("contract artifact source hash mismatch".into());
+    }
+    let (code, layout) = compile_with_layout(source)?;
+    let canonical_bytecode = serialize_bytecode_v2(&code, &layout)?;
+    let supplied_bytecode = artifact.get("bytecode_v2").and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "contract artifact is missing Bytecode v2".to_string())?;
+    let verified = deserialize_bytecode_v2(supplied_bytecode)?;
+    if serialize_bytecode_v2(&verified, &layout)? != canonical_bytecode {
+        return Err("contract artifact Bytecode v2 does not match its source".into());
+    }
+    let canonical_artifact = contract_abi_and_artifact(source)?;
+    if canonical_artifact.get("contract") != artifact.get("contract") {
+        return Err("contract artifact name does not match its source".into());
+    }
+    if canonical_artifact.get("abi") != artifact.get("abi") {
+        return Err("contract artifact ABI does not match its source".into());
+    }
+    Ok((name.to_string(), source.to_string(), canonical_bytecode))
 }
 
 fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), String> {
@@ -2958,10 +3004,41 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             run_signed_transfer_cli(store_path, chain_id, key_path, recipient, amount, max_fee, validator_paths)
         }
+        [_, mode, store_path, chain_id, key_path, artifact_path, contract_pool_path, gas_limit, gas_price, max_fee]
+            if mode == "--chain-contract-deploy" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let artifact = fs::read(artifact_path).map_err(|error| format!("cannot read contract artifact: {error}"))?;
+            submit_contract_transaction_cli(
+                store_path, chain_id, key_path, contract_pool_path,
+                crate::contract_protocol::ContractOperation::Deploy { artifact },
+                gas_limit, gas_price, max_fee,
+            )
+        }
+        [_, mode, store_path, chain_id, key_path, contract_id, method, calldata, contract_pool_path, gas_limit, gas_price, max_fee]
+            if mode == "--chain-contract-call" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            submit_contract_transaction_cli(
+                store_path, chain_id, key_path, contract_pool_path,
+                crate::contract_protocol::ContractOperation::Call {
+                    contract_id: contract_id.clone(), method: method.clone(), calldata: calldata.as_bytes().to_vec(),
+                },
+                gas_limit, gas_price, max_fee,
+            )
+        }
         [_, mode, store_path, chain_id, pool_path, validator_paths @ ..]
             if mode == "--chain-store-produce" && !validator_paths.is_empty() => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             run_pool_block_cli(store_path, chain_id, pool_path, validator_paths)
+        }
+        [_, mode, store_path, chain_id, transfer_pool_path, contract_pool_path, validator_paths @ ..]
+            if mode == "--chain-store-produce-contracts" && !validator_paths.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_contract_pool_block_cli(store_path, chain_id, transfer_pool_path, contract_pool_path, validator_paths)
+        }
+        [_, mode, store_path, chain_id, transfer_pool, contract_pool, proposer_key, peers @ ..]
+            if mode == "--chain-store-produce-contracts-peer-quorum" && !peers.is_empty() => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            run_contract_peer_quorum_block_cli(store_path, chain_id, transfer_pool, contract_pool, proposer_key, peers)
         }
         [_, mode, store_path, chain_id, pool_path, proposer_key, peers @ ..]
             if mode == "--chain-store-produce-peer-quorum" && !peers.is_empty() => {
@@ -2976,6 +3053,15 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
             let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
             crate::chain_rpc::serve_with_pool(store_path.clone(), chain_id, pool_path.clone(), port)
+        }
+        [_, mode, store_path, chain_id, transfer_pool, contract_pool] if mode == "--chain-rpc-contract-pools" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            crate::chain_rpc::serve_with_pools(store_path.clone(), chain_id, transfer_pool.clone(), contract_pool.clone(), 8545)
+        }
+        [_, mode, store_path, chain_id, transfer_pool, contract_pool, port] if mode == "--chain-rpc-contract-pools" => {
+            let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
+            let port: u16 = port.parse().map_err(|_| "RPC port must be between 1 and 65535")?;
+            crate::chain_rpc::serve_with_pools(store_path.clone(), chain_id, transfer_pool.clone(), contract_pool.clone(), port)
         }
         [_, mode, store_path, chain_id, address] if mode == "--chain-store-balance" => {
             let chain_id: u64 = chain_id.parse().map_err(|_| "chain ID must be a positive integer")?;
@@ -3068,6 +3154,95 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
         }
         _ => Err("invalid chain command arguments".into()),
     }
+}
+
+fn run_contract_peer_quorum_block_cli(
+    store_path: &str, chain_id: u64, transfer_pool_path: &str,
+    contract_pool_path: &str, proposer_key_path: &str, peers: &[String],
+) -> Result<(), String> {
+    if peers.is_empty() || peers.len() > 100 {
+        return Err("supply between 1 and 100 validator peer addresses".into());
+    }
+    let proposer_key = read_chain_key(proposer_key_path)?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let transfer_pool = crate::tx_pool::TransactionPool::load_from_file(transfer_pool_path, &runtime, chain_id, height)?;
+    let contract_pool = crate::tx_pool::ContractTransactionPool::load_from_file(contract_pool_path, &runtime, chain_id, height)?;
+    if transfer_pool.is_empty() && contract_pool.is_empty() {
+        return Err("both transfer and contract transaction pools are empty".into());
+    }
+    let envelopes = transfer_pool.pending().to_vec();
+    let contract_envelopes = contract_pool.pending().to_vec();
+    let mut candidate = runtime.clone();
+    let mut transfer_receipts = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        transfer_receipts.push(candidate.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, chain_id, height,
+        )?);
+    }
+    let contract_receipts = candidate.apply_signed_contract_transactions(
+        &contract_envelopes, chain_id, height,
+    )?;
+    let transactions: Vec<crate::chain_protocol::TransactionV1> = envelopes.iter()
+        .map(|envelope| envelope.transaction.clone()).collect();
+    let transfer_root = crate::chain_protocol::transaction_merkle_root(&transactions)?;
+    let transaction_root = if contract_envelopes.is_empty() { transfer_root }
+        else { crate::chain_block::combined_contract_transaction_root(transfer_root, &contract_envelopes)? };
+    let transfer_receipt_root = chain_runtime::ChainRuntime::receipt_root_for(&transfer_receipts)?;
+    let receipt_root = if contract_envelopes.is_empty() { transfer_receipt_root }
+        else { crate::chain_block::combined_contract_receipt_root(transfer_receipt_root, &contract_receipts)? };
+    let proposer = crate::chain_protocol::address_from_public_key(&proposer_key.verifying_key().to_bytes())?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id, height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root, receipt_root, state_root: candidate.try_state_root()?,
+        proposer, consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &proposer_key)?;
+    let mut peer_errors = Vec::new();
+    for peer in peers {
+        if crate::chain_consensus::verify_consensus_proof(&header, runtime.genesis_balances()).is_ok() { break; }
+        match crate::chain_p2p::request_block_signature_with_contracts(
+            peer, &header, &envelopes, &contract_envelopes,
+        ) {
+            Ok(proof) => {
+                let previous_proof = header.consensus_proof.clone();
+                header.consensus_proof = proof;
+                if let Err(error) = crate::chain_consensus::verify_partial_consensus_proof(
+                    &header, runtime.genesis_balances(),
+                ) {
+                    header.consensus_proof = previous_proof;
+                    peer_errors.push(format!("{peer}: {error}"));
+                }
+            }
+            Err(error) => peer_errors.push(format!("{peer}: {error}")),
+        }
+    }
+    let receipts = match crate::chain_block::execute_block_with_contracts(
+        &mut runtime, &header, &envelopes, &contract_envelopes, chain_id, Some(&previous.header),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            if peer_errors.is_empty() { return Err(error); }
+            return Err(format!("{error}; peer errors: {}", peer_errors.join("; ")));
+        }
+    };
+    if receipts != transfer_receipts || runtime.try_state_root()? != candidate.try_state_root()? {
+        return Err("executed contract-enabled block differs from candidate execution".into());
+    }
+    store.append_executed_block_with_contracts(
+        store_path, &runtime, &header, &envelopes, &contract_envelopes, &receipts,
+    )?;
+    let next_height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    crate::tx_pool::TransactionPool::new(chain_id, next_height)?.save_to_file(transfer_pool_path)?;
+    crate::tx_pool::ContractTransactionPool::new(chain_id, next_height)?.save_to_file(contract_pool_path)?;
+    println!("Peer-quorum QORVYNT contract block committed: height={height}");
+    println!("Transfer transactions={} contract transactions={}", receipts.len(), contract_envelopes.len());
+    println!("Validator signatures: {}", header.consensus_proof.len() / 96);
+    println!("State root: {}", hex_encode_bytes(&runtime.state_root()));
+    Ok(())
 }
 
 fn run_peer_quorum_block_cli(
@@ -3343,6 +3518,129 @@ fn run_signed_transfer_cli(
     Ok(())
 }
 
+fn submit_contract_transaction_cli(
+    store_path: &str,
+    chain_id: u64,
+    key_path: &str,
+    pool_path: &str,
+    operation: crate::contract_protocol::ContractOperation,
+    gas_limit_text: &str,
+    gas_price_text: &str,
+    max_fee_text: &str,
+) -> Result<(), String> {
+    let signing_key = read_chain_key(key_path)?;
+    let public_key = signing_key.verifying_key().to_bytes();
+    let sender = crate::chain_protocol::address_from_public_key(&public_key)?;
+    let gas_limit: u64 = gas_limit_text.parse().map_err(|_| "gas limit must be a positive integer")?;
+    let gas_price: u64 = gas_price_text.parse().map_err(|_| "gas price must be a positive integer")?;
+    let max_fee: u64 = max_fee_text.parse().map_err(|_| "maximum fee must be a nonnegative integer")?;
+    let (store, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let height = store.blocks().last().and_then(|block| block.header.height.checked_add(1))
+        .ok_or_else(|| "cannot determine next block height".to_string())?;
+    let mut pool = crate::tx_pool::ContractTransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
+    let pending_sender_nonce_count = pool.pending().iter()
+        .filter(|entry| entry.transaction.sender == sender).count() as u64;
+    let nonce = runtime.contract_state().nonce(&sender).checked_add(pending_sender_nonce_count)
+        .ok_or_else(|| "contract account nonce overflow".to_string())?;
+    let valid_until_height = height.checked_add(1_000)
+        .ok_or_else(|| "contract transaction expiry height overflow".to_string())?;
+    let mut transaction = crate::contract_protocol::ContractTransactionV1 {
+        chain_id, sender, nonce, gas_limit, max_fee, gas_price,
+        valid_until_height: Some(valid_until_height), operation, signature: Vec::new(),
+    };
+    transaction.signature = signing_key.sign(&transaction.signing_bytes()?).to_bytes().to_vec();
+    let envelope = crate::contract_executor::SignedContractTransaction {
+        transaction, public_key: public_key.to_vec(),
+    };
+    let transaction_id = pool.submit(&runtime, envelope)?;
+    let next_nonce = nonce.checked_add(1).ok_or_else(|| "contract account nonce overflow".to_string())?;
+    pool.save_to_file(pool_path)?;
+    println!("QORVYNT contract transaction queued: {}", hex_encode_bytes(&transaction_id));
+    println!("Chain height={height} next_nonce={next_nonce}");
+    Ok(())
+}
+
+fn run_contract_pool_block_cli(
+    store_path: &str,
+    chain_id: u64,
+    transfer_pool_path: &str,
+    contract_pool_path: &str,
+    validator_key_paths: &[String],
+) -> Result<(), String> {
+    if validator_key_paths.is_empty() || validator_key_paths.len() > 42 {
+        return Err("supply between 1 and 42 validator key files".into());
+    }
+    let validator_keys: Vec<SigningKey> = validator_key_paths.iter()
+        .map(|path| read_chain_key(path))
+        .collect::<Result<_, _>>()?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let transfer_pool = crate::tx_pool::TransactionPool::load_from_file(transfer_pool_path, &runtime, chain_id, height)?;
+    let contract_pool = crate::tx_pool::ContractTransactionPool::load_from_file(contract_pool_path, &runtime, chain_id, height)?;
+    if transfer_pool.is_empty() && contract_pool.is_empty() {
+        return Err("both transfer and contract transaction pools are empty".into());
+    }
+    let envelopes = transfer_pool.pending().to_vec();
+    let contract_envelopes = contract_pool.pending().to_vec();
+    let mut candidate = runtime.clone();
+    let mut candidate_receipts = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        candidate_receipts.push(candidate.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, chain_id, height,
+        )?);
+    }
+    let contract_receipts = candidate.apply_signed_contract_transactions(
+        &contract_envelopes, chain_id, height,
+    )?;
+    let transactions: Vec<crate::chain_protocol::TransactionV1> = envelopes.iter()
+        .map(|envelope| envelope.transaction.clone()).collect();
+    let transfer_tx_root = crate::chain_protocol::transaction_merkle_root(&transactions)?;
+    let transaction_root = if contract_envelopes.is_empty() {
+        transfer_tx_root
+    } else {
+        crate::chain_block::combined_contract_transaction_root(transfer_tx_root, &contract_envelopes)?
+    };
+    let transfer_receipt_root = chain_runtime::ChainRuntime::receipt_root_for(&candidate_receipts)?;
+    let receipt_root = if contract_envelopes.is_empty() {
+        transfer_receipt_root
+    } else {
+        crate::chain_block::combined_contract_receipt_root(transfer_receipt_root, &contract_receipts)?
+    };
+    let proposer = crate::chain_protocol::address_from_public_key(
+        &validator_keys[0].verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id, height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root, receipt_root,
+        state_root: candidate.try_state_root()?,
+        proposer, consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &validator_keys[0])?;
+    for key in validator_keys.iter().skip(1) {
+        crate::chain_consensus::add_validator_signature(&mut header, key)?;
+    }
+    let receipts = crate::chain_block::execute_block_with_contracts(
+        &mut runtime, &header, &envelopes, &contract_envelopes, chain_id, Some(&previous.header),
+    )?;
+    if receipts != candidate_receipts || runtime.try_state_root()? != candidate.try_state_root()? {
+        return Err("executed block state or transfer receipts differ from candidate execution".into());
+    }
+    store.append_executed_block_with_contracts(
+        store_path, &runtime, &header, &envelopes, &contract_envelopes, &receipts,
+    )?;
+    let next_height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    crate::tx_pool::TransactionPool::new(chain_id, next_height)?.save_to_file(transfer_pool_path)?;
+    crate::tx_pool::ContractTransactionPool::new(chain_id, next_height)?.save_to_file(contract_pool_path)?;
+    println!("QORVYNT contract-enabled block committed: height={height}");
+    println!("Transfer transactions={} contract transactions={}", receipts.len(), contract_envelopes.len());
+    println!("Validator signatures: {}", header.consensus_proof.len() / 96);
+    println!("State root: {}", hex_encode_bytes(&runtime.state_root()));
+    Ok(())
+}
+
 fn read_chain_key(path: &str) -> Result<SigningKey, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|error| format!("cannot read key file: {error}"))?;
@@ -3459,7 +3757,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("QORVYNT v0.8.0\nUsage: zv <file.qv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.qv>\n       zv --emit-bytecode <file.qv> <output.zvb>\n       zv --emit-bytecode-v2 <file.qv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("QORVYNT v0.8.0\nUsage: zv <file.qv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.qv>\n       zv --emit-bytecode <file.qv> <output.zvb>\n       zv --emit-bytecode-v2 <file.qv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-contract-deploy <store> <chain-id> <key> <artifact.json> <contract-pool> <gas-limit> <gas-price> <max-fee>\n       zv --chain-contract-call <store> <chain-id> <key> <contract-id> <method> <calldata> <contract-pool> <gas-limit> <gas-price> <max-fee>\n       zv --chain-store-produce-contracts <store> <chain-id> <transfer-pool> <contract-pool> <validator-key>...\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-store-produce-contracts-peer-quorum <store> <chain-id> <transfer-pool> <contract-pool> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-rpc-contract-pools <store.zvb> <chain-id> <transfer-pool> <contract-pool> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
@@ -3683,6 +3981,112 @@ mod tests {
         assert_eq!(runtime.balance("bob"), 100);
 
         for path in key_paths.iter().chain([&store_path, &config_path]) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn contract_deploy_and_call_cli_commit_and_replay_on_chain() {
+        let suffix = std::process::id();
+        let base = std::env::temp_dir();
+        let key_path = base.join(format!("qorvynt-contract-cli-{suffix}.zvk"));
+        let store_path = base.join(format!("qorvynt-contract-cli-{suffix}.zvb"));
+        let source_path = base.join(format!("qorvynt-contract-cli-{suffix}.qv"));
+        let artifact_path = base.join(format!("qorvynt-contract-cli-{suffix}.json"));
+        let transfer_pool_path = base.join(format!("qorvynt-contract-cli-{suffix}.transfers"));
+        let contract_pool_path = base.join(format!("qorvynt-contract-cli-{suffix}.contracts"));
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+        let key = key_path.to_string_lossy().to_string();
+        let store = store_path.to_string_lossy().to_string();
+        let source = source_path.to_string_lossy().to_string();
+        let artifact = artifact_path.to_string_lossy().to_string();
+        let transfer_pool = transfer_pool_path.to_string_lossy().to_string();
+        let contract_pool = contract_pool_path.to_string_lossy().to_string();
+
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key.clone()]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store.clone(), "71".into(), key.clone(), "5000000".into(),
+        ]).unwrap();
+        std::fs::write(&source_path, "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n").unwrap();
+        super::write_contract_artifact(&source, &artifact).unwrap();
+
+        run_chain_command(&vec![
+            "zv".into(), "--chain-contract-deploy".into(), store.clone(), "71".into(),
+            key.clone(), artifact.clone(), contract_pool.clone(),
+            "200000".into(), "1".into(), "200000".into(),
+        ]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce-contracts".into(), store.clone(), "71".into(),
+            transfer_pool.clone(), contract_pool.clone(), key.clone(),
+        ]).unwrap();
+
+        let (_, after_deploy) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
+        let contract_id = after_deploy.contract_state().deployed_contract_ids().into_iter().next().unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-contract-call".into(), store.clone(), "71".into(),
+            key.clone(), contract_id.clone(), "increment".into(), "7".into(), contract_pool.clone(),
+            "100000".into(), "1".into(), "100000".into(),
+        ]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce-contracts".into(), store.clone(), "71".into(),
+            transfer_pool.clone(), contract_pool.clone(), key.clone(),
+        ]).unwrap();
+
+        let (loaded, restored) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 3);
+        assert_eq!(loaded.blocks()[1].contract_transactions.len(), 1);
+        assert_eq!(loaded.blocks()[2].contract_transactions.len(), 1);
+        assert_eq!(restored.contract_state().storage.get(&contract_id, "count").unwrap(), Some(&b"7"[..]));
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn contract_peer_quorum_cli_commits_when_local_validator_meets_quorum() {
+        let suffix = std::process::id();
+        let base = std::env::temp_dir();
+        let key_path = base.join(format!("qorvynt-peer-quorum-key-{suffix}.zvk"));
+        let store_path = base.join(format!("qorvynt-peer-quorum-store-{suffix}.zvb"));
+        let source_path = base.join(format!("qorvynt-peer-quorum-{suffix}.qv"));
+        let artifact_path = base.join(format!("qorvynt-peer-quorum-{suffix}.json"));
+        let transfer_pool_path = base.join(format!("qorvynt-peer-quorum-{suffix}.transfers"));
+        let contract_pool_path = base.join(format!("qorvynt-peer-quorum-{suffix}.contracts"));
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
+            let _ = std::fs::remove_file(path);
+        }
+        let key = key_path.to_string_lossy().to_string();
+        let store = store_path.to_string_lossy().to_string();
+        let source = source_path.to_string_lossy().to_string();
+        let artifact = artifact_path.to_string_lossy().to_string();
+        let transfer_pool = transfer_pool_path.to_string_lossy().to_string();
+        let contract_pool = contract_pool_path.to_string_lossy().to_string();
+        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key.clone()]).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-init".into(), store.clone(), "71".into(), key.clone(), "5000000".into(),
+        ]).unwrap();
+        std::fs::write(&source_path, "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\n}\n").unwrap();
+        super::write_contract_artifact(&source, &artifact).unwrap();
+        run_chain_command(&vec![
+            "zv".into(), "--chain-contract-deploy".into(), store.clone(), "71".into(),
+            key.clone(), artifact, contract_pool.clone(), "200000".into(), "1".into(), "200000".into(),
+        ]).unwrap();
+
+        run_chain_command(&vec![
+            "zv".into(), "--chain-store-produce-contracts-peer-quorum".into(),
+            store.clone(), "71".into(), transfer_pool.clone(), contract_pool.clone(),
+            key, "127.0.0.1:1".into(),
+        ]).unwrap();
+        let (loaded, runtime) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 2, "single-validator quorum should append the contract block");
+        assert_eq!(runtime.contract_state().deployed_contract_count(), 1);
+        let pending = crate::tx_pool::ContractTransactionPool::load_from_file(
+            &contract_pool, &runtime, 71, 2,
+        ).unwrap();
+        assert_eq!(pending.len(), 0, "committed contract transactions should be removed from the pool");
+        for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
             let _ = std::fs::remove_file(path);
         }
     }
@@ -4341,6 +4745,21 @@ mod tests {
         let encoded = artifact["bytecode_v2"].as_str().unwrap();
         assert!(super::deserialize_bytecode_v2(encoded).is_ok());
         assert_eq!(artifact["source_sha256"].as_str().unwrap().len(), 64);
+        let encoded = serde_json::to_vec(&artifact).unwrap();
+        let (name, decoded_source, bytecode) = super::validate_contract_artifact(&encoded).unwrap();
+        assert_eq!(name, "Counter");
+        assert_eq!(decoded_source, source);
+        assert!(super::deserialize_bytecode_v2(&bytecode).is_ok());
+    }
+
+    #[test]
+    fn contract_artifact_rejects_abi_tampering_even_when_source_hash_and_bytecode_match() {
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\n}\n";
+        let mut artifact = super::contract_abi_and_artifact(source).unwrap();
+        artifact["abi"]["methods"][0]["name"] = serde_json::Value::String("withdraw_all".into());
+        let encoded = serde_json::to_vec(&artifact).unwrap();
+        let error = super::validate_contract_artifact(&encoded).unwrap_err();
+        assert!(error.contains("ABI does not match its source"), "{error}");
     }
 
     #[test]

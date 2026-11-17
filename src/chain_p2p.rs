@@ -10,12 +10,14 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::block_store::BlockStore;
-use super::chain_block::{execute_block, execute_block_candidate, SignedTransactionEnvelope};
+use super::chain_block::{execute_block, execute_block_candidate_with_contracts, execute_block_with_contracts, SignedTransactionEnvelope};
 use super::chain_consensus::{add_validator_signature, verify_partial_consensus_proof};
 use super::chain_protocol::{BlockHeaderV1, TransactionV1};
+use super::contract_executor::SignedContractTransaction;
+use super::contract_protocol::ContractTransactionV1;
 use super::tx_pool::TransactionPool;
 
-const PROTOCOL_VERSION: u64 = 1;
+const PROTOCOL_VERSION: u64 = 2;
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 const PEER_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -148,12 +150,26 @@ pub fn sync_from_peer(store_path: &str, chain_id: u64, peer: &str) -> Result<usi
             let transaction = TransactionV1::from_canonical_bytes(&transaction_bytes)?;
             transactions.push(SignedTransactionEnvelope { transaction, public_key });
         }
+        let contract_values = response.get("contractTransactions").and_then(Value::as_array)
+            .cloned().unwrap_or_default();
+        let mut contract_transactions = Vec::with_capacity(contract_values.len());
+        for item in contract_values {
+            let public_key = hex_decode(item.get("publicKey").and_then(Value::as_str)
+                .ok_or_else(|| "peer contract transaction is missing public key".to_string())?)?;
+            let transaction_bytes = hex_decode(item.get("transaction").and_then(Value::as_str)
+                .ok_or_else(|| "peer contract transaction is missing canonical bytes".to_string())?)?;
+            let transaction = ContractTransactionV1::from_canonical_bytes(&transaction_bytes)?;
+            contract_transactions.push(SignedContractTransaction { transaction, public_key });
+        }
         let previous = store.blocks().last().cloned()
             .ok_or_else(|| "local store has no previous block".to_string())?;
-        let receipts = execute_block(
-            &mut runtime, &header, &transactions, chain_id, Some(&previous.header),
+        let receipts = execute_block_with_contracts(
+            &mut runtime, &header, &transactions, &contract_transactions,
+            chain_id, Some(&previous.header),
         )?;
-        store.append_executed_block(store_path, &runtime, &header, &transactions, &receipts)?;
+        store.append_executed_block_with_contracts(
+            store_path, &runtime, &header, &transactions, &contract_transactions, &receipts,
+        )?;
         synced += 1;
         height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
     }
@@ -188,6 +204,16 @@ pub fn request_block_signature(
     header: &BlockHeaderV1,
     transactions: &[SignedTransactionEnvelope],
 ) -> Result<Vec<u8>, String> {
+    request_block_signature_with_contracts(peer, header, transactions, &[])
+}
+
+/// Ask a validator peer to verify a proposal including QORVYNT contract transactions.
+pub fn request_block_signature_with_contracts(
+    peer: &str,
+    header: &BlockHeaderV1,
+    transactions: &[SignedTransactionEnvelope],
+    contract_transactions: &[SignedContractTransaction],
+) -> Result<Vec<u8>, String> {
     let peer_address: SocketAddr = peer.parse()
         .map_err(|_| "peer must be an IP:port socket address")?;
     let encoded_transactions: Vec<Value> = transactions.iter().map(|envelope| {
@@ -196,10 +222,17 @@ pub fn request_block_signature(
             "transaction":hex_encode(&envelope.transaction.canonical_bytes()?)
         }))
     }).collect::<Result<_, String>>()?;
+    let encoded_contract_transactions: Vec<Value> = contract_transactions.iter().map(|envelope| {
+        Ok(json!({
+            "publicKey":hex_encode(&envelope.public_key),
+            "transaction":hex_encode(&envelope.transaction.canonical_bytes()?)
+        }))
+    }).collect::<Result<_, String>>()?;
     let response = request_peer(peer_address, &json!({
         "method":"sign_block",
         "header":hex_encode(&header.canonical_bytes()?),
-        "transactions":encoded_transactions
+        "transactions":encoded_transactions,
+        "contractTransactions":encoded_contract_transactions
     }))?;
     hex_decode(response.get("consensusProof").and_then(Value::as_str)
         .ok_or_else(|| "validator peer response is missing consensus proof".to_string())?)
@@ -286,7 +319,22 @@ fn handle_message_with_pool(
                     "transaction":hex_encode(&transaction_bytes)
                 }));
             }
-            json!({"ok":true,"result":{"header":hex_encode(&header),"transactions":transactions}})
+            let mut contract_transactions: Vec<Value> = Vec::with_capacity(block.contract_transactions.len());
+            for envelope in &block.contract_transactions {
+                let transaction_bytes = match envelope.transaction.canonical_bytes() {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":format!("cannot encode stored contract transaction: {error}")}),
+                };
+                contract_transactions.push(json!({
+                    "publicKey":hex_encode(&envelope.public_key),
+                    "transaction":hex_encode(&transaction_bytes)
+                }));
+            }
+            json!({"ok":true,"result":{
+                "header":hex_encode(&header),
+                "transactions":transactions,
+                "contractTransactions":contract_transactions
+            }})
         }
         Some("sign_block") => {
             let key_path = match validator_key_path {
@@ -321,6 +369,24 @@ fn handle_message_with_pool(
                 };
                 transactions.push(SignedTransactionEnvelope { transaction, public_key });
             }
+            let contract_values = request.get("contractTransactions").and_then(Value::as_array)
+                .cloned().unwrap_or_default();
+            let mut contract_transactions = Vec::with_capacity(contract_values.len());
+            for item in contract_values {
+                let public_key = match item.get("publicKey").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                    Some(value) => value,
+                    None => return json!({"ok":false,"error":"proposal contract transaction is missing public key"}),
+                };
+                let transaction_bytes = match item.get("transaction").and_then(Value::as_str).and_then(|value|hex_decode(value).ok()) {
+                    Some(value) => value,
+                    None => return json!({"ok":false,"error":"proposal contract transaction is missing canonical bytes"}),
+                };
+                let transaction = match ContractTransactionV1::from_canonical_bytes(&transaction_bytes) {
+                    Ok(value) => value,
+                    Err(error) => return json!({"ok":false,"error":error}),
+                };
+                contract_transactions.push(SignedContractTransaction { transaction, public_key });
+            }
             let (store, runtime) = match BlockStore::load_from_file(store_path, expected_chain_id) {
                 Ok(value) => value,
                 Err(error) => return json!({"ok":false,"error":format!("local block store failed verification: {error}")}),
@@ -341,8 +407,9 @@ fn handle_message_with_pool(
                 return json!({"ok":false,"error":format!("invalid existing proposal signatures: {error}")});
             }
             let mut candidate = runtime.clone();
-            if let Err(error) = execute_block_candidate(
-                &mut candidate, &header, &transactions, expected_chain_id, Some(&previous.header),
+            if let Err(error) = execute_block_candidate_with_contracts(
+                &mut candidate, &header, &transactions, &contract_transactions,
+                expected_chain_id, Some(&previous.header),
             ) {
                 return json!({"ok":false,"error":format!("candidate block validation failed: {error}")});
             }
@@ -729,6 +796,107 @@ mod tests {
         let (loaded, replayed) = BlockStore::load_from_file(&local_text, 71).unwrap();
         assert_eq!(loaded.blocks().len(), 2);
         assert_eq!(replayed.balance("bob"), 125);
+        std::fs::remove_file(remote_path).unwrap();
+        std::fs::remove_file(local_path).unwrap();
+    }
+
+    #[test]
+    fn peer_sync_replays_contract_deployment_from_remote_block_store() {
+        use super::super::chain_block::{
+            combined_contract_receipt_root, combined_contract_transaction_root, execute_block_with_contracts,
+        };
+        use super::super::contract_executor::SignedContractTransaction;
+        use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
+
+        let suffix = std::process::id();
+        let remote_path = std::env::temp_dir().join(format!("qorvynt-peer-contract-remote-{suffix}.zvb"));
+        let local_path = std::env::temp_dir().join(format!("qorvynt-peer-contract-local-{suffix}.zvb"));
+        for path in [&remote_path, &local_path] { let _ = std::fs::remove_file(path); }
+        let remote_text = remote_path.to_string_lossy().to_string();
+        let local_text = local_path.to_string_lossy().to_string();
+        let key = SigningKey::from_bytes(&[201; 32]);
+        let public = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public).unwrap();
+        let mut allocations = BTreeMap::new();
+        allocations.insert(address.clone(), 5_000_000);
+
+        let make_genesis = || {
+            let mut runtime = ChainRuntime::new();
+            runtime.set_genesis_balance(&address, 5_000_000).unwrap();
+            let header = BlockHeaderV1 {
+                chain_id: 71, height: 0, timestamp_secs: 1_800_000_000,
+                parent_hash: [0; 32], transaction_root: transaction_merkle_root(&[]).unwrap(),
+                receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+                state_root: runtime.state_root(), proposer: address.clone(), consensus_proof: Vec::new(),
+            };
+            execute_block(&mut runtime, &header, &[], 71, None).unwrap();
+            (runtime, header)
+        };
+        let (mut remote_runtime, genesis) = make_genesis();
+        let (local_runtime, local_genesis) = make_genesis();
+        assert_eq!(genesis, local_genesis);
+        let mut remote_store = BlockStore::new(71, allocations.clone()).unwrap();
+        remote_store.append_executed_block(&remote_text, &remote_runtime, &genesis, &[], &[]).unwrap();
+        let mut local_store = BlockStore::new(71, allocations).unwrap();
+        local_store.append_executed_block(&local_text, &local_runtime, &local_genesis, &[], &[]).unwrap();
+
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let mut transaction = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 0,
+            gas_limit: 200_000, max_fee: 200_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Deploy { artifact: serde_json::to_vec(&artifact).unwrap() },
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = SignedContractTransaction { transaction, public_key: public.to_vec() };
+        let mut candidate = remote_runtime.clone();
+        let contract_receipts = candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&envelope), 71, 1,
+        ).unwrap();
+        let empty_tx_root = transaction_merkle_root(&[]).unwrap();
+        let empty_receipt_root = ChainRuntime::receipt_root_for(&[]).unwrap();
+        let mut header = BlockHeaderV1 {
+            chain_id: 71, height: 1, timestamp_secs: 1_800_000_001,
+            parent_hash: genesis.header_hash().unwrap(),
+            transaction_root: combined_contract_transaction_root(empty_tx_root, std::slice::from_ref(&envelope)).unwrap(),
+            receipt_root: combined_contract_receipt_root(empty_receipt_root, &contract_receipts).unwrap(),
+            state_root: candidate.try_state_root().unwrap(),
+            proposer: String::new(), consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut header, &key).unwrap();
+        execute_block_with_contracts(
+            &mut remote_runtime, &header, &[], std::slice::from_ref(&envelope), 71, Some(&genesis),
+        ).unwrap();
+        remote_store.append_executed_block_with_contracts(
+            &remote_text, &remote_runtime, &header, &[], std::slice::from_ref(&envelope), &[],
+        ).unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let remote_text_for_thread = remote_text.clone();
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut length_bytes = [0_u8; 4];
+                stream.read_exact(&mut length_bytes).unwrap();
+                let length = u32::from_be_bytes(length_bytes) as usize;
+                let mut bytes = vec![0_u8; length];
+                stream.read_exact(&mut bytes).unwrap();
+                let request: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                let response = handle_message(&request, &remote_text_for_thread, 71).to_string();
+                stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        assert_eq!(sync_from_peer(&local_text, 71, &peer.to_string()).unwrap(), 1);
+        server.join().unwrap();
+        let (loaded, replayed) = BlockStore::load_from_file(&local_text, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 2);
+        assert_eq!(loaded.blocks()[1].contract_transactions.len(), 1);
+        assert_eq!(replayed.contract_state().deployed_contract_count(), 1);
+        assert_eq!(replayed.try_state_root().unwrap(), remote_runtime.try_state_root().unwrap());
         std::fs::remove_file(remote_path).unwrap();
         std::fs::remove_file(local_path).unwrap();
     }
