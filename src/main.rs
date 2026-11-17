@@ -19,7 +19,7 @@ mod bytecode_v2;
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
-mod contract_protocol;
+pub mod contract_protocol;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
