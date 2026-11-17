@@ -1,6 +1,7 @@
 //! Authenticated contract-call admission and execution on the existing QVM 2.0 runtime.
 use std::collections::BTreeMap;
 use ed25519_dalek::SigningKey;
+use sha2::{Digest, Sha256};
 use super::contract_protocol::{ContractOperation, ContractTransactionV1};
 use super::contract_runtime::{execute, ExecutionReceipt};
 use super::contract_state::{AccessMode, ContractState};
@@ -8,9 +9,33 @@ use super::contract_state::{AccessMode, ContractState};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContractAccountState {
     pub storage: ContractState,
+    deployed_contracts: BTreeMap<String, DeployedContract>,
     balances: BTreeMap<String, u64>,
     nonces: BTreeMap<String, u64>,
     pub fees_collected: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployedContract {
+    pub name: String,
+    pub source: String,
+    pub bytecode_v2: String,
+    pub deployer: String,
+    pub deployment_nonce: u64,
+    pub transaction_id: [u8; 32],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeploymentReceipt {
+    pub contract_id: String,
+    pub contract_name: String,
+    pub transaction_id: [u8; 32],
+    pub sender: String,
+    pub nonce: u64,
+    pub gas_charged: u64,
+    pub fee_charged: u64,
+    pub sender_balance: u64,
+    pub next_nonce: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +52,7 @@ pub struct SignedCallReceipt {
 
 impl Default for ContractAccountState {
     fn default() -> Self {
-        Self { storage: ContractState::new(), balances: BTreeMap::new(), nonces: BTreeMap::new(), fees_collected: 0 }
+        Self { storage: ContractState::new(), deployed_contracts: BTreeMap::new(), balances: BTreeMap::new(), nonces: BTreeMap::new(), fees_collected: 0 }
     }
 }
 
@@ -45,6 +70,55 @@ impl ContractAccountState {
 
     pub fn balance(&self, address: &str) -> u64 { self.balances.get(address).copied().unwrap_or(0) }
     pub fn nonce(&self, address: &str) -> u64 { self.nonces.get(address).copied().unwrap_or(0) }
+
+    pub fn deployed_contract(&self, contract_id: &str) -> Option<&DeployedContract> { self.deployed_contracts.get(contract_id) }
+
+    /// Admit and persist a signed deployment after validating the artifact against canonical
+    /// QORVYNT source and Bytecode v2. The generated ID is domain-separated and deterministic.
+    pub fn execute_signed_deployment(
+        &mut self,
+        tx: &ContractTransactionV1,
+        public_key: &[u8],
+        expected_chain_id: u64,
+        current_height: u64,
+    ) -> Result<DeploymentReceipt, String> {
+        tx.verify_signature(public_key)?;
+        let maximum_fee = tx.validate_for(expected_chain_id, current_height)?;
+        let expected_nonce = self.nonce(&tx.sender);
+        if tx.nonce != expected_nonce { return Err("contract transaction nonce mismatch or replay".into()); }
+        let balance = self.balance(&tx.sender);
+        if balance < tx.max_fee { return Err("insufficient balance for maximum authorized fee reserve".into()); }
+        let artifact = match &tx.operation {
+            ContractOperation::Deploy { artifact } => artifact,
+            ContractOperation::Call { .. } => return Err("deployment executor requires a deploy operation".into()),
+        };
+        let (name, source, bytecode_v2) = super::validate_contract_artifact(artifact)?;
+        let gas_charged = 21_000u64.checked_add(u64::try_from(artifact.len()).map_err(|_| "artifact gas size overflow")?)
+            .ok_or_else(|| "deployment gas calculation overflow".to_string())?;
+        if gas_charged > tx.gas_limit { return Err("out of gas during contract deployment".into()); }
+        let fee_charged = gas_charged.checked_mul(tx.gas_price).ok_or_else(|| "deployment fee overflow".to_string())?;
+        if fee_charged > maximum_fee || fee_charged > tx.max_fee { return Err("deployment fee exceeds authorized maximum".into()); }
+        let next_nonce = expected_nonce.checked_add(1).ok_or_else(|| "account nonce overflow".to_string())?;
+        let sender_balance = balance.checked_sub(fee_charged).ok_or_else(|| "sender fee balance underflow".to_string())?;
+        let next_fees = self.fees_collected.checked_add(fee_charged).ok_or_else(|| "fee collector balance overflow".to_string())?;
+        let transaction_id = tx.transaction_id()?;
+        let mut hasher = Sha256::new();
+        hasher.update(b"QORVYNT_CONTRACT_ADDRESS_V1\\0");
+        hasher.update(tx.sender.as_bytes());
+        hasher.update(tx.nonce.to_be_bytes());
+        hasher.update(transaction_id);
+        let contract_id = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>();
+        if self.deployed_contracts.contains_key(&contract_id) { return Err("contract address collision".into()); }
+        self.deployed_contracts.insert(contract_id.clone(), DeployedContract {
+            name: name.clone(), source, bytecode_v2, deployer: tx.sender.clone(),
+            deployment_nonce: tx.nonce, transaction_id,
+        });
+        self.balances.insert(tx.sender.clone(), sender_balance);
+        self.nonces.insert(tx.sender.clone(), next_nonce);
+        self.fees_collected = next_fees;
+        Ok(DeploymentReceipt { contract_id, contract_name: name, transaction_id, sender: tx.sender.clone(),
+            nonce: tx.nonce, gas_charged, fee_charged, sender_balance, next_nonce })
+    }
 
     /// Execute one signed call atomically against a candidate state. Failed VM calls consume
     /// the nonce and the full gas limit (bounded by max_fee), while contract storage rolls back.
@@ -109,6 +183,7 @@ impl ContractAccountState {
         out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0");
         put_bytes(&mut out, &storage)?;
         out.extend_from_slice(&self.fees_collected.to_be_bytes());
+        put_contracts(&mut out, &self.deployed_contracts)?;
         put_map(&mut out, &self.balances)?;
         put_map(&mut out, &self.nonces)?;
         if out.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
@@ -121,10 +196,11 @@ impl ContractAccountState {
         reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0")?;
         let storage = ContractState::decode_snapshot(reader.read_bytes(2 * 1024 * 1024)?)?;
         let fees_collected = reader.read_u64()?;
+        let deployed_contracts = reader.read_contracts()?;
         let balances = reader.read_map()?;
         let nonces = reader.read_map()?;
         reader.finish()?;
-        let state = Self { storage, balances, nonces, fees_collected };
+        let state = Self { storage, deployed_contracts, balances, nonces, fees_collected };
         if state.encode_snapshot()? != bytes { return Err("contract executor snapshot is not canonical".into()); }
         Ok(state)
     }
@@ -168,6 +244,17 @@ fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+fn put_contracts(out: &mut Vec<u8>, map: &BTreeMap<String, DeployedContract>) -> Result<(), String> {
+    out.extend_from_slice(&u32::try_from(map.len()).map_err(|_| "too many deployed contracts")?.to_be_bytes());
+    for (id, contract) in map {
+        put_bytes(out, id.as_bytes())?; put_bytes(out, contract.name.as_bytes())?;
+        put_bytes(out, contract.source.as_bytes())?; put_bytes(out, contract.bytecode_v2.as_bytes())?;
+        put_bytes(out, contract.deployer.as_bytes())?; out.extend_from_slice(&contract.deployment_nonce.to_be_bytes());
+        out.extend_from_slice(&contract.transaction_id);
+    }
+    Ok(())
+}
+
 fn put_map(out: &mut Vec<u8>, map: &BTreeMap<String, u64>) -> Result<(), String> {
     out.extend_from_slice(&u32::try_from(map.len()).map_err(|_| "too many account records")?.to_be_bytes());
     for (address, value) in map {
@@ -196,6 +283,25 @@ impl<'a> ExecutorReader<'a> {
         let len = self.read_u32()? as usize;
         if len > max { return Err("executor snapshot field exceeds limit".into()); }
         self.take(len)
+    }
+    fn read_contracts(&mut self) -> Result<BTreeMap<String, DeployedContract>, String> {
+        let count = self.read_u32()? as usize;
+        if count > 100_000 { return Err("too many deployed contracts in snapshot".into()); }
+        let mut map = BTreeMap::new(); let mut previous: Option<String> = None;
+        for _ in 0..count {
+            let id = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "contract ID is not UTF-8")?;
+            if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) || previous.as_ref().is_some_and(|p| p >= &id) { return Err("deployed contract IDs are invalid or unsorted".into()); }
+            previous = Some(id.clone());
+            let name = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "contract name is not UTF-8")?;
+            let source = String::from_utf8(self.read_bytes(1024 * 1024)?.to_vec()).map_err(|_| "contract source is not UTF-8")?;
+            let bytecode_v2 = String::from_utf8(self.read_bytes(1024 * 1024)?.to_vec()).map_err(|_| "contract bytecode is not UTF-8")?;
+            let deployer = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "deployer is not UTF-8")?;
+            let deployment_nonce = self.read_u64()?;
+            let transaction_id = self.take(32)?.try_into().map_err(|_| "invalid deployment transaction ID")?;
+            if name.is_empty() || deployer.is_empty() { return Err("invalid deployed contract metadata".into()); }
+            map.insert(id, DeployedContract { name, source, bytecode_v2, deployer, deployment_nonce, transaction_id });
+        }
+        Ok(map)
     }
     fn read_map(&mut self) -> Result<BTreeMap<String, u64>, String> {
         let count = self.read_u32()? as usize;
