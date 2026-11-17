@@ -3,6 +3,13 @@ set -euo pipefail
 
 # The release CLI is built earlier in the CI job. Execute every checked-in
 # .qv example, including module-only files, so stale or broken examples fail CI.
+# Reject a silent regression to the retired .zv source extension.
+legacy_source=$(find . -type f -name '*.zv' -not -path './.git/*' -not -path './target/*' -print -quit)
+if [[ -n "$legacy_source" ]]; then
+  echo "Legacy .zv source file found: $legacy_source (use .qv)" >&2
+  exit 1
+fi
+
 shopt -s nullglob
 examples=(examples/*.qv examples/modules/*.qv)
 if (("${#examples[@]}" == 0)); then
