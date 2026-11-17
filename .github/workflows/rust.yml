@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: zenvora-lang-ci-v3-${{ github.workflow }}-${{ github.ref }}
+  group: qorvynt-lang-ci-v3-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,7 +62,7 @@ jobs:
         run: cargo run --locked -- examples/hello.qv
 
       - name: Run QORVYNT language tour
-        run: cargo run --locked -- examples/zenvora-language-tour.qv
+        run: cargo run --locked -- examples/qorvynt-language-tour.qv
 
       - name: Run loop-control example
         run: cargo run --locked -- examples/loops.qv
@@ -104,19 +104,19 @@ jobs:
         run: cargo run --locked -- examples/modules.qv
 
       - name: Compile example to bytecode v1
-        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/qorvynt-functions.qvb
 
       - name: Execute compiled bytecode v1
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --run-bytecode /tmp/qorvynt-functions.qvb
 
       - name: Compile example to experimental bytecode v2
-        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/qorvynt-functions.qv2b
 
       - name: Check bytecode v2 header
-        run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.zv2b
+        run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/qorvynt-functions.qv2b
 
       - name: Execute verified bytecode v2
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --run-bytecode /tmp/qorvynt-functions.qv2b
 
       - name: Verify CLI version
         run: cargo run --locked -- --version
@@ -127,26 +127,26 @@ jobs:
       - name: Smoke-test Rust compiler HTTP API
         shell: bash
         run: |
-          cargo run --locked -- --compiler-api 18787 > /tmp/zenvora-compiler-api.log 2>&1 &
+          cargo run --locked -- --compiler-api 18787 > /tmp/qorvynt-compiler-api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
-            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/zenvora-api-health.json; then
+            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/qorvynt-api-health.json; then
               break
             fi
             sleep 1
           done
-          grep -q '"service":"zenvora-compiler-api"' /tmp/zenvora-api-health.json
+          grep -q '"service":"qorvynt-compiler-api"' /tmp/qorvynt-api-health.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
             --data '{"source":"define a := 10\ndefine b := 20\nshow a + b\nshow a * 2"}' \
-            http://127.0.0.1:18787/compile-run > /tmp/zenvora-api-result.json
-          grep -q '"output":"30\\n20"' /tmp/zenvora-api-result.json
+            http://127.0.0.1:18787/compile-run > /tmp/qorvynt-api-result.json
+          grep -q '"output":"30\\n20"' /tmp/qorvynt-api-result.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
             --data '{"source":"show missing_variable"}' \
-            http://127.0.0.1:18787/compile-run > /tmp/zenvora-api-error.json
-          grep -q '"ok":false' /tmp/zenvora-api-error.json
+            http://127.0.0.1:18787/compile-run > /tmp/qorvynt-api-error.json
+          grep -q '"ok":false' /tmp/qorvynt-api-error.json
 
   interpreter-mvp:
     name: Interpreter MVP regression suite
@@ -200,12 +200,12 @@ jobs:
 
       - name: Package installable VS Code extension
         working-directory: editors/vscode
-        run: npx --yes @vscode/vsce package --no-dependencies --out zenvora-lang.vsix
+        run: npx --yes @vscode/vsce package --no-dependencies --out qorvynt-lang.vsix
 
       - name: Upload VS Code extension artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zenvora-vscode-extension
-          path: editors/vscode/zenvora-lang.vsix
+          name: qorvynt-vscode-extension
+          path: editors/vscode/qorvynt-lang.vsix
           if-no-files-found: error
           retention-days: 7
