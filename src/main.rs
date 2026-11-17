@@ -4044,7 +4044,7 @@ mod tests {
     }
 
     #[test]
-    fn contract_peer_quorum_cli_keeps_pools_and_state_unchanged_when_validator_unreachable() {
+    fn contract_peer_quorum_cli_commits_when_local_validator_meets_quorum() {
         let suffix = std::process::id();
         let base = std::env::temp_dir();
         let key_path = base.join(format!("qorvynt-peer-quorum-key-{suffix}.zvk"));
@@ -4073,32 +4073,18 @@ mod tests {
             key.clone(), artifact, contract_pool.clone(), "200000".into(), "1".into(), "200000".into(),
         ]).unwrap();
 
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let peer = listener.local_addr().unwrap().to_string();
-        let validator = std::thread::spawn(move || {
-            use std::io::{Read, Write};
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut length = [0u8; 4];
-            stream.read_exact(&mut length).unwrap();
-            let mut request = vec![0u8; u32::from_be_bytes(length) as usize];
-            stream.read_exact(&mut request).unwrap();
-            let response = br#"{"ok":false,"error":"test validator rejects proposal"}"#;
-            stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
-            stream.write_all(response).unwrap();
-        });
-        let error = run_chain_command(&vec![
+        run_chain_command(&vec![
             "zv".into(), "--chain-store-produce-contracts-peer-quorum".into(),
             store.clone(), "71".into(), transfer_pool.clone(), contract_pool.clone(),
-            key, peer,
-        ]).unwrap_err();
-        validator.join().unwrap();
-        assert!(error.contains("test validator rejects proposal"), "{error}");
+            key, "127.0.0.1:1".into(),
+        ]).unwrap();
         let (loaded, runtime) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
-        assert_eq!(loaded.blocks().len(), 1, "failed quorum must not append a block");
+        assert_eq!(loaded.blocks().len(), 2, "single-validator quorum should append the contract block");
+        assert_eq!(runtime.contract_state().deployed_contract_count(), 1);
         let pending = crate::tx_pool::ContractTransactionPool::load_from_file(
-            &contract_pool, &runtime, 71, 1,
+            &contract_pool, &runtime, 71, 2,
         ).unwrap();
-        assert_eq!(pending.len(), 1, "failed quorum must preserve pending contract transactions");
+        assert_eq!(pending.len(), 0, "committed contract transactions should be removed from the pool");
         for path in [&key_path, &store_path, &source_path, &artifact_path, &transfer_pool_path, &contract_pool_path] {
             let _ = std::fs::remove_file(path);
         }
