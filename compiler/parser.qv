@@ -2512,6 +2512,8 @@ define map_index_lexed := lex(map_index_source)
 define map_index_ast := parse_program(get(map_index_lexed, "tokens"))
 define map_index_ir := lower_program(get(map_index_ast, "ast"))
 define map_index_plan := emit_bytecode_plan(map_index_ir)
+show "QORVYNT_VM_MAP_INDEX_PLAN_JSON"
+show json_encode(map_index_plan)
 define map_index_result := execute_bytecode_plan(map_index_plan)
 define map_index_output := get(map_index_result, "output")
 if get(map_index_result, "ok") and len(map_index_output) == 2 and get(map_index_output, 0) == "42" and get(map_index_output, 1) == "8" {
