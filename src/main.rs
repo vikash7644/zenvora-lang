@@ -2851,7 +2851,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
                 let _ = std::fs::remove_file(key_path);
                 return Err(format!("cannot safely write key file: {error}"));
             }
-            println!("Zenvora development key created: {key_path}");
+            println!("QORVYNT development key created: {key_path}");
             println!("Address: {address}");
             println!("WARNING: private key is unencrypted; keep this file private and do not use it for real funds.");
             Ok(())
@@ -2882,7 +2882,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let validator_count = runtime.genesis_balances().iter()
                 .filter(|(address, balance)| **balance > 0 && is_validator_address(address))
                 .count();
-            println!("Zenvora multi-account genesis initialized: chain_id={chain_id} validators={validator_count}");
+            println!("QORVYNT multi-account genesis initialized: chain_id={chain_id} validators={validator_count}");
             println!("Genesis proposer: {proposer}");
             println!("Block store: {store_path}");
             Ok(())
@@ -2916,7 +2916,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             };
             crate::chain_block::execute_block(&mut runtime, &header, &[], chain_id, None)?;
             store.append_executed_block(store_path, &runtime, &header, &[], &[])?;
-            println!("Zenvora local chain initialized: chain_id={chain_id} height=0");
+            println!("QORVYNT local chain initialized: chain_id={chain_id} height=0");
             println!("Genesis account: {address} balance={balance}");
             println!("Block store: {store_path}");
             Ok(())
@@ -3014,7 +3014,7 @@ fn run_chain_command(args: &[String]) -> Result<(), String> {
             let mut runtime = chain_runtime::ChainRuntime::new();
             runtime.set_genesis_balance(address, amount)?;
             runtime.save_to_file(ledger_path)?;
-            println!("Zenvora ledger initialized: {address} balance={amount}");
+            println!("QORVYNT ledger initialized: {address} balance={amount}");
             Ok(())
         }
         [_, mode, ledger_path, from, to, amount] if mode == "--chain-transfer" => {
@@ -3323,7 +3323,7 @@ fn read_chain_key(path: &str) -> Result<SigningKey, String> {
         .map_err(|error| format!("cannot read key file: {error}"))?;
     let mut lines = content.lines();
     if lines.next() != Some("ZENVORA_KEY_V1") {
-        return Err("unsupported or malformed Zenvora key file".into());
+        return Err("unsupported or malformed QORVYNT key file".into());
     }
     let private_line = lines.next().ok_or_else(|| "key file is missing private seed".to_string())?;
     let public_line = lines.next().ok_or_else(|| "key file is missing public key".to_string())?;
@@ -3386,13 +3386,13 @@ fn create_project(name: &str) -> Result<(), String> {
             format!("project path '{name}' already exists; refusing to overwrite it")
         } else { format!("cannot create project '{name}': {error}") }
     })?;
-    let main_source = "# Welcome to your first Zenvora project!\ndefine student := \"Creator\"\nshow \"Hello, \" + student\nshow \"Your first calculation:\"\nshow 6 * 7\n\ndefine scores := array(10, 20, 30)\nshow \"Total score:\"\nshow sum(scores)\n";
-    let readme = format!("# {name}\n\nA starter project written in Zenvora Lang.\n\nRun from the Zenvora Lang repository root:\n\n    cargo run -- {name}/main.qv\n    cargo run -- --check {name}/main.qv\n\nEdit main.qv to make this project your own.\n");
+    let main_source = "# Welcome to your first QORVYNT project!\ndefine student := \"Creator\"\nshow \"Hello, \" + student\nshow \"Your first calculation:\"\nshow 6 * 7\n\ndefine scores := array(10, 20, 30)\nshow \"Total score:\"\nshow sum(scores)\n";
+    let readme = format!("# {name}\n\nA starter project written in QORVYNT.\n\nRun from the QORVYNT repository root:\n\n    cargo run -- {name}/main.qv\n    cargo run -- --check {name}/main.qv\n\nEdit main.qv to make this project your own.\n");
     if let Err(error) = fs::write(path.join("main.qv"), main_source).and_then(|_| fs::write(path.join("README.md"), readme)) {
         let _ = fs::remove_dir_all(path);
         return Err(format!("cannot write starter project files: {error}"));
     }
-    println!("Created Zenvora project '{name}'");
+    println!("Created QORVYNT project '{name}'");
     println!("Next: zv {name}/main.qv");
     Ok(())
 }
@@ -3430,11 +3430,11 @@ fn run_contract_command(
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
-        println!("Zenvora Lang v0.8.0");
+        println!("QORVYNT v0.8.0");
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.qv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.qv>\n       zv --emit-bytecode <file.qv> <output.zvb>\n       zv --emit-bytecode-v2 <file.qv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("QORVYNT v0.8.0\nUsage: zv <file.qv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.qv>\n       zv --emit-bytecode <file.qv> <output.zvb>\n       zv --emit-bytecode-v2 <file.qv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
@@ -3446,7 +3446,7 @@ fn main() {
             match args[7].parse::<u64>() {
                 Ok(limit) => limit,
                 Err(_) => {
-                    eprintln!("Zenvora contract error: gas-limit must be an unsigned integer");
+                    eprintln!("QORVYNT contract error: gas-limit must be an unsigned integer");
                     process::exit(2);
                 }
             }
@@ -3460,27 +3460,27 @@ fn main() {
                 println!("state_root={}", hex_encode_bytes(&receipt.state_root));
             }
             Err(error) => {
-                eprintln!("Zenvora contract error: {error}");
+                eprintln!("QORVYNT contract error: {error}");
                 process::exit(1);
             }
         }
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--compiler-api") {
-        let port = args.get(2).map(|value| value.parse::<u16>().map_err(|_| "compiler API port must be between 1 and 65535".to_string())).transpose().unwrap_or_else(|error| { eprintln!("Zenvora API error: {error}"); process::exit(2) }).unwrap_or(8787);
-        if let Err(error) = compiler_api::serve(port) { eprintln!("Zenvora API error: {error}"); process::exit(1); }
+        let port = args.get(2).map(|value| value.parse::<u16>().map_err(|_| "compiler API port must be between 1 and 65535".to_string())).transpose().unwrap_or_else(|error| { eprintln!("QORVYNT API error: {error}"); process::exit(2) }).unwrap_or(8787);
+        if let Err(error) = compiler_api::serve(port) { eprintln!("QORVYNT API error: {error}"); process::exit(1); }
         return;
     }
     if args.get(1).is_some_and(|mode| mode.starts_with("--chain-")) {
         if let Err(error) = run_chain_command(&args) {
-            eprintln!("Zenvora chain error: {error}");
+            eprintln!("QORVYNT chain error: {error}");
             process::exit(1);
         }
         return;
     }
     let result = match args.as_slice() {
         [_, mode, name] if mode == "--new" => create_project(name),
-        [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
+        [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("QORVYNT check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
         [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_plan_bytecode_v2(plan, output),
@@ -3488,7 +3488,7 @@ fn main() {
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
             let source = read_program(path).unwrap_or_else(|error| {
-                eprintln!("Zenvora error: {error}");
+                eprintln!("QORVYNT error: {error}");
                 process::exit(1)
             });
             compile(&source).and_then(|code| run(&code))
@@ -3499,7 +3499,7 @@ fn main() {
         }
     };
     if let Err(error) = result {
-        eprintln!("Zenvora error: {error}");
+        eprintln!("QORVYNT error: {error}");
         process::exit(1);
     }
 }
@@ -3752,14 +3752,14 @@ mod tests {
 
     #[test]
     fn strings_support_escapes_concatenation_and_bytecode_round_trip() {
-        let source = "define message := \"hello\\nworld\"\nshow message\nshow \"Zenvora \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
+        let source = "define message := \"hello\\nworld\"\nshow message\nshow \"QORVYNT \" + \"Lang\"\nshow \"\"\nshow \"नमस्ते 🌍\"\n";
         let code = compile(source).unwrap();
         let encoded = super::serialize_bytecode(&code).unwrap();
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
         assert_eq!(decoded, code);
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
-        assert_eq!(output, vec!["hello\nworld", "Zenvora Lang", "", "नमस्ते 🌍"]);
+        assert_eq!(output, vec!["hello\nworld", "QORVYNT", "", "नमस्ते 🌍"]);
     }
 
     #[test]
@@ -4159,18 +4159,18 @@ mod tests {
 
     #[test]
     fn arrays_and_maps_support_construction_access_updates_and_bytecode() {
-        let source = "define numbers := array(10, 20, 30)\nshow len(numbers)\nshow get(numbers, 1)\ndefine grown := push(numbers, 40)\nshow get(grown, 3)\nshow contains(grown, 20)\ndefine profile := map(\"name\", \"Zenvora\", \"level\", 6)\nshow get(profile, \"name\")\nshow get(put(profile, \"level\", 7), \"level\")\nshow len(keys(profile))\nshow get(values(profile), 1)\n";
+        let source = "define numbers := array(10, 20, 30)\nshow len(numbers)\nshow get(numbers, 1)\ndefine grown := push(numbers, 40)\nshow get(grown, 3)\nshow contains(grown, 20)\ndefine profile := map(\"name\", \"QORVYNT\", \"level\", 6)\nshow get(profile, \"name\")\nshow get(put(profile, \"level\", 7), \"level\")\nshow len(keys(profile))\nshow get(values(profile), 1)\n";
         let code = compile(source).unwrap();
         let encoded = super::serialize_bytecode(&code).unwrap();
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
-        assert_eq!(output, vec!["3", "20", "40", "true", "Zenvora", "7", "2", "Zenvora"]);
+        assert_eq!(output, vec!["3", "20", "40", "true", "QORVYNT", "7", "2", "QORVYNT"]);
     }
 
     #[test]
     fn owned_collection_builtins_preserve_original_bindings() {
-        let source = "define numbers := array(10, 20, 30)\nshow reverse(numbers)\nshow numbers\nshow get(numbers, 1)\ndefine grown := push(numbers, 40)\nshow len(grown)\nshow len(numbers)\ndefine profile := map(\"name\", \"Zenvora\", \"level\", 6)\ndefine updated := put(profile, \"level\", 7)\nshow get(updated, \"level\")\nshow get(profile, \"level\")\nshow get(profile, \"name\")\nshow len(keys(profile))\nshow get(values(profile), 0)\nshow get(profile, \"level\")\n";
+        let source = "define numbers := array(10, 20, 30)\nshow reverse(numbers)\nshow numbers\nshow get(numbers, 1)\ndefine grown := push(numbers, 40)\nshow len(grown)\nshow len(numbers)\ndefine profile := map(\"name\", \"QORVYNT\", \"level\", 6)\ndefine updated := put(profile, \"level\", 7)\nshow get(updated, \"level\")\nshow get(profile, \"level\")\nshow get(profile, \"name\")\nshow len(keys(profile))\nshow get(values(profile), 0)\nshow get(profile, \"level\")\n";
         let output = execute(source).unwrap();
         assert_eq!(output, vec![
             "[30, 20, 10]",
@@ -4180,7 +4180,7 @@ mod tests {
             "3",
             "7",
             "6",
-            "Zenvora",
+            "QORVYNT",
             "2",
             "6",
             "6",
@@ -4247,7 +4247,7 @@ mod tests {
 
     #[test]
     fn direct_indexed_assignment_updates_arrays_and_maps() {
-        let source = "define numbers := array(10, 20, 30)\nnumbers[1] := 99\nshow numbers[1]\ndefine profile := map(\"name\", \"Zenvora\")\nprofile[\"name\"] := \"ZVR\"\nprofile[\"level\"] := 8\nshow profile[\"name\"]\nshow profile[\"level\"]\n";
+        let source = "define numbers := array(10, 20, 30)\nnumbers[1] := 99\nshow numbers[1]\ndefine profile := map(\"name\", \"QORVYNT\")\nprofile[\"name\"] := \"ZVR\"\nprofile[\"level\"] := 8\nshow profile[\"name\"]\nshow profile[\"level\"]\n";
         let code = compile(source).unwrap();
         let encoded = super::serialize_bytecode(&code).unwrap();
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
@@ -4375,10 +4375,10 @@ show unique(array())
 show ends_with("zenvora-lang", "lang")
 show replace("a-b-a", "a", "x")
 show split("red,green,blue", ",")
-show join(array("Zenvora", "Lang"), " ")
+show join(array("QORVYNT", "Lang"), " ")
 show sum(array(10, 20, 12))
 "#).unwrap();
-        assert_eq!(output, vec!["true", "true", "x-b-x", "[red, green, blue]", "Zenvora Lang", "42"]);
+        assert_eq!(output, vec!["true", "true", "x-b-x", "[red, green, blue]", "QORVYNT", "42"]);
     }
 
     #[test]
@@ -4445,14 +4445,14 @@ show clamp(-3, 0, 10)
 
     #[test]
     fn text_normalization_character_count_and_integer_conversion_work() {
-        let output = execute(r#"show trim("  Zenvora Lang  ")
+        let output = execute(r#"show trim("  QORVYNT  ")
 show lower("ZENvora")
-show upper("Zenvora")
+show upper("QORVYNT")
 show char_count("hé🙂")
 show to_int("  -42 ")
 show to_int(17)
 "#).unwrap();
-        assert_eq!(output, vec!["Zenvora Lang", "zenvora", "ZENVORA", "3", "-42", "17"]);
+        assert_eq!(output, vec!["QORVYNT", "zenvora", "ZENVORA", "3", "-42", "17"]);
     }
 
     #[test]
@@ -4585,13 +4585,13 @@ show index_of(array(7, "x", true), false)
 
     #[test]
     fn direct_array_and_map_indexing_supports_nested_expressions_and_bytecode() {
-        let source = "define numbers := array(10, 20, 30)\nshow numbers[0]\nshow numbers[1 + 1]\ndefine profile := map(\"name\", \"Zenvora\", \"level\", 6)\nshow profile[\"name\"]\nshow array(array(7, 8), array(9, 10))[1][0]\n";
+        let source = "define numbers := array(10, 20, 30)\nshow numbers[0]\nshow numbers[1 + 1]\ndefine profile := map(\"name\", \"QORVYNT\", \"level\", 6)\nshow profile[\"name\"]\nshow array(array(7, 8), array(9, 10))[1][0]\n";
         let code = compile(source).unwrap();
         let encoded = super::serialize_bytecode(&code).unwrap();
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
-        assert_eq!(output, vec!["10", "30", "Zenvora", "9"]);
+        assert_eq!(output, vec!["10", "30", "QORVYNT", "9"]);
     }
 
     #[test]
@@ -4782,7 +4782,7 @@ if total == 7 {
 
     #[test]
     fn bytecode_v2_matches_source_for_nested_calls_collections_and_runtime_errors() {
-        let source = r#"define profile := map("name", "Zenvora", "level", 6)
+        let source = r#"define profile := map("name", "QORVYNT", "level", 6)
 define updated := put(profile, "level", add(3, 4))
 show get(updated, "level")
 show get(profile, "level")
