@@ -72,6 +72,61 @@ impl ContractTransactionV1 {
         Ok(out)
     }
 
+    /// Canonical signed wire encoding: signing payload followed by the 64-byte signature.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, String> {
+        if self.signature.len() != 64 {
+            return Err("Ed25519 signature must be exactly 64 bytes".into());
+        }
+        let mut out = self.signing_bytes()?;
+        out.extend_from_slice(&self.signature);
+        if out.len() > MAX_ENCODED_BYTES + 64 {
+            return Err("contract transaction exceeds maximum encoded size".into());
+        }
+        Ok(out)
+    }
+
+    /// Decode and re-encode a signed transaction to enforce one canonical wire representation.
+    pub fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > MAX_ENCODED_BYTES + 64 {
+            return Err("contract transaction exceeds maximum encoded size".into());
+        }
+        let mut reader = ContractTxReader { bytes, offset: 0 };
+        reader.expect(DOMAIN)?;
+        if reader.read_u16()? != 1 {
+            return Err("unsupported contract transaction version".into());
+        }
+        let chain_id = reader.read_u64()?;
+        let sender = reader.read_string(MAX_SENDER_BYTES)?;
+        let nonce = reader.read_u64()?;
+        let gas_limit = reader.read_u64()?;
+        let max_fee = reader.read_u64()?;
+        let gas_price = reader.read_u64()?;
+        let valid_until_height = match reader.read_u8()? {
+            0 => None,
+            1 => Some(reader.read_u64()?),
+            _ => return Err("invalid contract transaction expiry marker".into()),
+        };
+        let operation = match reader.read_u8()? {
+            0 => ContractOperation::Deploy { artifact: reader.read_bytes(MAX_ARTIFACT_BYTES)? },
+            1 => ContractOperation::Call {
+                contract_id: reader.read_string(MAX_CONTRACT_ID_BYTES)?,
+                method: reader.read_string(MAX_METHOD_BYTES)?,
+                calldata: reader.read_bytes(MAX_CALLDATA_BYTES)?,
+            },
+            _ => return Err("invalid contract transaction operation tag".into()),
+        };
+        let signature = reader.take(64)?.to_vec();
+        reader.finish()?;
+        let transaction = Self {
+            chain_id, sender, nonce, gas_limit, max_fee, gas_price,
+            valid_until_height, operation, signature,
+        };
+        if transaction.canonical_bytes()? != bytes {
+            return Err("contract transaction encoding is not canonical".into());
+        }
+        Ok(transaction)
+    }
+
     pub fn transaction_id(&self) -> Result<[u8; 32], String> {
         if self.signature.len() != 64 {
             return Err("Ed25519 signature must be exactly 64 bytes".into());
@@ -155,6 +210,46 @@ impl ContractTransactionV1 {
     }
 }
 
+struct ContractTxReader<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> ContractTxReader<'a> {
+    fn take(&mut self, length: usize) -> Result<&'a [u8], String> {
+        let end = self.offset.checked_add(length).ok_or("contract transaction offset overflow")?;
+        if end > self.bytes.len() { return Err("truncated contract transaction".into()); }
+        let value = &self.bytes[self.offset..end];
+        self.offset = end;
+        Ok(value)
+    }
+    fn expect(&mut self, expected: &[u8]) -> Result<(), String> {
+        if self.take(expected.len())? != expected {
+            return Err("unsupported contract transaction domain".into());
+        }
+        Ok(())
+    }
+    fn read_u8(&mut self) -> Result<u8, String> { Ok(self.take(1)?[0]) }
+    fn read_u16(&mut self) -> Result<u16, String> {
+        Ok(u16::from_be_bytes(self.take(2)?.try_into().map_err(|_| "invalid u16")?))
+    }
+    fn read_u64(&mut self) -> Result<u64, String> {
+        Ok(u64::from_be_bytes(self.take(8)?.try_into().map_err(|_| "invalid u64")?))
+    }
+    fn read_bytes(&mut self, maximum: usize) -> Result<Vec<u8>, String> {
+        let length = u32::from_be_bytes(self.take(4)?.try_into().map_err(|_| "invalid field length")?) as usize;
+        if length > maximum { return Err("contract transaction field exceeds size limit".into()); }
+        Ok(self.take(length)?.to_vec())
+    }
+    fn read_string(&mut self, maximum: usize) -> Result<String, String> {
+        String::from_utf8(self.read_bytes(maximum)?).map_err(|_| "contract transaction string is not UTF-8".into())
+    }
+    fn finish(&self) -> Result<(), String> {
+        if self.offset != self.bytes.len() { return Err("trailing bytes in contract transaction".into()); }
+        Ok(())
+    }
+}
+
 fn put_string(out: &mut Vec<u8>, value: &str) -> Result<(), String> {
     put_bytes(out, value.as_bytes())
 }
@@ -197,6 +292,18 @@ mod tests {
         assert_eq!(tx.transaction_id().unwrap().len(), 32);
         assert!(tx.validate_for(9002, 100).is_err());
         assert!(tx.validate_for(9001, 201).is_err());
+    }
+
+    #[test]
+    fn signed_contract_transaction_wire_encoding_round_trips_canonically() {
+        let (tx, _) = signed(ContractOperation::Call {
+            contract_id: "counter".into(), method: "increment".into(), calldata: b"4".to_vec(),
+        });
+        let encoded = tx.canonical_bytes().unwrap();
+        assert_eq!(ContractTransactionV1::from_canonical_bytes(&encoded).unwrap(), tx);
+        let mut trailing = encoded;
+        trailing.push(0);
+        assert!(ContractTransactionV1::from_canonical_bytes(&trailing).is_err());
     }
 
     #[test]
