@@ -44,7 +44,7 @@ fn parse_primary(tokens, pos) {
             }
             return result(get(nested, "ast"), close_pos + 1, "")
           } otherwise {
-            return result("", pos, "expected literal, name, or parenthesized expression")
+            return result("", pos, "expected literal, name, or parenthesized expression; got " + kind + " " + value)
           }
         }
       }
