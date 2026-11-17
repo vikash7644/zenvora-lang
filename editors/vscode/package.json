@@ -35,10 +35,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/vikash7644/qorvynt-lang.git"
+    "url": "https://github.com/vikash7644/zenvora-lang.git"
   },
-  "homepage": "https://github.com/vikash7644/qorvynt-lang/tree/main/editors/vscode",
+  "homepage": "https://github.com/vikash7644/zenvora-lang/tree/main/editors/vscode",
   "bugs": {
-    "url": "https://github.com/vikash7644/qorvynt-lang/issues"
+    "url": "https://github.com/vikash7644/zenvora-lang/issues"
   }
 }
