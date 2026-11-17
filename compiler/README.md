@@ -1,4 +1,4 @@
-# Zenvora Lang — interpreter MVP
+# QORVYNT — interpreter MVP
 
 This folder contains an isolated line-based Rust interpreter used for syntax experiments and regression tests. The canonical bytecode compiler and VM live at the repository root (`src/main.rs`). GitHub Actions tests both implementations separately; no phone-local setup is required.
 
