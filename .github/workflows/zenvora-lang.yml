@@ -1,4 +1,4 @@
-name: Zenvora Interpreter MVP
+name: QORVYNT Interpreter MVP
 
 on:
   push:
@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: zenvora-interpreter-${{ github.workflow }}-${{ github.ref }}
+  group: qorvynt-interpreter-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
