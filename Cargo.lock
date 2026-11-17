@@ -346,6 +346,7 @@ version = "0.8.0"
 dependencies = [
  "ed25519-dalek",
  "getrandom",
+ "serde",
  "serde_json",
  "sha2",
 ]
