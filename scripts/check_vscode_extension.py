@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXT = ROOT / "editors" / "vscode"
 PACKAGE = EXT / "package.json"
-GRAMMAR = EXT / "syntaxes" / "zenvora.tmLanguage.json"
+GRAMMAR = EXT / "syntaxes" / "qorvynt.tmLanguage.json"
 CONFIG = EXT / "language-configuration.json"
 
 
@@ -29,21 +29,21 @@ grammar = load_json(GRAMMAR)
 config = load_json(CONFIG)
 
 languages = package.get("contributes", {}).get("languages", [])
-zenvora = next((item for item in languages if item.get("id") == "zenvora"), None)
-if not zenvora:
-    fail("package.json does not register language id 'zenvora'")
-if ".qv" not in zenvora.get("extensions", []):
-    fail("language id 'zenvora' must register the .qv extension")
-if zenvora.get("configuration") != "./language-configuration.json":
+qorvynt = next((item for item in languages if item.get("id") == "qorvynt"), None)
+if not qorvynt:
+    fail("package.json does not register language id 'qorvynt'")
+if ".qv" not in qorvynt.get("extensions", []):
+    fail("language id 'qorvynt' must register the .qv extension")
+if qorvynt.get("configuration") != "./language-configuration.json":
     fail("language configuration path does not match the checked-in file")
 
 grammars = package.get("contributes", {}).get("grammars", [])
-grammar_entry = next((item for item in grammars if item.get("language") == "zenvora"), None)
+grammar_entry = next((item for item in grammars if item.get("language") == "qorvynt"), None)
 if not grammar_entry:
-    fail("package.json does not register a grammar for 'zenvora'")
+    fail("package.json does not register a grammar for 'qorvynt'")
 if grammar_entry.get("scopeName") != grammar.get("scopeName"):
     fail("package.json and TextMate grammar scopeName differ")
-if grammar_entry.get("path") != "./syntaxes/zenvora.tmLanguage.json":
+if grammar_entry.get("path") != "./syntaxes/qorvynt.tmLanguage.json":
     fail("package.json grammar path does not match the checked-in file")
 
 checked = 0
