@@ -120,6 +120,21 @@ impl ContractAccountState {
             nonce: tx.nonce, gas_charged, fee_charged, sender_balance, next_nonce })
     }
 
+    /// Execute a signed call against the source registered by a prior verified deployment.
+    /// Callers cannot substitute arbitrary source code for a deployed contract ID.
+    pub fn execute_signed_registered_call(
+        &mut self, tx: &ContractTransactionV1, public_key: &[u8],
+        expected_chain_id: u64, current_height: u64,
+    ) -> Result<SignedCallReceipt, String> {
+        let contract_id = match &tx.operation {
+            ContractOperation::Call { contract_id, .. } => contract_id,
+            ContractOperation::Deploy { .. } => return Err("registered call executor requires a call operation".into()),
+        };
+        let source = self.deployed_contracts.get(contract_id)
+            .map(|contract| contract.source.clone())
+            .ok_or_else(|| "contract is not deployed in this QVM state".to_string())?;
+        self.execute_signed_call(tx, public_key, expected_chain_id, current_height, &source)
+    }
     /// Execute one signed call atomically against a candidate state. Failed VM calls consume
     /// the nonce and the full gas limit (bounded by max_fee), while contract storage rolls back.
     pub fn execute_signed_call(
@@ -437,6 +452,11 @@ mod tests {
         assert_eq!(state.nonce(&address), 1);
         assert_eq!(state.fees_collected, receipt.fee_charged);
         assert!(state.execute_signed_deployment(&tx, &public, 9001, 100).is_err());
+
+        let call = signed_call(&key, 1, "9");
+        let call_receipt = state.execute_signed_registered_call(&call, &public, 9001, 100).unwrap();
+        assert!(call_receipt.execution.is_ok());
+        assert_eq!(state.storage.get(&receipt.contract_id, "count").unwrap(), Some(&b"9"[..]));
 
         let restored = ContractAccountState::decode_snapshot(&state.encode_snapshot().unwrap()).unwrap();
         assert_eq!(restored, state);
