@@ -12,18 +12,25 @@ use serde_json::{json, Value};
 use super::block_store::BlockStore;
 use super::chain_block::SignedTransactionEnvelope;
 use super::chain_protocol::TransactionV1;
-use super::tx_pool::TransactionPool;
+use super::tx_pool::{ContractTransactionPool, TransactionPool};
+use super::contract_executor::SignedContractTransaction;
+use super::contract_protocol::ContractTransactionV1;
 
 const MAX_HTTP_REQUEST_BYTES: usize = 64 * 1024;
 const READ_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub fn serve(store_path: String, chain_id: u64, port: u16) -> Result<(), String> {
-    serve_inner(store_path, chain_id, port, None)
+    serve_inner(store_path, chain_id, port, None, None)
 }
 
 /// Start loopback RPC with a persisted transaction pool enabled.
 pub fn serve_with_pool(store_path: String, chain_id: u64, pool_path: String, port: u16) -> Result<(), String> {
-    serve_inner(store_path, chain_id, port, Some(pool_path))
+    serve_inner(store_path, chain_id, port, Some(pool_path), None)
+}
+
+/// Start loopback RPC with transfer and contract transaction pools enabled.
+pub fn serve_with_pools(store_path: String, chain_id: u64, transfer_pool_path: String, contract_pool_path: String, port: u16) -> Result<(), String> {
+    serve_inner(store_path, chain_id, port, Some(transfer_pool_path), Some(contract_pool_path))
 }
 
 fn serve_inner(
@@ -31,6 +38,7 @@ fn serve_inner(
     chain_id: u64,
     port: u16,
     pool_path: Option<String>,
+    contract_pool_path: Option<String>,
 ) -> Result<(), String> {
     if chain_id == 0 {
         return Err("chain ID must be nonzero".into());
@@ -52,8 +60,8 @@ fn serve_inner(
                 let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
                 match read_http_body(&mut stream) {
                     Ok(body) => {
-                        let response = handle_json_rpc_with_pool(
-                            &body, &store_path, chain_id, pool_path.as_deref(),
+                        let response = handle_json_rpc_with_pools(
+                            &body, &store_path, chain_id, pool_path.as_deref(), contract_pool_path.as_deref(),
                         ).to_string();
                         if let Err(error) = write_http_response(&mut stream, "200 OK", &response) {
                             // A client that disconnects while reading must not stop the RPC listener.
@@ -137,14 +145,16 @@ fn write_http_response(stream: &mut TcpStream, status: &str, body: &str) -> Resu
 }
 
 pub fn handle_json_rpc(body: &[u8], store_path: &str, expected_chain_id: u64) -> Value {
-    handle_json_rpc_with_pool(body, store_path, expected_chain_id, None)
+    handle_json_rpc_with_pools(body, store_path, expected_chain_id, None, None)
 }
 
-fn handle_json_rpc_with_pool(
-    body: &[u8],
-    store_path: &str,
-    expected_chain_id: u64,
-    pool_path: Option<&str>,
+fn handle_json_rpc_with_pool(body: &[u8], store_path: &str, expected_chain_id: u64, pool_path: Option<&str>) -> Value {
+    handle_json_rpc_with_pools(body, store_path, expected_chain_id, pool_path, None)
+}
+
+fn handle_json_rpc_with_pools(
+    body: &[u8], store_path: &str, expected_chain_id: u64,
+    pool_path: Option<&str>, contract_pool_path: Option<&str>,
 ) -> Value {
     let request: Value = match serde_json::from_slice(body) {
         Ok(value) => value,
@@ -281,6 +291,58 @@ fn handle_json_rpc_with_pool(
                 "poolSize": pool.len(),
                 "nextBlockHeight": next_height
             })
+        }
+        "chain_submitContractTransaction" => {
+            let pool_path = match contract_pool_path {
+                Some(value) => value,
+                None => return rpc_error(id, -32601, "contract transaction submission is disabled on this RPC"),
+            };
+            let public_key = match string_param(&params, "publicKey", 0) {
+                Some(value) => match hex_decode(value) { Ok(bytes) => bytes, Err(error) => return rpc_error(id, -32602, &error) },
+                None => return rpc_error(id, -32602, "expected publicKey hex parameter"),
+            };
+            let transaction_bytes = match string_param(&params, "transaction", 1) {
+                Some(value) => match hex_decode(value) { Ok(bytes) => bytes, Err(error) => return rpc_error(id, -32602, &error) },
+                None => return rpc_error(id, -32602, "expected canonical contract transaction hex parameter"),
+            };
+            let transaction = match ContractTransactionV1::from_canonical_bytes(&transaction_bytes) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32602, &error),
+            };
+            let envelope = SignedContractTransaction { transaction, public_key };
+            let next_height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value, None => return rpc_error(id, -32000, "cannot determine next block height"),
+            };
+            let mut pool = match ContractTransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, next_height) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32000, &error),
+            };
+            let transaction_id = match pool.submit(&runtime, envelope) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32011, &error),
+            };
+            if let Err(error) = pool.save_to_file(pool_path) { return rpc_error(id, -32000, &error); }
+            json!({"transactionId": hex_encode(&transaction_id), "poolSize": pool.len(), "nextBlockHeight": next_height})
+        }
+        "chain_getPendingContractTransactions" => {
+            let pool_path = match contract_pool_path {
+                Some(value) => value,
+                None => return rpc_error(id, -32601, "contract transaction pool is disabled on this RPC"),
+            };
+            let next_height = match store.blocks().last().and_then(|block| block.header.height.checked_add(1)) {
+                Some(value) => value, None => return rpc_error(id, -32000, "cannot determine next block height"),
+            };
+            let pool = match ContractTransactionPool::load_from_file(pool_path, &runtime, expected_chain_id, next_height) {
+                Ok(value) => value, Err(error) => return rpc_error(id, -32000, &error),
+            };
+            let transactions: Vec<Value> = pool.pending().iter().map(|envelope| {
+                let operation = match &envelope.transaction.operation {
+                    super::contract_protocol::ContractOperation::Deploy { artifact } => json!({"type":"deploy","artifactBytes":artifact.len()}),
+                    super::contract_protocol::ContractOperation::Call { contract_id, method, calldata } => json!({"type":"call","contractId":contract_id,"method":method,"calldata":hex_encode(calldata)}),
+                };
+                json!({"transactionId":envelope.transaction.transaction_id().map(|id|hex_encode(&id)).unwrap_or_default(),
+                    "sender":envelope.transaction.sender,"nonce":envelope.transaction.nonce,
+                    "gasLimit":envelope.transaction.gas_limit,"maxFee":envelope.transaction.max_fee,
+                    "gasPrice":envelope.transaction.gas_price,"operation":operation})
+            }).collect();
+            json!({"count":pool.len(),"transactions":transactions})
         }
         "chain_getPendingTransactions" => {
             let pool_path = match pool_path {
