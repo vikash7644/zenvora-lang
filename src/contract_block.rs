@@ -91,7 +91,7 @@ pub fn execute_contract_block(
                 receipts.push(ContractBlockReceipt::Call {
                     transaction_id: r.transaction_id, contract_id: contract_id.clone(), sender: r.sender,
                     nonce: r.nonce, success: r.execution.is_ok(), gas_charged: r.gas_charged,
-                    fee_charged: r.fee_charged, output_hash: hash(b"QORVYNT_CALL_OUTPUT_V1\\0", output.as_bytes()),
+                    fee_charged: r.fee_charged, output_hash: hash(b"QORVYNT_CALL_OUTPUT_V1\0", output.as_bytes()),
                 });
             }
         }
@@ -109,9 +109,9 @@ pub fn contract_transaction_root(envelopes: &[SignedContractEnvelope]) -> Result
     let mut leaves = Vec::with_capacity(envelopes.len());
     for envelope in envelopes {
         envelope.transaction.verify_signature(&envelope.public_key)?;
-        leaves.push(hash(b"QORVYNT_CONTRACT_TX_LEAF_V1\\0", &envelope.transaction.transaction_id()?));
+        leaves.push(hash(b"QORVYNT_CONTRACT_TX_LEAF_V1\0", &envelope.transaction.transaction_id()?));
     }
-    Ok(merkle_root(leaves, b"QORVYNT_CONTRACT_TX_EMPTY_V1\\0", b"QORVYNT_CONTRACT_TX_NODE_V1\\0"))
+    Ok(merkle_root(leaves, b"QORVYNT_CONTRACT_TX_EMPTY_V1\0", b"QORVYNT_CONTRACT_TX_NODE_V1\0"))
 }
 
 pub fn contract_receipt_root(receipts: &[ContractBlockReceipt]) -> Result<[u8; 32], String> {
@@ -131,13 +131,13 @@ pub fn contract_receipt_root(receipts: &[ContractBlockReceipt]) -> Result<[u8; 3
                 bytes.extend_from_slice(&fee_charged.to_be_bytes()); bytes.extend_from_slice(output_hash);
             }
         }
-        leaves.push(hash(b"QORVYNT_CONTRACT_RECEIPT_LEAF_V1\\0", &bytes));
+        leaves.push(hash(b"QORVYNT_CONTRACT_RECEIPT_LEAF_V1\0", &bytes));
     }
-    Ok(merkle_root(leaves, b"QORVYNT_CONTRACT_RECEIPT_EMPTY_V1\\0", b"QORVYNT_CONTRACT_RECEIPT_NODE_V1\\0"))
+    Ok(merkle_root(leaves, b"QORVYNT_CONTRACT_RECEIPT_EMPTY_V1\0", b"QORVYNT_CONTRACT_RECEIPT_NODE_V1\0"))
 }
 
 pub fn contract_state_root(state: &ContractAccountState) -> Result<[u8; 32], String> {
-    Ok(hash(b"QORVYNT_CONTRACT_STATE_ROOT_V1\\0", &state.encode_snapshot()?))
+    Ok(hash(b"QORVYNT_CONTRACT_STATE_ROOT_V1\0", &state.encode_snapshot()?))
 }
 
 pub fn contract_block_hash(header: &ContractBlockHeaderV1) -> Result<[u8; 32], String> {
@@ -149,7 +149,7 @@ pub fn contract_block_hash(header: &ContractBlockHeaderV1) -> Result<[u8; 32], S
     bytes.extend_from_slice(&header.transaction_root);
     bytes.extend_from_slice(&header.receipt_root);
     bytes.extend_from_slice(&header.state_root);
-    Ok(hash(b"QORVYNT_CONTRACT_BLOCK_V1\\0", &bytes))
+    Ok(hash(b"QORVYNT_CONTRACT_BLOCK_V1\0", &bytes))
 }
 
 fn put_string(out: &mut Vec<u8>, value: &str) -> Result<(), String> {
@@ -229,7 +229,7 @@ mod tests {
         let key = SigningKey::from_bytes(&[91; 32]);
         let public = key.verifying_key().to_bytes();
         let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
-        let source = "contract Counter {\\nstate count := 0\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
         let mut state = ContractAccountState::new();
         state.set_balance(&address, 2_000_000).unwrap();
         let genesis = header(0, [0; 32], 1, contract_transaction_root(&[]).unwrap(),
@@ -253,12 +253,12 @@ mod tests {
         let call_tx = call(&key, 1, &deployed.contract_id, "11");
         let mut after_call = state.clone();
         let call_result = after_call.execute_signed_registered_call(&call_tx.transaction, &public, 77, 2).unwrap();
-        let output = call_result.execution.as_ref().map(|r| r.output.join("\\n")).unwrap_or_default();
+        let output = call_result.execution.as_ref().map(|r| r.output.join("\n")).unwrap_or_default();
         let call_receipt = ContractBlockReceipt::Call {
             transaction_id: call_result.transaction_id, contract_id: deployed.contract_id.clone(),
             sender: call_result.sender, nonce: call_result.nonce, success: call_result.execution.is_ok(),
             gas_charged: call_result.gas_charged, fee_charged: call_result.fee_charged,
-            output_hash: hash(b"QORVYNT_CALL_OUTPUT_V1\\0", output.as_bytes()),
+            output_hash: hash(b"QORVYNT_CALL_OUTPUT_V1\0", output.as_bytes()),
         };
         let h2 = header(2, applied.block_hash, 3,
             contract_transaction_root(&[call_tx.clone()]).unwrap(),
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn invalid_state_root_does_not_mutate_contract_state() {
         let key = SigningKey::from_bytes(&[92; 32]);
-        let source = "contract Counter {\\nstate count := 0\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
         let mut state = ContractAccountState::new();
         let public = key.verifying_key().to_bytes();
         let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
