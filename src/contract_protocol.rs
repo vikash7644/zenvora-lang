@@ -16,13 +16,13 @@ const MAX_ARTIFACT_BYTES: usize = 1024 * 1024;
 const MAX_CALLDATA_BYTES: usize = 64 * 1024;
 const MAX_ENCODED_BYTES: usize = MAX_ARTIFACT_BYTES + MAX_CALLDATA_BYTES + 512;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ContractOperation {
     Deploy { artifact: Vec<u8> },
     Call { contract_id: String, method: String, calldata: Vec<u8> },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ContractTransactionV1 {
     pub chain_id: u64,
     pub sender: String,
