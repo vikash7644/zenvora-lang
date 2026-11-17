@@ -1276,12 +1276,12 @@ fn validate_statements(ast, function_depth, loop_depth) {
 
 # Built-ins are callable without user-defined function declarations.
 fn is_builtin_function(name) {
-  return name == "array" or name == "map" or name == "get" or name == "hex_encode" or name == "len" or name == "contains" or name == "push" or name == "put" or name == "keys" or name == "values" or name == "char_at" or name == "type_of" or name == "to_string" or name == "abs" or name == "min" or name == "max" or name == "range" or name == "assert" or name == "sum" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "clamp" or name == "starts_with" or name == "ends_with" or name == "replace" or name == "split" or name == "join" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "index_of" or name == "unique" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "pow_int" or name == "mean" or name == "speed" or name == "force" or name == "kinetic_energy" or name == "density" or name == "molarity" or name == "bmi_x10" or name == "molar_mass" or name == "dna_complement" or name == "gc_content_percent"
+  return name == "array" or name == "map" or name == "get" or name == "json_encode" or name == "hex_encode" or name == "len" or name == "contains" or name == "push" or name == "put" or name == "keys" or name == "values" or name == "char_at" or name == "type_of" or name == "to_string" or name == "abs" or name == "min" or name == "max" or name == "range" or name == "assert" or name == "sum" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "clamp" or name == "starts_with" or name == "ends_with" or name == "replace" or name == "split" or name == "join" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "index_of" or name == "unique" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "pow_int" or name == "mean" or name == "speed" or name == "force" or name == "kinetic_energy" or name == "density" or name == "molarity" or name == "bmi_x10" or name == "molar_mass" or name == "dna_complement" or name == "gc_content_percent"
 }
 
 # Returns a fixed arity for built-ins; -1 means the builtin has a variable arity.
 fn builtin_fixed_arity(name) {
-  if name == "hex_encode" or name == "len" or name == "keys" or name == "values" or name == "type_of" or name == "to_string" or name == "abs" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "unique" or name == "assert" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "mean" or name == "molar_mass" or name == "sum" or name == "dna_complement" or name == "gc_content_percent" {
+  if name == "json_encode" or name == "hex_encode" or name == "len" or name == "keys" or name == "values" or name == "type_of" or name == "to_string" or name == "abs" or name == "first" or name == "last" or name == "reverse" or name == "is_empty" or name == "trim" or name == "lower" or name == "upper" or name == "char_count" or name == "to_int" or name == "unique" or name == "assert" or name == "factorial" or name == "is_prime" or name == "fibonacci" or name == "mean" or name == "molar_mass" or name == "sum" or name == "dna_complement" or name == "gc_content_percent" {
     return 1
   }
   if name == "get" or name == "contains" or name == "push" or name == "min" or name == "max" or name == "starts_with" or name == "ends_with" or name == "split" or name == "join" or name == "char_at" or name == "index_of" or name == "assert_eq" or name == "gcd" or name == "lcm" or name == "pow_int" or name == "speed" or name == "density" or name == "molarity" or name == "force" or name == "kinetic_energy" or name == "bmi_x10" {
@@ -1772,6 +1772,9 @@ fn execute_plan_builtin(name, reversed_args) {
     pos := pos - 1
   }
   # Expand execution parity with the VM's established string and collection built-ins.
+  if name == "json_encode" and len(args) == 1 {
+    return map("ok", true, "value", json_encode(get(args, 0)), "error", "")
+  }
   if name == "hex_encode" and len(args) == 1 {
     return map("ok", true, "value", hex_encode(get(args, 0)), "error", "")
   }
@@ -2474,14 +2477,14 @@ if get(runnable_result, "ok") and len(runnable_output) == 30 and get(runnable_ou
   show "ZENVORA_VM_ASSERTIONS_FAIL"
 }
 
-define extended_builtin_source := "show gcd(48, 18)\nshow lcm(6, 8)\nshow is_prime(29)\nshow is_prime(21)\nshow factorial(6)\nshow fibonacci(10)\nshow pow_int(2, 8)\nshow mean(array(3, 6, 9))\nshow speed(100, 4)\nshow force(3, 7)\nshow kinetic_energy(4, 3)\nshow bmi_x10(70, 175)\nshow molar_mass(array(12, 16, 1))\nshow assert(true)\nshow assert_eq(4, 4)\nshow dna_complement(\"ACGT\")\nshow gc_content_percent(\"GCGC\")\ndefine join_values := array(\"a\", \"b\")\nshow join(join_values, \",\")\n"
+define extended_builtin_source := "show gcd(48, 18)\nshow lcm(6, 8)\nshow is_prime(29)\nshow is_prime(21)\nshow factorial(6)\nshow fibonacci(10)\nshow pow_int(2, 8)\nshow mean(array(3, 6, 9))\nshow speed(100, 4)\nshow force(3, 7)\nshow kinetic_energy(4, 3)\nshow bmi_x10(70, 175)\nshow molar_mass(array(12, 16, 1))\nshow assert(true)\nshow assert_eq(4, 4)\nshow dna_complement(\"ACGT\")\nshow gc_content_percent(\"GCGC\")\nshow json_encode(array(\"QORVYNT\", true, 9))\ndefine join_values := array(\"a\", \"b\")\nshow join(join_values, \",\")\n"
 define extended_builtin_lexed := lex(extended_builtin_source)
 define extended_builtin_ast := parse_program(get(extended_builtin_lexed, "tokens"))
 define extended_builtin_ir := lower_program(get(extended_builtin_ast, "ast"))
 define extended_builtin_plan := emit_bytecode_plan(extended_builtin_ir)
 define extended_builtin_result := execute_bytecode_plan(extended_builtin_plan)
 define extended_builtin_output := get(extended_builtin_result, "output")
-if get(extended_builtin_result, "ok") and len(extended_builtin_output) == 18 and get(extended_builtin_output, 0) == "6" and get(extended_builtin_output, 1) == "24" and get(extended_builtin_output, 2) == "true" and get(extended_builtin_output, 3) == "false" and get(extended_builtin_output, 4) == "720" and get(extended_builtin_output, 5) == "55" and get(extended_builtin_output, 6) == "256" and get(extended_builtin_output, 7) == "6" and get(extended_builtin_output, 8) == "25" and get(extended_builtin_output, 9) == "21" and get(extended_builtin_output, 10) == "18" and get(extended_builtin_output, 11) == "228" and get(extended_builtin_output, 12) == "29" and get(extended_builtin_output, 13) == "true" and get(extended_builtin_output, 14) == "true" and get(extended_builtin_output, 15) == "TGCA" and get(extended_builtin_output, 16) == "100" and get(extended_builtin_output, 17) == "a,b" {
+if get(extended_builtin_result, "ok") and len(extended_builtin_output) == 19 and get(extended_builtin_output, 0) == "6" and get(extended_builtin_output, 1) == "24" and get(extended_builtin_output, 2) == "true" and get(extended_builtin_output, 3) == "false" and get(extended_builtin_output, 4) == "720" and get(extended_builtin_output, 5) == "55" and get(extended_builtin_output, 6) == "256" and get(extended_builtin_output, 7) == "6" and get(extended_builtin_output, 8) == "25" and get(extended_builtin_output, 9) == "21" and get(extended_builtin_output, 10) == "18" and get(extended_builtin_output, 11) == "228" and get(extended_builtin_output, 12) == "29" and get(extended_builtin_output, 13) == "true" and get(extended_builtin_output, 14) == "true" and get(extended_builtin_output, 15) == "TGCA" and get(extended_builtin_output, 16) == "100" and get(extended_builtin_output, 17) == "[\"QORVYNT\",true,9]" and get(extended_builtin_output, 18) == "a,b" {
   show "ZENVORA_VM_EXTENDED_BUILTIN_PARITY_PASS"
 } otherwise {
   show "ZENVORA_VM_EXTENDED_BUILTIN_PARITY_FAIL"
