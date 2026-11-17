@@ -253,10 +253,81 @@ impl ContractAccountState {
             ContractOperation::Call { contract_id, .. } => contract_id,
             ContractOperation::Deploy { .. } => return Err("registered call executor requires a call operation".into()),
         };
+        if self.tokens.token(contract_id).is_some() {
+            return self.execute_signed_token_call(tx, public_key, expected_chain_id, current_height);
+        }
         let deployed = self.deployed_contracts.get(contract_id)
             .ok_or_else(|| "contract ID is not deployed on this state".to_string())?;
         let source = deployed.source.clone();
         self.execute_signed_call(tx, public_key, expected_chain_id, current_height, &source)
+    }
+
+    /// Signed token actions use the same contract transaction envelope, nonce and fee settlement
+    /// as QVM calls. The token ledger is committed into the same contract account state root.
+    fn execute_signed_token_call(
+        &mut self, tx: &ContractTransactionV1, public_key: &[u8],
+        expected_chain_id: u64, current_height: u64,
+    ) -> Result<SignedCallReceipt, String> {
+        tx.verify_signature(public_key)?;
+        let maximum_fee = tx.validate_for(expected_chain_id, current_height)?;
+        let expected_nonce = self.nonce(&tx.sender);
+        if tx.nonce != expected_nonce { return Err("contract transaction nonce mismatch or replay".into()); }
+        let balance = self.balance(&tx.sender);
+        if balance < tx.max_fee { return Err("insufficient balance for maximum authorized fee reserve".into()); }
+        let (token_id, method, calldata) = match &tx.operation {
+            ContractOperation::Call { contract_id, method, calldata } => (contract_id.as_str(), method.as_str(), calldata.as_slice()),
+            ContractOperation::Deploy { .. } => return Err("token call requires a call operation".into()),
+        };
+        let args_text = std::str::from_utf8(calldata).map_err(|_| "token calldata must be UTF-8")?;
+        if args_text.contains('\\n') || args_text.contains('\\r') { return Err("token calldata must be one line".into()); }
+        let args: Vec<&str> = if args_text.trim().is_empty() { Vec::new() } else { args_text.split(',').map(str::trim).collect() };
+        let mut candidate = self.tokens.clone();
+        let operation = (|| -> Result<(), String> {
+            let amount = |index: usize| -> Result<u128, String> {
+                args.get(index).ok_or_else(|| "missing token amount argument".to_string())?
+                    .parse::<u128>().map_err(|_| "token amount must be an unsigned integer".into())
+            };
+            let account = |index: usize| -> Result<&str, String> {
+                args.get(index).copied().filter(|v| !v.is_empty()).ok_or_else(|| "missing token account argument".into())
+            };
+            match method {
+                "transfer" if args.len() == 2 => candidate.transfer(token_id, &tx.sender, account(0)?, amount(1)?),
+                "approve" if args.len() == 2 => candidate.approve(token_id, &tx.sender, account(0)?, amount(1)?),
+                "transfer_from" if args.len() == 3 => candidate.transfer_from(token_id, &tx.sender, account(0)?, account(1)?, amount(2)?),
+                "mint" if args.len() == 2 => candidate.mint(token_id, &tx.sender, account(0)?, amount(1)?),
+                "burn" if args.len() == 1 => candidate.burn(token_id, &tx.sender, amount(0)?),
+                _ => Err("unsupported token action or incorrect token arguments".into()),
+            }
+        })();
+        let mut meter = GasMeter::new(tx.gas_limit);
+        let result = (|| -> Result<(), String> {
+            meter.charge(BASE_EXECUTION_GAS)?;
+            meter.charge(super::contract_gas::STORAGE_READ_GAS)?;
+            operation?;
+            meter.charge(STORAGE_WRITE_GAS)?;
+            Ok(())
+        })();
+        let (execution, gas_charged) = match result {
+            Ok(()) => (Ok(()), meter.used()),
+            Err(error) => (Err(error), tx.gas_limit),
+        };
+        let fee_charged = gas_charged.checked_mul(tx.gas_price).ok_or("actual token fee overflow")?;
+        if fee_charged > maximum_fee || fee_charged > tx.max_fee { return Err("actual token fee exceeds authorized maximum".into()); }
+        let next_nonce = expected_nonce.checked_add(1).ok_or("account nonce overflow")?;
+        let sender_balance = balance.checked_sub(fee_charged).ok_or("sender fee balance underflow")?;
+        let next_fees = self.fees_collected.checked_add(fee_charged).ok_or("fee collector balance overflow")?;
+        let transaction_id = tx.transaction_id()?;
+        if execution.is_ok() { self.tokens = candidate; }
+        self.balances.insert(tx.sender.clone(), sender_balance);
+        self.nonces.insert(tx.sender.clone(), next_nonce);
+        self.fees_collected = next_fees;
+        let execution = execution.map(|()| ExecutionReceipt {
+            output: vec!["true".into()], gas_used: gas_charged, state_root: self.state_root().unwrap_or([0; 32]),
+        });
+        Ok(SignedCallReceipt {
+            transaction_id, sender: tx.sender.clone(), nonce: tx.nonce, execution,
+            gas_charged, fee_charged, sender_balance, next_nonce,
+        })
     }
 
     /// Execute one signed call atomically against a candidate state. Failed VM calls consume
