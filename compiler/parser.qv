@@ -2111,36 +2111,36 @@ fn execute_plan_builtin(name, reversed_args) {
   }
   if name == "array" {
     return map("ok", true, "value", args, "error", "")
-  }
-  if name == "get" and len(args) == 2 {
-    define collection := get(args, 0)
-    define key := get(args, 1)
-    if type_of(collection) == "array" and type_of(key) == "integer" and key >= 0 and key < len(collection) {
-      return map("ok", true, "value", get(collection, key), "error", "")
+  } otherwise {
+    if name == "get" and len(args) == 2 {
+      define collection := get(args, 0)
+      define key := get(args, 1)
+      if type_of(collection) == "array" and type_of(key) == "integer" and key >= 0 and key < len(collection) {
+        return map("ok", true, "value", get(collection, key), "error", "")
+      }
+      if type_of(collection) == "map" and type_of(key) == "string" and contains(collection, key) {
+        return map("ok", true, "value", get(collection, key), "error", "")
+      }
+      return map("ok", false, "value", "", "error", "get key is invalid or missing")
     }
-    if type_of(collection) == "map" and type_of(key) == "string" and contains(collection, key) {
-      return map("ok", true, "value", get(collection, key), "error", "")
+    if name == "contains" and len(args) == 2 {
+      define collection := get(args, 0)
+      define key := get(args, 1)
+      if type_of(collection) == "array" or type_of(collection) == "map" {
+        return map("ok", true, "value", contains(collection, key), "error", "")
+      }
+      return map("ok", false, "value", "", "error", "type error: contains expects an array or map")
     }
-    return map("ok", false, "value", "", "error", "get key is invalid or missing")
-  }
-  if name == "contains" and len(args) == 2 {
-    define collection := get(args, 0)
-    define key := get(args, 1)
-    if type_of(collection) == "array" or type_of(collection) == "map" {
-      return map("ok", true, "value", contains(collection, key), "error", "")
+    if name == "push" and len(args) == 2 and type_of(get(args, 0)) == "array" {
+      return map("ok", true, "value", push(get(args, 0), get(args, 1)), "error", "")
     }
-    return map("ok", false, "value", "", "error", "type error: contains expects an array or map")
-  }
-  if name == "push" and len(args) == 2 and type_of(get(args, 0)) == "array" {
-    return map("ok", true, "value", push(get(args, 0), get(args, 1)), "error", "")
-  }
-  if name == "keys" and len(args) == 1 and type_of(get(args, 0)) == "map" {
-    return map("ok", true, "value", keys(get(args, 0)), "error", "")
-  }
-  if name == "values" and len(args) == 1 and type_of(get(args, 0)) == "map" {
-    return map("ok", true, "value", values(get(args, 0)), "error", "")
-  }
-  if name == "len" and len(args) == 1 {
+    if name == "keys" and len(args) == 1 and type_of(get(args, 0)) == "map" {
+      return map("ok", true, "value", keys(get(args, 0)), "error", "")
+    }
+    if name == "values" and len(args) == 1 and type_of(get(args, 0)) == "map" {
+      return map("ok", true, "value", values(get(args, 0)), "error", "")
+    }
+    if name == "len" and len(args) == 1 {
       return map("ok", true, "value", len(get(args, 0)), "error", "")
     } otherwise {
       if name == "sum" and len(args) == 1 and type_of(get(args, 0)) == "array" {
