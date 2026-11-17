@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "compiler/parser.zv"
+      - "compiler/bootstrap.zv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -13,6 +14,7 @@ on:
       - main
     paths:
       - "compiler/parser.zv"
+      - "compiler/bootstrap.zv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
