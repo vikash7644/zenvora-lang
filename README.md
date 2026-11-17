@@ -2,7 +2,7 @@
 
 ## Current language identity and source extension
 
-The language is now **QORVYNT**. New source files use the **`.qv`** extension (for example, `examples/hello.qv`). The compiler reads source from the supplied file path, and relative module imports can use `.qv` paths. New QORVYNT source files and module imports use `.qv`.
+The language is **QORVYNT**. All current source examples and relative module imports use the `.qv` extension (for example, `examples/hello.qv`).
 
 ## Official website
 
