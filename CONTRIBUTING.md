@@ -23,7 +23,7 @@ cargo test --all-targets
 For a user-facing language change, also run at least one affected example, for example:
 
 ```sh
-cargo run -- examples/zenvora-language-tour.qv
+cargo run -- examples/qorvynt-language-tour.qv
 cargo run -- --check examples/functions.qv
 ```
 
