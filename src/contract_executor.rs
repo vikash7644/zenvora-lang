@@ -180,7 +180,7 @@ impl ContractAccountState {
     pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
         let storage = self.storage.encode_snapshot()?;
         let mut out = Vec::new();
-        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0");
+        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0");
         put_bytes(&mut out, &storage)?;
         out.extend_from_slice(&self.fees_collected.to_be_bytes());
         put_contracts(&mut out, &self.deployed_contracts)?;
@@ -193,7 +193,7 @@ impl ContractAccountState {
     pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
         if bytes.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
         let mut reader = ExecutorReader { bytes, offset: 0 };
-        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0")?;
+        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0")?;
         let storage = ContractState::decode_snapshot(reader.read_bytes(2 * 1024 * 1024)?)?;
         let fees_collected = reader.read_u64()?;
         let deployed_contracts = reader.read_contracts()?;
@@ -413,4 +413,34 @@ mod tests {
         assert!(state.execute_signed_call(&tx, &key.verifying_key().to_bytes(), 9001, 100, SOURCE).is_err());
         assert_eq!(state.nonce(&address), 0);
     }
+
+    #[test]
+    fn signed_deployment_registers_verified_artifact_and_survives_snapshot_restore() {
+        let key = SigningKey::from_bytes(&[81; 32]);
+        let public = key.verifying_key().to_bytes();
+        let address = super::super::chain_protocol::address_from_public_key(&public).unwrap();
+        let source = "contract Counter {\\nstate count := 0\\naction increment(amount) {\\ncount := count + amount\\n}\\nview current() {\\nreturn count\\n}\\n}\\n";
+        let artifact = serde_json::to_vec(&super::super::contract_abi_and_artifact(source).unwrap()).unwrap();
+        let mut tx = ContractTransactionV1 {
+            chain_id: 9001, sender: address.clone(), nonce: 0, gas_limit: 100_000,
+            max_fee: 200_000, gas_price: 2, valid_until_height: Some(200),
+            operation: ContractOperation::Deploy { artifact }, signature: Vec::new(),
+        };
+        tx.signature = key.sign(&tx.signing_bytes().unwrap()).to_bytes().to_vec();
+        let mut state = ContractAccountState::new();
+        state.set_balance(&address, 1_000_000).unwrap();
+        let receipt = state.execute_signed_deployment(&tx, &public, 9001, 100).unwrap();
+        let deployed = state.deployed_contract(&receipt.contract_id).unwrap();
+        assert_eq!(deployed.name, "Counter");
+        assert_eq!(deployed.source, source);
+        assert!(deployed.bytecode_v2.starts_with("ZENVORA_BYTECODE 2"));
+        assert_eq!(state.nonce(&address), 1);
+        assert_eq!(state.fees_collected, receipt.fee_charged);
+        assert!(state.execute_signed_deployment(&tx, &public, 9001, 100).is_err());
+
+        let restored = ContractAccountState::decode_snapshot(&state.encode_snapshot().unwrap()).unwrap();
+        assert_eq!(restored, state);
+        assert_eq!(restored.deployed_contract(&receipt.contract_id).unwrap(), deployed);
+    }
+
 }
