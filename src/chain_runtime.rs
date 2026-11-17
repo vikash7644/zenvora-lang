@@ -149,12 +149,12 @@ impl ChainRuntime {
             encoded.extend_from_slice(&self.balance(address).to_be_bytes());
             encoded.extend_from_slice(&self.account_nonce(address).to_be_bytes());
         }
-        let transfer_root = hash_tagged(b"ZENVORA_STATE_ROOT_V1\\0", &encoded);
+        let transfer_root = hash_tagged(b"ZENVORA_STATE_ROOT_V1\0", &encoded);
         let contract_root = self.contract_state.state_root()?;
         let mut combined = Vec::with_capacity(64);
         combined.extend_from_slice(&transfer_root);
         combined.extend_from_slice(&contract_root);
-        Ok(hash_tagged(b"QORVYNT_CHAIN_STATE_ROOT_V1\\0", &combined))
+        Ok(hash_tagged(b"QORVYNT_CHAIN_STATE_ROOT_V1\0", &combined))
     }
 
     /// Compatibility wrapper for callers that operate on already validated in-memory state.
