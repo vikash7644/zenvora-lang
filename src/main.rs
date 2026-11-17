@@ -4557,7 +4557,10 @@ show char_at("hé🙂", 2)
         let (code, layout) = super::compile_with_layout(source).unwrap();
         let bytecode = super::serialize_bytecode_v2(&code, &layout).unwrap();
         assert!(bytecode.contains("BUILTIN json_encode 1"));
-        assert_eq!(super::run_bytecode_v2(&bytecode).unwrap(), output);
+        let decoded = super::deserialize_bytecode(&bytecode).unwrap();
+        let mut bytecode_output = Vec::new();
+        super::run_with_output(&decoded, &mut |line| bytecode_output.push(line)).unwrap();
+        assert_eq!(bytecode_output, output);
     }
 
     #[test]
