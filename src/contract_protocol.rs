@@ -227,7 +227,10 @@ mod tests {
 
     #[test]
     fn oversized_artifacts_and_invalid_method_names_fail_closed() {
-        let (mut tx, _) = signed(ContractOperation::Deploy { artifact: vec![0; super::MAX_ARTIFACT_BYTES + 1] });
+        let (mut tx, _) = signed(ContractOperation::Deploy { artifact: vec![0, 1, 2] });
+        if let ContractOperation::Deploy { artifact } = &mut tx.operation {
+            artifact.resize(super::MAX_ARTIFACT_BYTES + 1, 0);
+        }
         assert!(tx.signing_bytes().is_err());
         tx.operation = ContractOperation::Call {
             contract_id: "token".into(),
