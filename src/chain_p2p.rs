@@ -801,6 +801,107 @@ mod tests {
     }
 
     #[test]
+    fn peer_sync_replays_contract_deployment_from_remote_block_store() {
+        use super::super::chain_block::{
+            combined_contract_receipt_root, combined_contract_transaction_root, execute_block_with_contracts,
+        };
+        use super::super::contract_executor::SignedContractTransaction;
+        use super::super::contract_protocol::{ContractOperation, ContractTransactionV1};
+
+        let suffix = std::process::id();
+        let remote_path = std::env::temp_dir().join(format!("qorvynt-peer-contract-remote-{suffix}.zvb"));
+        let local_path = std::env::temp_dir().join(format!("qorvynt-peer-contract-local-{suffix}.zvb"));
+        for path in [&remote_path, &local_path] { let _ = std::fs::remove_file(path); }
+        let remote_text = remote_path.to_string_lossy().to_string();
+        let local_text = local_path.to_string_lossy().to_string();
+        let key = SigningKey::from_bytes(&[201; 32]);
+        let public = key.verifying_key().to_bytes();
+        let address = address_from_public_key(&public).unwrap();
+        let mut allocations = BTreeMap::new();
+        allocations.insert(address.clone(), 5_000_000);
+
+        let make_genesis = || {
+            let mut runtime = ChainRuntime::new();
+            runtime.set_genesis_balance(&address, 5_000_000).unwrap();
+            let header = BlockHeaderV1 {
+                chain_id: 71, height: 0, timestamp_secs: 1_800_000_000,
+                parent_hash: [0; 32], transaction_root: transaction_merkle_root(&[]).unwrap(),
+                receipt_root: ChainRuntime::receipt_root_for(&[]).unwrap(),
+                state_root: runtime.state_root(), proposer: address.clone(), consensus_proof: Vec::new(),
+            };
+            execute_block(&mut runtime, &header, &[], 71, None).unwrap();
+            (runtime, header)
+        };
+        let (mut remote_runtime, genesis) = make_genesis();
+        let (local_runtime, local_genesis) = make_genesis();
+        assert_eq!(genesis, local_genesis);
+        let mut remote_store = BlockStore::new(71, allocations.clone()).unwrap();
+        remote_store.append_executed_block(&remote_text, &remote_runtime, &genesis, &[], &[]).unwrap();
+        let mut local_store = BlockStore::new(71, allocations).unwrap();
+        local_store.append_executed_block(&local_text, &local_runtime, &local_genesis, &[], &[]).unwrap();
+
+        let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+        let artifact = super::super::contract_abi_and_artifact(source).unwrap();
+        let mut transaction = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 0,
+            gas_limit: 200_000, max_fee: 200_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Deploy { artifact: serde_json::to_vec(&artifact).unwrap() },
+            signature: Vec::new(),
+        };
+        transaction.signature = key.sign(&transaction.signing_bytes().unwrap()).to_bytes().to_vec();
+        let envelope = SignedContractTransaction { transaction, public_key: public.to_vec() };
+        let mut candidate = remote_runtime.clone();
+        let contract_receipts = candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&envelope), 71, 1,
+        ).unwrap();
+        let empty_tx_root = transaction_merkle_root(&[]).unwrap();
+        let empty_receipt_root = ChainRuntime::receipt_root_for(&[]).unwrap();
+        let mut header = BlockHeaderV1 {
+            chain_id: 71, height: 1, timestamp_secs: 1_800_000_001,
+            parent_hash: genesis.header_hash().unwrap(),
+            transaction_root: combined_contract_transaction_root(empty_tx_root, std::slice::from_ref(&envelope)).unwrap(),
+            receipt_root: combined_contract_receipt_root(empty_receipt_root, &contract_receipts).unwrap(),
+            state_root: candidate.try_state_root().unwrap(),
+            proposer: String::new(), consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut header, &key).unwrap();
+        execute_block_with_contracts(
+            &mut remote_runtime, &header, &[], std::slice::from_ref(&envelope), 71, Some(&genesis),
+        ).unwrap();
+        remote_store.append_executed_block_with_contracts(
+            &remote_text, &remote_runtime, &header, &[], std::slice::from_ref(&envelope), &[],
+        ).unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap();
+        let remote_text_for_thread = remote_text.clone();
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut length_bytes = [0_u8; 4];
+                stream.read_exact(&mut length_bytes).unwrap();
+                let length = u32::from_be_bytes(length_bytes) as usize;
+                let mut bytes = vec![0_u8; length];
+                stream.read_exact(&mut bytes).unwrap();
+                let request: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                let response = handle_message(&request, &remote_text_for_thread, 71).to_string();
+                stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        assert_eq!(sync_from_peer(&local_text, 71, &peer.to_string()).unwrap(), 1);
+        server.join().unwrap();
+        let (loaded, replayed) = BlockStore::load_from_file(&local_text, 71).unwrap();
+        assert_eq!(loaded.blocks().len(), 2);
+        assert_eq!(loaded.blocks()[1].contract_transactions.len(), 1);
+        assert_eq!(replayed.contract_state().deployed_contract_count(), 1);
+        assert_eq!(replayed.try_state_root().unwrap(), remote_runtime.try_state_root().unwrap());
+        std::fs::remove_file(remote_path).unwrap();
+        std::fs::remove_file(local_path).unwrap();
+    }
+
+    #[test]
     fn peer_sync_rejects_invalid_block_without_persisting_partial_state() {
         let local_path = std::env::temp_dir().join(format!(
             "zenvora-peer-invalid-block-{}.zvb",
