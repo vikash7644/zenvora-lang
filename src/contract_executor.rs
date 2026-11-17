@@ -453,7 +453,9 @@ mod tests {
         assert_eq!(state.fees_collected, receipt.fee_charged);
         assert!(state.execute_signed_deployment(&tx, &public, 9001, 100).is_err());
 
-        let call = signed_call(&key, 1, "9");
+        let mut call = signed_call(&key, 1, "9");
+        call.operation = ContractOperation::Call { contract_id: receipt.contract_id.clone(), method: "increment".into(), calldata: b"9".to_vec() };
+        call.signature = key.sign(&call.signing_bytes().unwrap()).to_bytes().to_vec();
         let call_receipt = state.execute_signed_registered_call(&call, &public, 9001, 100).unwrap();
         assert!(call_receipt.execution.is_ok());
         assert_eq!(state.storage.get(&receipt.contract_id, "count").unwrap(), Some(&b"9"[..]));
