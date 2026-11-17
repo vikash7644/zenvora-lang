@@ -510,6 +510,10 @@ mod tests {
         let contract_receipts = candidate.apply_signed_contract_transactions(
             std::slice::from_ref(&envelope), 71, 1,
         ).unwrap();
+        let deployed_contract_id = match &contract_receipts[0] {
+            super::super::contract_executor::ContractExecutionReceipt::Deploy(receipt) => receipt.contract_id.clone(),
+            _ => panic!("expected deploy receipt"),
+        };
         let empty_tx_root = transaction_merkle_root(&[]).unwrap();
         let empty_receipt_root = ChainRuntime::receipt_root_for(&[]).unwrap();
         let mut header = BlockHeaderV1 {
@@ -528,11 +532,47 @@ mod tests {
             &path, &runtime, &header, &[], std::slice::from_ref(&envelope), &[],
         ).unwrap();
 
+        let mut call = ContractTransactionV1 {
+            chain_id: 71, sender: address.clone(), nonce: 1,
+            gas_limit: 100_000, max_fee: 100_000, gas_price: 1,
+            valid_until_height: Some(100),
+            operation: ContractOperation::Call {
+                contract_id: deployed_contract_id.clone(),
+                method: "increment".into(),
+                calldata: b"7".to_vec(),
+            },
+            signature: Vec::new(),
+        };
+        call.signature = key.sign(&call.signing_bytes().unwrap()).to_bytes().to_vec();
+        let call_envelope = SignedContractTransaction { transaction: call, public_key: public.to_vec() };
+        let mut call_candidate = runtime.clone();
+        let call_receipts = call_candidate.apply_signed_contract_transactions(
+            std::slice::from_ref(&call_envelope), 71, 2,
+        ).unwrap();
+        let mut call_header = BlockHeaderV1 {
+            chain_id: 71, height: 2, timestamp_secs: 1_800_000_002,
+            parent_hash: header.header_hash().unwrap(),
+            transaction_root: combined_contract_transaction_root(empty_tx_root, std::slice::from_ref(&call_envelope)).unwrap(),
+            receipt_root: combined_contract_receipt_root(empty_receipt_root, &call_receipts).unwrap(),
+            state_root: call_candidate.try_state_root().unwrap(),
+            proposer: String::new(), consensus_proof: Vec::new(),
+        };
+        sign_header_as_proposer(&mut call_header, &key).unwrap();
+        execute_block_with_contracts(
+            &mut runtime, &call_header, &[], std::slice::from_ref(&call_envelope), 71, Some(&header),
+        ).unwrap();
+        store.append_executed_block_with_contracts(
+            &path, &runtime, &call_header, &[], std::slice::from_ref(&call_envelope), &[],
+        ).unwrap();
+
         let (loaded, restored) = BlockStore::load_from_file(&path, 71).unwrap();
-        assert_eq!(loaded.blocks().len(), 2);
+        assert_eq!(loaded.blocks().len(), 3);
         assert_eq!(loaded.blocks()[1].contract_transactions.len(), 1);
+        assert_eq!(loaded.blocks()[2].contract_transactions.len(), 1);
         assert_eq!(restored.try_state_root().unwrap(), runtime.try_state_root().unwrap());
         assert_eq!(restored.contract_state().deployed_contract_count(), 1);
+        assert_eq!(restored.contract_state().storage.get(&deployed_contract_id, "count").unwrap(), Some(&b"7"[..]));
+        assert_eq!(restored.contract_state().nonce(&address), 2);
         std::fs::remove_file(path).unwrap();
     }
 
