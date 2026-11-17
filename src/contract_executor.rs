@@ -79,7 +79,7 @@ impl ContractAccountState {
     pub fn state_root(&self) -> Result<[u8; 32], String> {
         let snapshot = self.encode_snapshot()?;
         let mut hasher = Sha256::new();
-        hasher.update(b"QORVYNT_CONTRACT_STATE_ROOT_V1\\0");
+        hasher.update(b"QORVYNT_CONTRACT_STATE_ROOT_V1\0");
         hasher.update(snapshot);
         Ok(hasher.finalize().into())
     }
@@ -92,7 +92,7 @@ impl ContractAccountState {
         expected_chain_id: u64,
         current_height: u64,
     ) -> Result<ContractExecutionReceipt, String> {
-        match tx.operation {
+        match &tx.operation {
             ContractOperation::Deploy { .. } => self.execute_signed_deploy(
                 tx, public_key, expected_chain_id, current_height
             ).map(ContractExecutionReceipt::Deploy),
