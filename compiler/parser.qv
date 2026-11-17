@@ -2505,6 +2505,32 @@ if get(extended_builtin_result, "ok") and len(extended_builtin_output) == 19 and
 } otherwise {
   show "ZENVORA_VM_EXTENDED_BUILTIN_PARITY_FAIL"
 }
+ 
+# Map indexing parity: the QORVYNT VM accepts string keys as well as array indexes.
+define map_index_source := "show map(\"answer\", 42)[\"answer\"]\\nshow array(7, 8)[1]\\n"
+define map_index_lexed := lex(map_index_source)
+define map_index_ast := parse_program(get(map_index_lexed, "tokens"))
+define map_index_ir := lower_program(get(map_index_ast, "ast"))
+define map_index_plan := emit_bytecode_plan(map_index_ir)
+define map_index_result := execute_bytecode_plan(map_index_plan)
+define map_index_output := get(map_index_result, "output")
+if get(map_index_result, "ok") and len(map_index_output) == 2 and get(map_index_output, 0) == "42" and get(map_index_output, 1) == "8" {
+  show "QORVYNT_VM_MAP_INDEX_PASS"
+} otherwise {
+  show "QORVYNT_VM_MAP_INDEX_FAIL"
+}
+define missing_map_key_source := "show map(\"answer\", 42)[\"missing\"]\\n"
+define missing_map_key_lexed := lex(missing_map_key_source)
+define missing_map_key_ast := parse_program(get(missing_map_key_lexed, "tokens"))
+define missing_map_key_ir := lower_program(get(missing_map_key_ast, "ast"))
+define missing_map_key_plan := emit_bytecode_plan(missing_map_key_ir)
+define missing_map_key_result := execute_bytecode_plan(missing_map_key_plan)
+if not get(missing_map_key_result, "ok") and contains(get(missing_map_key_result, "error"), "map key not found") {
+  show "QORVYNT_VM_MISSING_MAP_KEY_PASS"
+} otherwise {
+  show "QORVYNT_VM_MISSING_MAP_KEY_FAIL"
+}
+
 
 # Resource-limit regressions: malicious plans must terminate instead of hanging or overflowing the host stack.
 define recursive_source := "fn recurse(n) {\nreturn recurse(n + 1)\n}\nshow recurse(0)\n"
