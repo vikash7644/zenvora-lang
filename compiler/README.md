@@ -19,7 +19,7 @@ GitHub Actions runs `cargo test` in this folder and executes the shared hello ex
 
 ## Syntax
 
-```zv
+```qv
 define count := 1
 repeat count <= 5 {
     show count
@@ -34,7 +34,7 @@ repeat count <= 5 {
 
 - `break` exits only the nearest enclosing `repeat` loop.
 - `continue` skips the rest of the current loop body and reevaluates that loop's condition.
-- Using either statement outside a loop exits with a clear `Zenvora error`.
+- Using either statement outside a loop exits with a clear `QORVYNT error`.
 - Nested loops are tested to ensure an inner `break` does not terminate the outer loop.
 
 Run the regression suite with:
