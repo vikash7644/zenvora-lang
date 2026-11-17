@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::block_store::BlockStore;
-use super::chain_block::{execute_block, execute_block_candidate, execute_block_candidate_with_contracts, execute_block_with_contracts, SignedTransactionEnvelope};
+use super::chain_block::{execute_block, execute_block_candidate_with_contracts, execute_block_with_contracts, SignedTransactionEnvelope};
 use super::chain_consensus::{add_validator_signature, verify_partial_consensus_proof};
 use super::chain_protocol::{BlockHeaderV1, TransactionV1};
 use super::contract_executor::SignedContractTransaction;
@@ -204,6 +204,16 @@ pub fn request_block_signature(
     header: &BlockHeaderV1,
     transactions: &[SignedTransactionEnvelope],
 ) -> Result<Vec<u8>, String> {
+    request_block_signature_with_contracts(peer, header, transactions, &[])
+}
+
+/// Ask a validator peer to verify a proposal including QORVYNT contract transactions.
+pub fn request_block_signature_with_contracts(
+    peer: &str,
+    header: &BlockHeaderV1,
+    transactions: &[SignedTransactionEnvelope],
+    contract_transactions: &[SignedContractTransaction],
+) -> Result<Vec<u8>, String> {
     let peer_address: SocketAddr = peer.parse()
         .map_err(|_| "peer must be an IP:port socket address")?;
     let encoded_transactions: Vec<Value> = transactions.iter().map(|envelope| {
@@ -212,10 +222,17 @@ pub fn request_block_signature(
             "transaction":hex_encode(&envelope.transaction.canonical_bytes()?)
         }))
     }).collect::<Result<_, String>>()?;
+    let encoded_contract_transactions: Vec<Value> = contract_transactions.iter().map(|envelope| {
+        Ok(json!({
+            "publicKey":hex_encode(&envelope.public_key),
+            "transaction":hex_encode(&envelope.transaction.canonical_bytes()?)
+        }))
+    }).collect::<Result<_, String>>()?;
     let response = request_peer(peer_address, &json!({
         "method":"sign_block",
         "header":hex_encode(&header.canonical_bytes()?),
-        "transactions":encoded_transactions
+        "transactions":encoded_transactions,
+        "contractTransactions":encoded_contract_transactions
     }))?;
     hex_decode(response.get("consensusProof").and_then(Value::as_str)
         .ok_or_else(|| "validator peer response is missing consensus proof".to_string())?)
