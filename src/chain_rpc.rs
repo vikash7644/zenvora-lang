@@ -237,17 +237,33 @@ fn handle_json_rpc_with_pools(
                 "allowance":runtime.contract_state().tokens.allowance(token_id, owner, spender).to_string()})
         }
         "chain_getTokenEvents" => {
+            const DEFAULT_LIMIT: u64 = 100;
+            const MAX_LIMIT: u64 = 500;
             let token_id = match string_param(&params, "tokenId", 0) {
                 Some(value) => value, None => return rpc_error(id, -32602, "expected tokenId parameter"),
+            };
+            let limit = match number_param(&params, "limit", 1) {
+                Some(value) if value > 0 && value <= MAX_LIMIT => value,
+                Some(_) => return rpc_error(id, -32602, "limit must be between 1 and 500"),
+                None => DEFAULT_LIMIT,
+            };
+            let offset = match number_param(&params, "offset", 2) {
+                Some(value) => value,
+                None => 0,
             };
             if runtime.contract_state().tokens.token(token_id).is_none() {
                 return rpc_error(id, -32602, "token ID not found");
             }
-            let events: Vec<Value> = runtime.contract_state().tokens.events().iter().filter(|event| match event {
-                super::token_standard::TokenEvent::Transfer { token_id: id, .. }
-                | super::token_standard::TokenEvent::Approval { token_id: id, .. } => id == token_id,
+            let matching: Vec<Value> = runtime.contract_state().tokens.events().iter().filter(|event| match event {
+                super::token_standard::TokenEvent::Transfer { token_id: event_token, .. }
+                | super::token_standard::TokenEvent::Approval { token_id: event_token, .. } => event_token == token_id,
             }).map(|event| serde_json::to_value(event).unwrap_or(Value::Null)).collect();
-            json!({"tokenId":token_id,"count":events.len(),"events":events})
+            let total = matching.len();
+            let start = usize::try_from(offset).unwrap_or(usize::MAX).min(total);
+            let end = start.saturating_add(limit as usize).min(total);
+            let events = &matching[start..end];
+            json!({"tokenId":token_id,"count":events.len(),"total":total,
+                "limit":limit,"offset":offset,"events":events})
         }
         "chain_getBlock" => {
             let height = match number_param(&params, "height", 0) {
@@ -665,6 +681,19 @@ mod tests {
             let response = handle_json_rpc(request, &path, 71);
             assert_eq!(response["error"]["code"], -32602);
             assert_eq!(response["error"]["message"], "token ID not found");
+        }
+        std::fs::remove_file(cleanup_path).unwrap();
+    }
+
+    #[test]
+    fn token_event_rpc_rejects_zero_or_oversized_page_limits() {
+        let (path, cleanup_path) = test_store();
+        for limit in [0, 501] {
+            let request = json!({"jsonrpc":"2.0","id":40,"method":"chain_getTokenEvents",
+                "params":{"tokenId":"missing","limit":limit}});
+            let response = handle_json_rpc(request.to_string().as_bytes(), &path, 71);
+            assert_eq!(response["error"]["code"], -32602);
+            assert_eq!(response["error"]["message"], "limit must be between 1 and 500");
         }
         std::fs::remove_file(cleanup_path).unwrap();
     }
