@@ -30,6 +30,7 @@ impl TokenLedger {
         self.allowances.get(&(id.into(), owner.into(), spender.into())).copied().unwrap_or(0)
     }
     pub fn events(&self) -> &[TokenEvent] { &self.events }
+    pub fn is_empty(&self) -> bool { self.tokens.is_empty() && self.balances.is_empty() && self.allowances.is_empty() && self.events.is_empty() }
     fn event_room(&self, n: usize) -> Result<(), String> {
         if self.events.len().checked_add(n).is_none_or(|v| v > MAX_EVENTS) { Err("token event history limit reached".into()) } else { Ok(()) }
     }
