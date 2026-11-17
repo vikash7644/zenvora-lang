@@ -207,7 +207,7 @@ impl ContractAccountState {
     pub fn encode_snapshot(&self) -> Result<Vec<u8>, String> {
         let storage = self.storage.encode_snapshot()?;
         let mut out = Vec::new();
-        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0");
+        out.extend_from_slice(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0");
         put_bytes(&mut out, &storage)?;
         out.extend_from_slice(&self.fees_collected.to_be_bytes());
         put_map(&mut out, &self.balances)?;
@@ -339,7 +339,8 @@ impl<'a> ExecutorReader<'a> {
         }
         Ok(contracts)
     }
-\n    fn read_map(&mut self) -> Result<BTreeMap<String, u64>, String> {
+
+    fn read_map(&mut self) -> Result<BTreeMap<String, u64>, String> {
         let count = self.read_u32()? as usize;
         if count > 100_000 { return Err("too many account records in snapshot".into()); }
         let mut map = BTreeMap::new();
