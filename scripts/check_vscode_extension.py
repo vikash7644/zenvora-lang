@@ -13,7 +13,7 @@ CONFIG = EXT / "language-configuration.json"
 
 
 def fail(message: str) -> None:
-    print(f"Zenvora editor validation failed: {message}", file=sys.stderr)
+    print(f"QORVYNT editor validation failed: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -32,8 +32,8 @@ languages = package.get("contributes", {}).get("languages", [])
 zenvora = next((item for item in languages if item.get("id") == "zenvora"), None)
 if not zenvora:
     fail("package.json does not register language id 'zenvora'")
-if ".zv" not in zenvora.get("extensions", []):
-    fail("language id 'zenvora' must register the .zv extension")
+if ".qv" not in zenvora.get("extensions", []):
+    fail("language id 'zenvora' must register the .qv extension")
 if zenvora.get("configuration") != "./language-configuration.json":
     fail("language configuration path does not match the checked-in file")
 
@@ -69,4 +69,4 @@ def check_patterns(value, location="grammar"):
 check_patterns(grammar)
 if not isinstance(config.get("comments"), dict) or config["comments"].get("lineComment") != "#":
     fail("language configuration must define # line comments")
-print(f"Zenvora VS Code extension validated: JSON metadata valid; {checked} TextMate regexes compile; .zv language registration and scope match.")
+print(f"QORVYNT VS Code extension validated: JSON metadata valid; {checked} TextMate regexes compile; .qv language registration and scope match.")
