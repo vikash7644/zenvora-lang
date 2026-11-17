@@ -271,6 +271,22 @@ mod tests {
     }
 
     #[test]
+    fn contract_execution_rejects_gas_limit_below_base_charge() {
+        use super::super::contract_gas::BASE_EXECUTION_GAS;
+        let mut state = ContractState::new();
+        let error = execute(
+            COUNTER,
+            "counter",
+            "show current()",
+            AccessMode::View,
+            &mut state,
+            BASE_EXECUTION_GAS - 1,
+        ).unwrap_err();
+        assert!(error.contains("out of gas"), "{error}");
+        assert!(state.is_empty());
+    }
+
+    #[test]
     fn action_state_persists_across_vm_invocations_and_view_reads_it() {
         let mut state = ContractState::new();
         let first = execute(COUNTER, "counter", "call increment(3)", AccessMode::Action, &mut state, 100_000).unwrap();
