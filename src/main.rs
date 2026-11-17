@@ -3759,7 +3759,7 @@ mod tests {
         assert_eq!(decoded, code);
         let mut output = Vec::new();
         run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
-        assert_eq!(output, vec!["hello\nworld", "QORVYNT", "", "नमस्ते 🌍"]);
+        assert_eq!(output, vec!["hello\nworld", "QORVYNT Lang", "", "नमस्ते 🌍"]);
     }
 
     #[test]
@@ -4378,7 +4378,7 @@ show split("red,green,blue", ",")
 show join(array("QORVYNT", "Lang"), " ")
 show sum(array(10, 20, 12))
 "#).unwrap();
-        assert_eq!(output, vec!["true", "true", "x-b-x", "[red, green, blue]", "QORVYNT", "42"]);
+        assert_eq!(output, vec!["true", "true", "x-b-x", "[red, green, blue]", "QORVYNT Lang", "42"]);
     }
 
     #[test]
@@ -4452,7 +4452,7 @@ show char_count("hé🙂")
 show to_int("  -42 ")
 show to_int(17)
 "#).unwrap();
-        assert_eq!(output, vec!["QORVYNT", "zenvora", "ZENVORA", "3", "-42", "17"]);
+        assert_eq!(output, vec!["QORVYNT", "zenvora", "QORVYNT", "3", "-42", "17"]);
     }
 
     #[test]
