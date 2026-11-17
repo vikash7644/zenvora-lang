@@ -312,8 +312,15 @@ impl<'a> ExecutorReader<'a> {
             let bytecode_v2 = String::from_utf8(self.read_bytes(1024 * 1024)?.to_vec()).map_err(|_| "contract bytecode is not UTF-8")?;
             let deployer = String::from_utf8(self.read_bytes(64)?.to_vec()).map_err(|_| "deployer is not UTF-8")?;
             let deployment_nonce = self.read_u64()?;
-            let transaction_id = self.take(32)?.try_into().map_err(|_| "invalid deployment transaction ID")?;
+            let transaction_id: [u8; 32] = self.take(32)?.try_into().map_err(|_| "invalid deployment transaction ID")?;
             if name.is_empty() || deployer.is_empty() { return Err("invalid deployed contract metadata".into()); }
+            let (compiled, layout) = super::compile_with_layout(&source).map_err(|_| "deployed contract source is invalid")?;
+            let canonical_bytecode = super::serialize_bytecode_v2(&compiled, &layout).map_err(|_| "cannot verify deployed contract bytecode")?;
+            if canonical_bytecode != bytecode_v2 { return Err("deployed contract bytecode does not match canonical source".into()); }
+            let mut hasher = Sha256::new(); hasher.update(b"QORVYNT_CONTRACT_ADDRESS_V1\\0");
+            hasher.update(deployer.as_bytes()); hasher.update(deployment_nonce.to_be_bytes()); hasher.update(transaction_id);
+            let expected_id = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>();
+            if id != expected_id { return Err("deployed contract ID does not match deployment metadata".into()); }
             map.insert(id, DeployedContract { name, source, bytecode_v2, deployer, deployment_nonce, transaction_id });
         }
         Ok(map)
