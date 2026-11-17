@@ -4073,12 +4073,26 @@ mod tests {
             key.clone(), artifact, contract_pool.clone(), "200000".into(), "1".into(), "200000".into(),
         ]).unwrap();
 
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = listener.local_addr().unwrap().to_string();
+        let validator = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut length = [0u8; 4];
+            stream.read_exact(&mut length).unwrap();
+            let mut request = vec![0u8; u32::from_be_bytes(length) as usize];
+            stream.read_exact(&mut request).unwrap();
+            let response = br#"{"ok":false,"error":"test validator rejects proposal"}"#;
+            stream.write_all(&(response.len() as u32).to_be_bytes()).unwrap();
+            stream.write_all(response).unwrap();
+        });
         let error = run_chain_command(&vec![
             "zv".into(), "--chain-store-produce-contracts-peer-quorum".into(),
             store.clone(), "71".into(), transfer_pool.clone(), contract_pool.clone(),
-            key, "127.0.0.1:1".into(),
+            key, peer,
         ]).unwrap_err();
-        assert!(error.contains("cannot connect to peer"), "{error}");
+        validator.join().unwrap();
+        assert!(error.contains("test validator rejects proposal"), "{error}");
         let (loaded, runtime) = crate::block_store::BlockStore::load_from_file(&store, 71).unwrap();
         assert_eq!(loaded.blocks().len(), 1, "failed quorum must not append a block");
         let pending = crate::tx_pool::ContractTransactionPool::load_from_file(
