@@ -51,7 +51,9 @@ jobs:
           grep -F 'ZENVORA_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' parser-output.txt
           grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' parser-output.txt
           grep -F 'ZENVORA_NATIVE_BYTECODE_V2_EMIT_PASS' parser-output.txt
+          grep -F 'QORVYNT_SOURCE_TO_BYTECODE_V2_API_PASS' parser-output.txt
           ! grep -F 'ZENVORA_NATIVE_BYTECODE_V2_EMIT_FAIL' parser-output.txt
+          ! grep -F 'QORVYNT_SOURCE_TO_BYTECODE_V2_API_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_FAIL' parser-output.txt
           ! grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_FAIL' parser-output.txt
