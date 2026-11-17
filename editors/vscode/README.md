@@ -19,10 +19,10 @@ This is editor syntax support, not a compiler or language server. Diagnostics, a
 
 ## Install a packaged VSIX
 
-The main GitHub Actions workflow builds an installable `.vsix` artifact after validating the extension. Open the latest successful [QORVYNT CI run](https://github.com/vikash7644/zenvora-lang/actions/workflows/rust.yml), download the `zenvora-vscode-extension` artifact, extract it, then install it on desktop VS Code:
+The main GitHub Actions workflow builds an installable `.vsix` artifact after validating the extension. Open the latest successful [QORVYNT CI run](https://github.com/vikash7644/qorvynt-lang/actions/workflows/rust.yml), download the `qorvynt-vscode-extension` artifact, extract it, then install it on desktop VS Code:
 
 ```sh
-code --install-extension zenvora-lang.vsix
+code --install-extension qorvynt-lang.vsix
 ```
 
 The workflow artifact is temporary (7-day retention). The extension is **not yet published to the VS Code Marketplace**; Marketplace publication needs a maintainer-controlled publisher token and release approval.
