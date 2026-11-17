@@ -4379,6 +4379,11 @@ mod tests {
         let encoded = artifact["bytecode_v2"].as_str().unwrap();
         assert!(super::deserialize_bytecode_v2(encoded).is_ok());
         assert_eq!(artifact["source_sha256"].as_str().unwrap().len(), 64);
+        let encoded = serde_json::to_vec(&artifact).unwrap();
+        let (name, source, bytecode) = super::validate_contract_artifact(&encoded).unwrap();
+        assert_eq!(name, "Counter");
+        assert_eq!(source, source_text);
+        assert!(super::deserialize_bytecode_v2(&bytecode).is_ok());
     }
 
     #[test]
