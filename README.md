@@ -1,4 +1,8 @@
-# Zenvora Lang
+# QORVYNT
+
+## Current language identity and source extension
+
+The language is now **QORVYNT**. New source files use the **`.qv`** extension (for example, `examples/hello.qv`). The compiler reads source from the supplied file path, and relative module imports can use `.qv` paths. Existing `.zv` examples remain temporarily as legacy regression fixtures during the migration; they are not the recommended extension for new QORVYNT programs.
 
 ## Official website
 
