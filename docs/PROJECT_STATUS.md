@@ -1,7 +1,16 @@
-# Zenvora Lang — Mission Status and Completion Gate
+# QORVYNT — Mission Status and Completion Gate
 
 Last audited: 2026-10-23  
 Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, not a claim that the project is complete.
+
+
+## QORVYNT identity and .qv migration audit (2026-11-17)
+
+- The language's public identity is **QORVYNT** and the active source extension is **.qv**. This does not rename the GitHub repository or automatically rename internal Rust crate/module identifiers.
+- Draft PR [#55](https://github.com/vikash7644/zenvora-lang/pull/55) is the migration vehicle. Its tree at commit `fb9ef92c081847bae67cb82e8f872371d5b46f8f` contained 18 `.qv` source files and zero `.zv` source files.
+- All seven workflows on that exact commit completed successfully: QORVYNT CI, self-hosted compiler/Bytecode v2 validation, interpreter MVP, playground CI, local chain smoke, multi-node sync smoke, and Bytecode v2 fuzzing. The self-hosted job ran the QORVYNT-written frontend and compared its Bytecode v2 output with the reference compiler.
+- Important limitation: that self-hosted workflow still installs and runs a **Rust reference host**. This proves the current frontend-to-Bytecode-v2 validation path, not a clean, Rust-independent bootstrap. Do not mark QORVYNT v0.9.0 complete on this evidence alone.
+- A docs-only cleanup commit `87bee6c7ba28f51e124b56ca3f8310b1b08bac0f` then aligned the interpreter guide's code fence and error label with QORVYNT/.qv. The seven passing workflow results above are for `fb9ef92`, not this later documentation commit.
 
 ## Status meanings
 
