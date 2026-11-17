@@ -2649,6 +2649,10 @@ define v2_driver_function := compile_to_bytecode_v2("fn twice(n) {\\nreturn n * 
 define v2_driver_invalid := compile_to_bytecode_v2("show missing_symbol\\n")
 define v2_driver_simple_bytes := get(v2_driver_simple, "bytecode")
 define v2_driver_function_bytes := get(v2_driver_function, "bytecode")
+show "QORVYNT_SOURCE_TO_BYTECODE_V2_DIAGNOSTICS"
+show v2_driver_simple
+show v2_driver_function
+show v2_driver_invalid
 if get(v2_driver_simple, "ok") and get(v2_driver_simple, "stage") == "complete" and starts_with(v2_driver_simple_bytes, "ZENVORA_BYTECODE 2\\n") and get(v2_driver_function, "ok") and starts_with(v2_driver_function_bytes, "ZENVORA_BYTECODE 2\\n") and not get(v2_driver_invalid, "ok") and get(v2_driver_invalid, "stage") == "validate" and get(v2_driver_invalid, "bytecode") == "" {
   show "QORVYNT_SOURCE_TO_BYTECODE_V2_API_PASS"
 } otherwise {
