@@ -279,7 +279,7 @@ impl ContractAccountState {
             ContractOperation::Deploy { .. } => return Err("token call requires a call operation".into()),
         };
         let args_text = std::str::from_utf8(calldata).map_err(|_| "token calldata must be UTF-8")?;
-        if args_text.contains('\\n') || args_text.contains('\\r') { return Err("token calldata must be one line".into()); }
+        if args_text.contains('\n') || args_text.contains('\r') { return Err("token calldata must be one line".into()); }
         let args: Vec<&str> = if args_text.trim().is_empty() { Vec::new() } else { args_text.split(',').map(str::trim).collect() };
         let mut candidate = self.tokens.clone();
         let operation = (|| -> Result<(), String> {
