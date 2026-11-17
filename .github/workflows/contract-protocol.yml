@@ -1,0 +1,35 @@
+name: QORVYNT Contract Protocol Checks
+
+on:
+  push:
+    branches:
+      - qorvynt-contract-tx-foundation
+  pull_request:
+    paths:
+      - "src/contract_protocol.rs"
+      - "src/main.rs"
+      - ".github/workflows/contract-protocol.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qorvynt-contract-protocol-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-contract-envelope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Test signed contract transaction envelopes
+        run: cargo test --locked contract_protocol::tests -- --nocapture
