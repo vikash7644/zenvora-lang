@@ -15,7 +15,7 @@ Each following non-empty line encodes exactly one instruction. Instructions use 
 Create and execute a bytecode file:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.zv functions.zvb
+cargo run -- --emit-bytecode examples/functions.qv functions.zvb
 cargo run -- --run-bytecode functions.zvb
 ```
 
