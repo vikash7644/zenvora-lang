@@ -239,7 +239,7 @@ impl ContractAccountState {
     pub fn decode_snapshot(bytes: &[u8]) -> Result<Self, String> {
         if bytes.len() > 4 * 1024 * 1024 { return Err("contract executor snapshot exceeds size limit".into()); }
         let mut reader = ExecutorReader { bytes, offset: 0 };
-        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V1\\0")?;
+        reader.expect(b"QORVYNT_CONTRACT_EXECUTOR_V2\\0")?;
         let storage = ContractState::decode_snapshot(reader.read_bytes(2 * 1024 * 1024)?)?;
         let fees_collected = reader.read_u64()?;
         let balances = reader.read_map()?;
