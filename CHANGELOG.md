@@ -1,12 +1,12 @@
 # Changelog
 
-Notable changes to Zenvora Lang are recorded here.
+Notable changes to QORVYNT are recorded here.
 
 ## Unreleased
 
 - Fixed the browser playground's same-line `} otherwise {` parsing and function-call executor scope; added regression coverage for nested branches and recursive functions.
 - Main CI now packages the VS Code syntax-highlighting extension as a `.vsix` artifact and uploads it for manual installation; Marketplace publishing remains separate.
-- Fixed `examples/science.zv` to construct integer arrays with the supported `array(...)` builtin rather than unsupported bracket-array syntax. Added a CI sweep that executes every checked-in `.zv` example with the optimized release CLI.
+- Fixed `examples/science.qv` to construct integer arrays with the supported `array(...)` builtin rather than unsupported bracket-array syntax. Added a CI sweep that executes every checked-in `.qv` example with the optimized release CLI.
 - Added Cargo package homepage, repository, README, keywords, and category metadata for cleaner distribution metadata.
 
 - Collection builtins `push`, `put`, `get`, `first`, `last`, `reverse`, `keys`, and `values` now move owned collection data where possible instead of cloning it a second time, reducing temporary allocations.
@@ -55,12 +55,12 @@ Notable changes to Zenvora Lang are recorded here.
 
 - Hardened block-store appends by independently executing each candidate against a verified tip-runtime cache before persistence; loading still rebuilds state by replaying the complete stored chain. Added regression coverage proving that state/receipt commitments from unrelated transactions are rejected without altering the stored tip. The verified cache avoids replaying the entire chain on every append.
 
-- Added `zv --new <project-name>` to create a safe starter project with a runnable `main.zv` and project README; existing paths are never overwritten. Added CLI dispatch and regression coverage.
+- Added `zv --new <project-name>` to create a safe starter project with a runnable `main.qv` and project README; existing paths are never overwritten. Added CLI dispatch and regression coverage.
 - Documented the beginner starter-project workflow in the README.
 - Added DNA complement and GC-content helpers plus an integer atomic-mass summation helper, with input validation and regression tests.
-- Added checked integer mathematics helpers (`gcd`, `lcm`, `factorial`, `is_prime`, `fibonacci`, `pow_int`, `mean`) and introductory integer-only science formula helpers (`speed`, `force`, `kinetic_energy`, `density`, `molarity`, `bmi_x10`), with regression tests and `examples/science.zv`.
+- Added checked integer mathematics helpers (`gcd`, `lcm`, `factorial`, `is_prime`, `fibonacci`, `pow_int`, `mean`) and introductory integer-only science formula helpers (`speed`, `force`, `kinetic_energy`, `density`, `molarity`, `bmi_x10`), with regression tests and `examples/science.qv`.
 
-- Added `zv --check <file.zv>` to compile source and relative imports without executing the program; added regression coverage for successful compile-only validation and syntax errors.
+- Added `zv --check <file.qv>` to compile source and relative imports without executing the program; added regression coverage for successful compile-only validation and syntax errors.
 
 - Rejected language keywords as variable, function, parameter, and contract-state identifiers, with regression coverage for declaration and function headers.
 
@@ -71,7 +71,7 @@ Notable changes to Zenvora Lang are recorded here.
 - Added `first`, `last`, and `reverse` collection/text helpers, `is_empty` checks for arrays/maps/strings, and range-validated integer `clamp`.
 - Added whitespace trimming, Unicode-aware lowercase/uppercase conversion, Unicode scalar counting, checked string-to-`i64` conversion, and zero-based `index_of` for strings and arrays.
 - Added argument/type validation, empty-separator/search rejection, and result-size/item-count limits for the new standard-library functions.
-- Added runnable `examples/stdlib-strings.zv` and regression tests for successful operations, invalid input, and overflow.
+- Added runnable `examples/stdlib-strings.qv` and regression tests for successful operations, invalid input, and overflow.
 - Hardened bytecode loading with file-size, instruction-count, decoded-string, and call-argument limits.
 - Added a VM operand-stack limit alongside existing instruction and call-depth limits.
 - Added regression assertions for oversized bytecode payloads and excessive argument counts.
@@ -86,7 +86,7 @@ Notable changes to Zenvora Lang are recorded here.
 
 ## v0.7.0 — Standard library and modules
 
-- Added relative `use "path.zv"` imports with duplicate-load prevention, cycle detection, and an import-depth limit.
+- Added relative `use "path.qv"` imports with duplicate-load prevention, cycle detection, and an import-depth limit.
 - Added direct postfix array/map indexing, including nested indexing and computed index expressions.
 - Added `type_of`, `to_string`, `abs`, `min`, `max`, bounded end-exclusive `range`, and `assert` built-ins.
 - Added explicit declaration bytecode and global/local variable scope rules, including global reads/updates from functions and local shadowing.
@@ -98,7 +98,7 @@ Notable changes to Zenvora Lang are recorded here.
 - Added relative use-path module imports for source files and bytecode builds.
 - Module files resolve relative to their importer and are loaded once per program.
 - Added cycle detection, a 64-file import-depth limit, and source-location context for import errors.
-- Added module-loader regression tests and a runnable examples/modules.zv program.
+- Added module-loader regression tests and a runnable examples/modules.qv program.
 
 ## v0.6.1 — 2026-10-18
 
@@ -107,7 +107,7 @@ Notable changes to Zenvora Lang are recorded here.
 - Added stable map display order, collection display output, and bytecode serialization support for built-in instructions.
 - Added regression tests for collection operations, bytecode round-trips, invalid indexes/keys, and type errors.
 - Collection updates are immutable-style: `push` and `put` return a new collection; index syntax and direct mutation are not implemented yet.
-- GitHub Actions passed on commit `acbf28c`: `cargo check`, all 62 tests (23 compiler/VM, 5 CLI, 34 integration), and all six runnable examples including `examples/collections.zv`.
+- GitHub Actions passed on commit `acbf28c`: `cargo check`, all 62 tests (23 compiler/VM, 5 CLI, 34 integration), and all six runnable examples including `examples/collections.qv`.
 
 ## v0.6.0 — 2026-10-18
 
