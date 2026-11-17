@@ -151,7 +151,7 @@ fn hash_domain(domain: &[u8], bytes: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-fn combined_contract_transaction_root(
+pub(crate) fn combined_contract_transaction_root(
     transfer_root: [u8; 32],
     transactions: &[SignedContractTransaction],
 ) -> Result<[u8; 32], String> {
@@ -167,7 +167,7 @@ fn combined_contract_transaction_root(
     Ok(hash_domain(b"QORVYNT_BLOCK_TX_ROOT_V1\0", &combined))
 }
 
-fn combined_contract_receipt_root(
+pub(crate) fn combined_contract_receipt_root(
     transfer_root: [u8; 32],
     receipts: &[ContractExecutionReceipt],
 ) -> Result<[u8; 32], String> {
