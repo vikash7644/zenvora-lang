@@ -3,7 +3,8 @@
 //! integration into the legacy transfer-only BlockStore remain separate integration steps.
 
 use sha2::{Digest, Sha256};
-use super::contract_executor::{ContractAccountState, ContractTransactionV1, ContractOperation};
+use super::contract_executor::ContractAccountState;
+use super::contract_protocol::{ContractTransactionV1, ContractOperation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContractBlockHeaderV1 {
