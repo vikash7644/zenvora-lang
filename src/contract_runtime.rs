@@ -81,18 +81,25 @@ pub fn execute(
     let code = deserialize_bytecode_v2(&artifact)?;
     let mut output = Vec::new();
     let mut meter = GasMeter::new(gas_limit);
+    for _ in &state_vars {
+        meter.charge(super::contract_gas::STORAGE_READ_GAS)?;
+    }
     run_with_gas(&code, &mut |line| output.push(line), &mut meter)?;
     if output.len() < state_vars.len() {
         return Err("VM did not return all contract state values".into());
     }
     let state_output = output.split_off(output.len() - state_vars.len());
     let mut pending = state.begin(contract_id, mode)?;
-    for ((name, _), value) in state_vars.iter().zip(state_output) {
+    for ((name, previous), value) in state_vars.iter().zip(state_output) {
         let parsed: i64 = value.parse().map_err(|_| format!(
             "contract state '{name}' must evaluate to an integer in runtime v1"
         ))?;
         if mode == AccessMode::Action {
-            pending.set(name, parsed.to_string().into_bytes())?;
+            let canonical = parsed.to_string();
+            if canonical != *previous {
+                meter.charge(super::contract_gas::STORAGE_WRITE_GAS)?;
+            }
+            pending.set(name, canonical.into_bytes())?;
         }
     }
     if mode == AccessMode::Action {
@@ -248,6 +255,18 @@ mod tests {
         ).unwrap();
         assert!(receipt.gas_used > 0);
         assert_eq!(state.get("counter", "count").unwrap(), Some(&b"9"[..]));
+    }
+
+    #[test]
+    fn contract_gas_charges_persistent_reads_and_changed_writes() {
+        use super::super::contract_gas::{BASE_EXECUTION_GAS, STORAGE_READ_GAS, STORAGE_WRITE_GAS};
+        let mut state = ContractState::new();
+        let receipt = execute(COUNTER, "counter", "call increment(1)", AccessMode::Action, &mut state, 100_000).unwrap();
+        assert!(receipt.gas_used >= BASE_EXECUTION_GAS + STORAGE_READ_GAS + STORAGE_WRITE_GAS);
+        let before = receipt.gas_used;
+        let view = execute(COUNTER, "counter", "show current()", AccessMode::View, &mut state, 100_000).unwrap();
+        assert!(view.gas_used >= BASE_EXECUTION_GAS + STORAGE_READ_GAS);
+        assert!(view.gas_used < before + STORAGE_WRITE_GAS);
     }
 
     #[test]
