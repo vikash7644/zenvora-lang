@@ -3388,6 +3388,128 @@ fn run_signed_transfer_cli(
     Ok(())
 }
 
+fn submit_contract_transaction_cli(
+    store_path: &str,
+    chain_id: u64,
+    key_path: &str,
+    pool_path: &str,
+    operation: crate::contract_protocol::ContractOperation,
+    gas_limit_text: &str,
+    gas_price_text: &str,
+    max_fee_text: &str,
+) -> Result<(), String> {
+    let signing_key = read_chain_key(key_path)?;
+    let public_key = signing_key.verifying_key().to_bytes();
+    let sender = crate::chain_protocol::address_from_public_key(&public_key)?;
+    let gas_limit: u64 = gas_limit_text.parse().map_err(|_| "gas limit must be a positive integer")?;
+    let gas_price: u64 = gas_price_text.parse().map_err(|_| "gas price must be a positive integer")?;
+    let max_fee: u64 = max_fee_text.parse().map_err(|_| "maximum fee must be a nonnegative integer")?;
+    let (store, runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let height = store.blocks().last().and_then(|block| block.header.height.checked_add(1))
+        .ok_or_else(|| "cannot determine next block height".to_string())?;
+    let mut pool = crate::tx_pool::ContractTransactionPool::load_from_file(pool_path, &runtime, chain_id, height)?;
+    let pending_sender_nonce_count = pool.pending().iter()
+        .filter(|entry| entry.transaction.sender == sender).count() as u64;
+    let nonce = runtime.contract_state().nonce(&sender).checked_add(pending_sender_nonce_count)
+        .ok_or_else(|| "contract account nonce overflow".to_string())?;
+    let valid_until_height = height.checked_add(1_000)
+        .ok_or_else(|| "contract transaction expiry height overflow".to_string())?;
+    let mut transaction = crate::contract_protocol::ContractTransactionV1 {
+        chain_id, sender, nonce, gas_limit, max_fee, gas_price,
+        valid_until_height: Some(valid_until_height), operation, signature: Vec::new(),
+    };
+    transaction.signature = signing_key.sign(&transaction.signing_bytes()?).to_bytes().to_vec();
+    let envelope = crate::contract_executor::SignedContractTransaction {
+        transaction, public_key: public_key.to_vec(),
+    };
+    let transaction_id = pool.submit(&runtime, envelope)?;
+    pool.save_to_file(pool_path)?;
+    println!("QORVYNT contract transaction queued: {}", hex_encode_bytes(&transaction_id));
+    println!("Chain height={height} next_nonce={}", nonce + 1);
+    Ok(())
+}
+
+fn run_contract_pool_block_cli(
+    store_path: &str,
+    chain_id: u64,
+    transfer_pool_path: &str,
+    contract_pool_path: &str,
+    validator_key_paths: &[String],
+) -> Result<(), String> {
+    if validator_key_paths.is_empty() || validator_key_paths.len() > 42 {
+        return Err("supply between 1 and 42 validator key files".into());
+    }
+    let validator_keys: Vec<SigningKey> = validator_key_paths.iter()
+        .map(|path| read_chain_key(path))
+        .collect::<Result<_, _>>()?;
+    let (mut store, mut runtime) = crate::block_store::BlockStore::load_from_file(store_path, chain_id)?;
+    let previous = store.blocks().last().cloned().ok_or_else(|| "block store has no genesis block".to_string())?;
+    let height = previous.header.height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    let transfer_pool = crate::tx_pool::TransactionPool::load_from_file(transfer_pool_path, &runtime, chain_id, height)?;
+    let contract_pool = crate::tx_pool::ContractTransactionPool::load_from_file(contract_pool_path, &runtime, chain_id, height)?;
+    if transfer_pool.is_empty() && contract_pool.is_empty() {
+        return Err("both transfer and contract transaction pools are empty".into());
+    }
+    let envelopes = transfer_pool.pending().to_vec();
+    let contract_envelopes = contract_pool.pending().to_vec();
+    let mut candidate = runtime.clone();
+    let mut candidate_receipts = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        candidate_receipts.push(candidate.apply_signed_transaction(
+            &envelope.transaction, &envelope.public_key, chain_id, height,
+        )?);
+    }
+    let contract_receipts = candidate.apply_signed_contract_transactions(
+        &contract_envelopes, chain_id, height,
+    )?;
+    let transactions: Vec<crate::chain_protocol::TransactionV1> = envelopes.iter()
+        .map(|envelope| envelope.transaction.clone()).collect();
+    let transfer_tx_root = crate::chain_protocol::transaction_merkle_root(&transactions)?;
+    let transaction_root = if contract_envelopes.is_empty() {
+        transfer_tx_root
+    } else {
+        crate::chain_block::combined_contract_transaction_root(transfer_tx_root, &contract_envelopes)?
+    };
+    let transfer_receipt_root = chain_runtime::ChainRuntime::receipt_root_for(&candidate_receipts)?;
+    let receipt_root = if contract_envelopes.is_empty() {
+        transfer_receipt_root
+    } else {
+        crate::chain_block::combined_contract_receipt_root(transfer_receipt_root, &contract_receipts)?
+    };
+    let proposer = crate::chain_protocol::address_from_public_key(
+        &validator_keys[0].verifying_key().to_bytes()
+    )?;
+    let mut header = crate::chain_protocol::BlockHeaderV1 {
+        chain_id, height,
+        timestamp_secs: current_unix_seconds()?.max(previous.header.timestamp_secs),
+        parent_hash: previous.header.header_hash()?,
+        transaction_root, receipt_root,
+        state_root: candidate.try_state_root()?,
+        proposer, consensus_proof: Vec::new(),
+    };
+    crate::chain_consensus::sign_header_as_proposer(&mut header, &validator_keys[0])?;
+    for key in validator_keys.iter().skip(1) {
+        crate::chain_consensus::add_validator_signature(&mut header, key)?;
+    }
+    let receipts = crate::chain_block::execute_block_with_contracts(
+        &mut runtime, &header, &envelopes, &contract_envelopes, chain_id, Some(&previous.header),
+    )?;
+    if receipts != candidate_receipts || runtime.try_state_root()? != candidate.try_state_root()? {
+        return Err("executed block state or transfer receipts differ from candidate execution".into());
+    }
+    store.append_executed_block_with_contracts(
+        store_path, &runtime, &header, &envelopes, &contract_envelopes, &receipts,
+    )?;
+    let next_height = height.checked_add(1).ok_or_else(|| "block height overflow".to_string())?;
+    crate::tx_pool::TransactionPool::new(chain_id, next_height)?.save_to_file(transfer_pool_path)?;
+    crate::tx_pool::ContractTransactionPool::new(chain_id, next_height)?.save_to_file(contract_pool_path)?;
+    println!("QORVYNT contract-enabled block committed: height={height}");
+    println!("Transfer transactions={} contract transactions={}", receipts.len(), contract_envelopes.len());
+    println!("Validator signatures: {}", header.consensus_proof.len() / 96);
+    println!("State root: {}", hex_encode_bytes(&runtime.state_root()));
+    Ok(())
+}
+
 fn read_chain_key(path: &str) -> Result<SigningKey, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|error| format!("cannot read key file: {error}"))?;
