@@ -5,6 +5,7 @@ on:
     paths:
       - "compiler/parser.qv"
       - "compiler/bootstrap.qv"
+      - "compiler/fixtures/runnable_sample.qv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -124,7 +125,10 @@ jobs:
           target/debug/zv --run-bytecode-with-source self-hosted-stage1-compiler.zv2b compiler/bootstrap.qv self-hosted-stage2-compiler.zv2b > self-hosted-stage2-output.txt || { cat self-hosted-stage2-output.txt; exit 1; }
           grep -F 'ZENVORA_INPUT_BYTECODE_V2_JSON' self-hosted-stage2-output.txt
           ! grep -F 'ZENVORA_INPUT_BYTECODE_V2_FAIL' self-hosted-stage2-output.txt
-          target/debug/zv --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/bootstrap.qv self-hosted-stage3-compiler.zv2b > self-hosted-stage3-output.txt
+          target/debug/zv --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/bootstrap.qv self-hosted-stage3-compiler.zv2b > self-hosted-stage3-output.txt || { cat self-hosted-stage3-output.txt; exit 1; }
+          grep -F 'ZENVORA_INPUT_BYTECODE_V2_JSON' self-hosted-stage3-output.txt
+          ! grep -F 'ZENVORA_INPUT_BYTECODE_V2_FAIL' self-hosted-stage3-output.txt
           cmp self-hosted-stage2-compiler.zv2b self-hosted-stage3-compiler.zv2b
+          echo 'QORVYNT_STAGE1_STAGE2_STAGE3_BOOTSTRAP_PASS'
           target/debug/zv --run-bytecode-with-source self-hosted-stage2-compiler.zv2b compiler/fixtures/runnable_sample.qv self-hosted-stage2-sample.zv2b > self-hosted-stage2-sample-output.txt
           cmp self-hosted-stage2-sample.zv2b self-hosted-native-v2.zv2b
