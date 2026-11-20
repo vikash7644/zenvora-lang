@@ -110,7 +110,7 @@ fn parse_unary(tokens, pos) {
   }
   define t := at(tokens, pos)
   define op := get(t, "value")
-  define is_unary := contains(array("-", "!", "not"), op)
+  define is_unary := op == "-" or op == "!" or op == "not"
   if is_unary {
     define operand := parse_unary(tokens, pos + 1)
     if get(operand, "error") != "" {
