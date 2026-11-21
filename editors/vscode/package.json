@@ -29,7 +29,7 @@
       {
         "language": "qorvynt",
         "scopeName": "source.qorvynt",
-        "path": "./syntaxes/zenvora.tmLanguage.json"
+        "path": "./syntaxes/qorvynt.tmLanguage.json"
       }
     ]
   },
