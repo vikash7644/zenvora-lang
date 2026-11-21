@@ -1909,7 +1909,6 @@ where
 
 
 const BYTECODE_HEADER: &str = "QORVYNT_BYTECODE 1";
-const QORVYNT_HEADER: &str = "QORVYNT_BYTECODE 1";
 const LEGACY_BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
@@ -2250,7 +2249,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
         return deserialize_bytecode_v2(source);
     }
     let mut lines = source.lines();
-    if !matches!(lines.next(), Some(QORVYNT_HEADER) | Some(LEGACY_BYTECODE_HEADER)) {
+    if !matches!(lines.next(), Some(BYTECODE_HEADER) | Some(LEGACY_BYTECODE_HEADER)) {
         return Err("invalid bytecode header or unsupported bytecode version".into());
     }
     let mut code = Vec::new();
@@ -2702,7 +2701,7 @@ fn compile_plan_json_to_bytecode_v2(source: &str) -> Result<String, String> {
     }
     let plan: serde_json::Value = serde_json::from_str(source)
         .map_err(|error| format!("bytecode plan: invalid JSON: {error}"))?;
-    if plan_required_string(&plan, "format")? != "ZENVORA_BYTECODE_PLAN_1" {
+    if !matches!(plan_required_string(&plan, "format")?, "QORVYNT_BYTECODE_PLAN_1" | "ZENVORA_BYTECODE_PLAN_1") {
         return Err("bytecode plan: unsupported format".into());
     }
     let main = plan.get("main").and_then(serde_json::Value::as_array)
@@ -4534,7 +4533,7 @@ show char_at("hé🙂", 2)
     #[test]
     fn qorvynt_plan_json_emits_direct_executable_bytecode_v2() {
         let plan = r#"{
-          "format":"ZENVORA_BYTECODE_PLAN_1",
+          "format":"QORVYNT_BYTECODE_PLAN_1",
           "main":[
             {"op":"push_const","type":"number","value":21},
             {"op":"call","name":"twice","argc":1},
@@ -4564,9 +4563,9 @@ show char_at("hé🙂", 2)
 
     #[test]
     fn qorvynt_plan_json_rejects_invalid_jump_targets_and_unknown_opcodes() {
-        let invalid_target = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[{"op":"jump","target":99}],"functions":[]}"#;
+        let invalid_target = r#"{"format":"QORVYNT_BYTECODE_PLAN_1","main":[{"op":"jump","target":99}],"functions":[]}"#;
         assert!(super::compile_plan_json_to_bytecode_v2(invalid_target).unwrap_err().contains("outside its instruction region"));
-        let unknown = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[{"op":"eval_magic"}],"functions":[]}"#;
+        let unknown = r#"{"format":"QORVYNT_BYTECODE_PLAN_1","main":[{"op":"eval_magic"}],"functions":[]}"#;
         assert!(super::compile_plan_json_to_bytecode_v2(unknown).unwrap_err().contains("unsupported instruction"));
     }
 
