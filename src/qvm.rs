@@ -16,12 +16,10 @@ pub(super) fn compile(source_path: &str, output_path: &str) -> Result<(), String
     write_bytecode_v2(source_path, output_path)
 }
 
-/// Load only verified Bytecode v2 artifacts for the QVM-specific execution path.
-/// Legacy ZENVORA headers remain readable during the migration window.
+/// Load only canonical, verified QORVYNT Bytecode v2 artifacts.
 pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
     let serialized = read_bytecode_source(path)?;
-    if !(serialized.starts_with("QORVYNT_BYTECODE 2\n")
-        || serialized.starts_with("ZENVORA_BYTECODE 2\n"))
+    if !serialized.starts_with("QORVYNT_BYTECODE 2\n")
     {
         return Err("QVM requires a verified Bytecode v2 artifact".into());
     }
