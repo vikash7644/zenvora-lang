@@ -4418,7 +4418,7 @@ show unique(array())
 
     #[test]
     fn string_helpers_and_sum_cover_common_standard_library_operations() {
-        let output = execute(r#"show starts_with("qorvynt-lang", "zen")
+        let output = execute(r#"show starts_with("qorvynt-lang", "qor")
 show ends_with("qorvynt-lang", "lang")
 show replace("a-b-a", "a", "x")
 show split("red,green,blue", ",")
@@ -4493,8 +4493,8 @@ show clamp(-3, 0, 10)
     #[test]
     fn text_normalization_character_count_and_integer_conversion_work() {
         let output = execute(r#"show trim("  QORVYNT Lang  ")
-show lower("ZENvora")
-show upper("QORVYNT")
+show lower("QORVYNT")
+show upper("qorvynt")
 show char_count("hé🙂")
 show to_int("  -42 ")
 show to_int(17)
@@ -4786,7 +4786,7 @@ if enabled and (1 / 0 == 0) {
 } otherwise {
     show "short-circuit"
 }
-show "zen" + "vora"
+show "qor" + "vynt"
 "#;
 
         let expected = execute(source).unwrap();
