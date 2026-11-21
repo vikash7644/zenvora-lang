@@ -1,4 +1,4 @@
-# Zenvora Lang — Mission Status and Completion Gate
+# QORVYNT Lang — Mission Status and Completion Gate
 
 Last audited: 2026-10-23  
 Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, not a claim that the project is complete.
@@ -8,7 +8,7 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 - **Implemented, needs current CI proof**: code and tests exist; the current revision still needs green CI.
 - **Prototype / partial**: useful functionality exists, but known limitations remain.
 - **Pending**: not complete enough to claim release-ready.
-- **Out of scope for Zenvora Lang**: chain-specific work must be handled in the separate BHYVORIX Chain repository after that repository is verified.
+- **Out of scope for QORVYNT Lang**: chain-specific work must be handled in the separate BHYVORIX Chain repository after that repository is verified.
 
 ## QORVYNT Virtual Machine (QVM) milestone (2026-11-21)
 
@@ -44,9 +44,9 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 
 - Added `src/contract_runtime.rs`: the Rust compiler/VM now executes contract `action` and `view` calls against persisted integer state. Actions commit through isolated state overlays; failed execution/out-of-gas leaves prior state unchanged; views do not commit and cannot invoke actions.
 - The VM has an opt-in deterministic gas-metered execution path: base gas is charged once, then each executed opcode is charged using the versioned integer schedule. This is an experimental local schedule, not an activated blockchain protocol parameter.
-- Added `zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]` with versioned atomic snapshots. CI verifies persistent actions, view results, gas reporting, and no snapshot change on out-of-gas.
+- Added `qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]` with versioned atomic snapshots. CI verifies persistent actions, view results, gas reporting, and no snapshot change on out-of-gas.
 - Added `replay_block` to replay ordered contract calls on a candidate state and publish it only when every call succeeds and the final state root matches the supplied commitment. This is a local contract-call replay harness, not full signed block/consensus replay.
-- Added `zv --contract-artifact <contract.qv> <artifact.json>`: emits ABI metadata, source SHA-256, compiler version, and verifier-checked Bytecode v2. ABI output is experimental and currently reports state as integer and method types as dynamic; it is not a chain deployment format.
+- Added `qorvynt --contract-artifact <contract.qv> <artifact.json>`: emits ABI metadata, source SHA-256, compiler version, and verifier-checked Bytecode v2. ABI output is experimental and currently reports state as integer and method types as dynamic; it is not a chain deployment format.
 - Storage/gas tests, contract action/view tests, artifact tests, and the CLI integration test passed in main CI run [39368613130](https://github.com/vikash7644/zenvora-lang/actions/runs/39368613130). Bytecode v2 fuzz is still running on matching compiler-source revision [39368477353](https://github.com/vikash7644/zenvora-lang/actions/runs/39368477353).
 - Still pending: signed contract-call transaction envelope and signer authorization, fee reservation/settlement, chain-specific transaction receipts and replay integration, broad typed state (arrays/maps/strings), real-compiler browser playground backend, deployment ABI freeze and on-chain deployment/verification, independent security review. BHYVORIX Chain must live in its own repository; `vikash7644/bhyvorix-chain` has not been created/verified yet.
 
@@ -106,7 +106,7 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 4. Replace the demo-only playground execution path with a secure real-compiler integration and test parity.
 5. Implement and independently test contract state persistence, atomic rollback, authorization, deterministic gas, ABI, and deployment before describing contracts as production-ready.
 6. Finish editor/LSP and release packaging, then complete the release checklist.
-7. Only after Zenvora Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Do not mix chain branding into the Zenvora Lang name.
+7. Only after QORVYNT Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Do not mix chain branding into the QORVYNT Lang name.
 
 ## Continuity note
 
