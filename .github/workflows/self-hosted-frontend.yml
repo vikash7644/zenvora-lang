@@ -86,12 +86,41 @@ jobs:
           target/debug/zv --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
           cmp self-hosted-native-v2.zv2b self-hosted-compiler.zv2b
           grep -F 'ZENVORA_BYTECODE 2' self-hosted-compiler.zv2b
-          grep -F 'ZENVORA_BYTECODE 2' self-hosted-compiler-from-driver.zv2b
-          target/debug/zv --run-bytecode self-hosted-compiler-from-driver.zv2b > self-hosted-driver-output.txt
           target/debug/zv --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
           target/debug/zv --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-native-v2-output.txt
-          diff -u self-hosted-driver-output.txt self-hosted-native-v2-output.txt
+          python3 - <<'PY'
+          expected = [
+              "14", "42", "7", "7", "120", "7", "3", "v", "true", "ZV",
+              "2", "3", "true", "42", "2", "xv", "2", "5", "2", "42",
+              "3", "720", "55", "256", "6", "25", "21", "18", "228", "29",
+          ]
+          with open("self-hosted-bytecode-output.txt", encoding="utf-8") as artifact:
+              actual = artifact.read().splitlines()
+          if actual != expected:
+              raise SystemExit(f"internal Bytecode v2 regression mismatch:\\nexpected={expected!r}\\nactual={actual!r}")
+          print("QORVYNT_PLAN_TO_BYTECODE_V2_EXECUTION_PASS")
+          PY
+          awk '/^QORVYNT_INPUT_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output.txt > self-hosted-input-plan.json
+          test -s self-hosted-input-plan.json
+          python3 -m json.tool self-hosted-input-plan.json >/dev/null
+          awk '/^ZENVORA_INPUT_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output.txt > self-hosted-input-native-v2.json
+          python3 - <<'PY'
+          import json
+          with open("self-hosted-input-native-v2.json", encoding="utf-8") as source:
+              bytecode = json.load(source)
+          if not isinstance(bytecode, str) or not bytecode.startswith("ZENVORA_BYTECODE 2\\n"):
+              raise SystemExit("QORVYNT input compiler did not return canonical Bytecode v2 text")
+          with open("self-hosted-input-native-v2.zv2b", "w", encoding="utf-8", newline="") as output:
+              output.write(bytecode)
+          PY
+          target/debug/zv --emit-plan-bytecode-v2 self-hosted-input-plan.json self-hosted-input-plan-adapter.zv2b
+          cmp self-hosted-input-native-v2.zv2b self-hosted-input-plan-adapter.zv2b
+          target/debug/zv --run-bytecode self-hosted-compiler-from-driver.zv2b > self-hosted-driver-output.txt
+          target/debug/zv --run-bytecode self-hosted-input-plan-adapter.zv2b > self-hosted-input-plan-output.txt
+          target/debug/zv --run-bytecode self-hosted-input-native-v2.zv2b > self-hosted-input-native-v2-output.txt
+          diff -u self-hosted-input-plan-output.txt self-hosted-input-native-v2-output.txt
+          diff -u self-hosted-driver-output.txt self-hosted-input-native-v2-output.txt
           python3 - <<'PY'
           expected = [
               "14", "42", "7", "7", "120", "7", "3", "v", "true", "ZV",
@@ -99,11 +128,11 @@ jobs:
               "3", "720", "55", "256", "6", "25", "21", "18", "228", "29",
               "-", "!", "not",
           ]
-          with open("self-hosted-bytecode-output.txt", encoding="utf-8") as artifact:
+          with open("self-hosted-input-native-v2-output.txt", encoding="utf-8") as artifact:
               actual = artifact.read().splitlines()
           if actual != expected:
-              raise SystemExit(f"direct Bytecode v2 execution mismatch:\nexpected={expected!r}\nactual={actual!r}")
-          print("QORVYNT_PLAN_TO_BYTECODE_V2_EXECUTION_PASS")
+              raise SystemExit(f"caller-source Bytecode v2 execution mismatch:\\nexpected={expected!r}\\nactual={actual!r}")
+          print("QORVYNT_CALLER_SOURCE_TO_BYTECODE_V2_PARITY_PASS")
           PY
       - name: Verify deterministic plan translation and Bytecode v2 artifact
         shell: bash
