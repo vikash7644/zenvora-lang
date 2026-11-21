@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use super::Value;
 use super::super::{
-    MAX_COLLECTION_ITEMS, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUE_BYTES,
+    MAX_BYTECODE_STRING_BYTES, MAX_COLLECTION_ITEMS, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUE_BYTES,
     hex_encode, MAX_BYTECODE_STRING_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH,
 };
 
@@ -627,4 +627,15 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
         }
         _ => Err(format!("unknown builtin '{name}'")),
     }
+}
+
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
+        encoded.push(HEX[(byte >> 4) as usize] as char);
+        encoded.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    encoded
 }
