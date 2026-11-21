@@ -2249,7 +2249,8 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
         return deserialize_bytecode_v2(source);
     }
     let mut lines = source.lines();
-    if !matches!(lines.next(), Some(BYTECODE_HEADER) | Some(LEGACY_BYTECODE_HEADER)) {
+    let header = lines.next();
+    if header != Some(BYTECODE_HEADER) && header != Some(LEGACY_BYTECODE_HEADER) {
         return Err("invalid bytecode header or unsupported bytecode version".into());
     }
     let mut code = Vec::new();
