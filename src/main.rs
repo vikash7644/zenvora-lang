@@ -1908,7 +1908,9 @@ where
 }
 
 
-const BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
+const BYTECODE_HEADER: &str = "QORVYNT_BYTECODE 1";
+const QORVYNT_HEADER: &str = "QORVYNT_BYTECODE 1";
+const LEGACY_BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
@@ -2244,11 +2246,11 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_BYTECODE_BYTES {
         return Err(format!("bytecode file exceeds safety limit ({} bytes)", MAX_BYTECODE_BYTES));
     }
-    if source.lines().next().map(str::trim) == Some("ZENVORA_BYTECODE 2") {
+    if matches!(source.lines().next().map(str::trim), Some("QORVYNT_BYTECODE 2" | "ZENVORA_BYTECODE 2")) {
         return deserialize_bytecode_v2(source);
     }
     let mut lines = source.lines();
-    if lines.next() != Some(BYTECODE_HEADER) {
+    if !matches!(lines.next(), Some(QORVYNT_HEADER) | Some(LEGACY_BYTECODE_HEADER)) {
         return Err("invalid bytecode header or unsupported bytecode version".into());
     }
     let mut code = Vec::new();
@@ -2810,7 +2812,7 @@ fn write_qvm_bytecode(source_path: &str, output_path: &str) -> Result<(), String
 
 fn read_qvm_bytecode(path: &str) -> Result<Vec<Op>, String> {
     let serialized = read_bytecode_source(path)?;
-    if !serialized.starts_with("ZENVORA_BYTECODE 2\n") {
+    if !(serialized.starts_with("QORVYNT_BYTECODE 2\n") || serialized.starts_with("ZENVORA_BYTECODE 2\n")) {
         return Err("QVM requires a verified Bytecode v2 artifact".into());
     }
     deserialize_bytecode_v2(&serialized)
@@ -2832,7 +2834,7 @@ fn run_bytecode(path: &str) -> Result<(), String> {
     let serialized = read_bytecode_source(path)?;
     // Accept both supported bytecode generations through the same CLI entry point.
     // The v2 decoder performs framing, layout, opcode, and control-flow verification.
-    let code = if serialized.starts_with("ZENVORA_BYTECODE 2\n") {
+    let code = if serialized.starts_with("QORVYNT_BYTECODE 2\n") || serialized.starts_with("ZENVORA_BYTECODE 2\n") {
         deserialize_bytecode_v2(&serialized)?
     } else {
         deserialize_bytecode(&serialized)?
@@ -3709,13 +3711,13 @@ mod tests {
 
         super::write_qvm_bytecode(&source_text, &bytecode_text).unwrap();
         let serialized = std::fs::read_to_string(&bytecode_path).unwrap();
-        assert!(serialized.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert!(serialized.starts_with("QORVYNT_BYTECODE 2\n"));
         let code = super::read_qvm_bytecode(&bytecode_text).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&code, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["42"]);
 
-        std::fs::write(&bytecode_path, "ZENVORA_BYTECODE 1\nPUSH 42\nPRINT\n").unwrap();
+        std::fs::write(&bytecode_path, "QORVYNT_BYTECODE 1\nPUSH 42\nPRINT\n").unwrap();
         assert!(super::read_qvm_bytecode(&bytecode_text).unwrap_err().contains("Bytecode v2"));
         let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(bytecode_path);
@@ -3931,25 +3933,25 @@ mod tests {
 
     #[test]
     fn bytecode_verifier_rejects_inconsistent_function_parameter_metadata() {
-        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 -\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
+        let bytecode = "QORVYNT_BYTECODE 1\nCALL_TARGET 4 1 -\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
         assert!(error.contains("declares 0 parameter(s)") && error.contains("records 1"), "unexpected error: {error}");
     }
 
     #[test]
     fn bytecode_verifier_rejects_inconsistent_function_parameter_metadata_across_calls() {
-        let bytecode = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 first\nCALL_TARGET 4 1 second\nJUMP 5\nPUSH 1\nRETURN\n";
+        let bytecode = "QORVYNT_BYTECODE 1\nCALL_TARGET 4 1 first\nCALL_TARGET 4 1 second\nJUMP 5\nPUSH 1\nRETURN\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
         assert!(error.contains("inconsistent parameter metadata across call sites"), "unexpected error: {error}");
     }
 
     #[test]
     fn bytecode_verifier_rejects_duplicate_and_invalid_function_parameter_names() {
-        let duplicate = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 2 value,value\nPUSH 1\nPUSH 2\nJUMP 5\nRETURN\n";
+        let duplicate = "QORVYNT_BYTECODE 1\nCALL_TARGET 4 2 value,value\nPUSH 1\nPUSH 2\nJUMP 5\nRETURN\n";
         let error = super::deserialize_bytecode(duplicate).unwrap_err();
         assert!(error.contains("duplicate parameter"), "unexpected error: {error}");
 
-        let invalid = "ZENVORA_BYTECODE 1\nCALL_TARGET 4 1 bad-name\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
+        let invalid = "QORVYNT_BYTECODE 1\nCALL_TARGET 4 1 bad-name\nPUSH 1\nPRINT\nJUMP 5\nRETURN\n";
         let error = super::deserialize_bytecode(invalid).unwrap_err();
         assert!(error.contains("invalid parameter name"), "unexpected error: {error}");
     }
@@ -3957,9 +3959,9 @@ mod tests {
     #[test]
     fn bytecode_verifier_rejects_stack_underflow_and_bad_control_flow() {
         for bytecode in [
-            "ZENVORA_BYTECODE 1\nPRINT\nJUMP 2\n",
-            "ZENVORA_BYTECODE 1\nPUSH 1\nADD\nJUMP 3\n",
-            "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 99\nJUMP 3\n",
+            "QORVYNT_BYTECODE 1\nPRINT\nJUMP 2\n",
+            "QORVYNT_BYTECODE 1\nPUSH 1\nADD\nJUMP 3\n",
+            "QORVYNT_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 99\nJUMP 3\n",
         ] {
             let error = super::deserialize_bytecode(bytecode).unwrap_err();
             assert!(error.contains("verifier") || error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
@@ -3976,7 +3978,7 @@ mod tests {
     #[test]
     fn bytecode_verifier_rejects_mixed_reachable_return_kinds() {
         let bytecode = concat!(
-            "ZENVORA_BYTECODE 1\n",
+            "QORVYNT_BYTECODE 1\n",
             "CALL_TARGET 3 0 -\n",
             "PRINT\n",
             "JUMP 8\n",
@@ -3993,7 +3995,7 @@ mod tests {
     #[test]
     fn bytecode_verifier_rejects_function_returns_with_stack_residue() {
         let bytecode = concat!(
-            "ZENVORA_BYTECODE 1\n",
+            "QORVYNT_BYTECODE 1\n",
             "CALL_TARGET 7 0 -\n",
             "PUSH 10\n",
             "ADD\n",
@@ -4011,14 +4013,14 @@ mod tests {
 
     #[test]
     fn bytecode_verifier_rejects_structural_errors_in_unreachable_code() {
-        let bytecode = "ZENVORA_BYTECODE 1\nJUMP 3\nJUMP 99\nJUMP 3\n";
+        let bytecode = "QORVYNT_BYTECODE 1\nJUMP 3\nJUMP 99\nJUMP 3\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
         assert!(error.contains("invalid instruction") || error.contains("invalid target"), "unexpected error: {error}");
     }
 
     #[test]
     fn bytecode_verifier_rejects_inconsistent_stack_depth_at_merge() {
-        let bytecode = "ZENVORA_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 4\nPUSH 1\nJUMP 5\nJUMP 5\nPRINT\nJUMP 7\n";
+        let bytecode = "QORVYNT_BYTECODE 1\nPUSH_BOOL true\nJUMP_IF_FALSE 4\nPUSH 1\nJUMP 5\nJUMP 5\nPRINT\nJUMP 7\n";
         let error = super::deserialize_bytecode(bytecode).unwrap_err();
         assert!(error.contains("inconsistent stack depth") || error.contains("invalid"), "unexpected error: {error}");
     }
@@ -4037,7 +4039,7 @@ mod tests {
         let source = "define total := 20 + 22\nshow total\nif total >= 40 {\nshow true\n} otherwise {\nshow false\n}\nfn twice(n) {\nreturn n * 2\n}\nshow twice(21)\n";
         let compiled = compile(source).unwrap();
         let serialized = super::serialize_bytecode(&compiled).unwrap();
-        assert!(serialized.starts_with("ZENVORA_BYTECODE 1\n"));
+        assert!(serialized.starts_with("QORVYNT_BYTECODE 1\n"));
         let restored = super::deserialize_bytecode(&serialized).unwrap();
         assert_eq!(restored, compiled);
         let mut output = Vec::new();
@@ -4082,13 +4084,13 @@ mod tests {
     #[test]
     fn bytecode_rejects_unknown_instructions_and_invalid_jumps() {
         assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 9\n").unwrap_err().contains("unsupported bytecode version"));
-        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nMAGIC\n").unwrap_err().contains("invalid bytecode instruction"));
-        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nJUMP 99\n").unwrap_err().contains("invalid instruction"));
-        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nCALL_TARGET 9 0 -\n").unwrap_err().contains("invalid function entry"));
-        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", "PUSH 1\n".repeat(super::MAX_BYTECODE_INSTRUCTIONS + 1))).unwrap_err().contains("instruction count exceeds safety limit"));
-        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\nPUSH_STRING_HEX {}", "61".repeat(super::MAX_BYTECODE_STRING_BYTES + 1))).unwrap_err().contains("string exceeds safety limit"));
-        assert!(super::deserialize_bytecode("ZENVORA_BYTECODE 1\nBUILTIN array 1025\n").unwrap_err().contains("argument count exceeds safety limit"));
-        assert!(super::deserialize_bytecode(&format!("ZENVORA_BYTECODE 1\n{}", " ".repeat(super::MAX_BYTECODE_BYTES))).unwrap_err().contains("file exceeds safety limit"));
+        assert!(super::deserialize_bytecode("QORVYNT_BYTECODE 1\nMAGIC\n").unwrap_err().contains("invalid bytecode instruction"));
+        assert!(super::deserialize_bytecode("QORVYNT_BYTECODE 1\nJUMP 99\n").unwrap_err().contains("invalid instruction"));
+        assert!(super::deserialize_bytecode("QORVYNT_BYTECODE 1\nCALL_TARGET 9 0 -\n").unwrap_err().contains("invalid function entry"));
+        assert!(super::deserialize_bytecode(&format!("QORVYNT_BYTECODE 1\n{}", "PUSH 1\n".repeat(super::MAX_BYTECODE_INSTRUCTIONS + 1))).unwrap_err().contains("instruction count exceeds safety limit"));
+        assert!(super::deserialize_bytecode(&format!("QORVYNT_BYTECODE 1\nPUSH_STRING_HEX {}", "61".repeat(super::MAX_BYTECODE_STRING_BYTES + 1))).unwrap_err().contains("string exceeds safety limit"));
+        assert!(super::deserialize_bytecode("QORVYNT_BYTECODE 1\nBUILTIN array 1025\n").unwrap_err().contains("argument count exceeds safety limit"));
+        assert!(super::deserialize_bytecode(&format!("QORVYNT_BYTECODE 1\n{}", " ".repeat(super::MAX_BYTECODE_BYTES))).unwrap_err().contains("file exceeds safety limit"));
     }
 
     #[test]
@@ -4548,7 +4550,7 @@ show char_at("hé🙂", 2)
           ]
         }"#;
         let encoded = super::compile_plan_json_to_bytecode_v2(plan).unwrap();
-        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert!(encoded.starts_with("QORVYNT_BYTECODE 2\n"));
         let parsed = super::bytecode_v2::parse_v2_file(&encoded).unwrap();
         assert_eq!(parsed.layout.main_end, 4);
         assert_eq!(parsed.layout.functions.len(), 1);
@@ -4655,7 +4657,7 @@ show index_of(array(7, "x", true), false)
         ).unwrap();
 
         let encoded = std::fs::read_to_string(&bytecode_path).unwrap();
-        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert!(encoded.starts_with("QORVYNT_BYTECODE 2\n"));
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&decoded, &mut |line| output.push(line)).unwrap();
@@ -4674,7 +4676,7 @@ show index_of(array(7, "x", true), false)
         assert_eq!(layout.functions[1].return_kind, super::bytecode_v2::ReturnKind::Void);
 
         let encoded = super::serialize_bytecode_v2(&code, &layout).unwrap();
-        assert!(encoded.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert!(encoded.starts_with("QORVYNT_BYTECODE 2\n"));
         assert!(encoded.contains("FUNCTION 4 8 1 value value"));
         assert!(encoded.contains("FUNCTION 8 11 1 void value"));
         let decoded = super::deserialize_bytecode(&encoded).unwrap();
@@ -4685,7 +4687,7 @@ show index_of(array(7, "x", true), false)
 
     #[test]
     fn bytecode_v2_loader_verifies_and_executes_metadata_driven_function() {
-        let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 8 1 value amount\nCODE\nPUSH 41\nCALL 4 1\nPRINT\nJUMP 4\nLOAD amount\nPUSH 1\nADD\nRETURN_VALUE\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 8 1 value amount\nCODE\nPUSH 41\nCALL 4 1\nPRINT\nJUMP 4\nLOAD amount\nPUSH 1\nADD\nRETURN_VALUE\n";
         let parsed = super::bytecode_v2::parse_v2_file(source).unwrap();
         let serialized = super::bytecode_v2::serialize_v2_file(&parsed).unwrap();
         let decoded = super::deserialize_bytecode(&serialized).unwrap();
@@ -4696,7 +4698,7 @@ show index_of(array(7, "x", true), false)
 
     #[test]
     fn bytecode_v2_loader_rejects_invalid_code_before_execution() {
-        let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n";
         assert!(super::deserialize_bytecode(source).unwrap_err().contains("stack underflow"));
     }
 
