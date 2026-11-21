@@ -629,3 +629,63 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stack_push_and_pop_keep_byte_accounting_consistent() {
+        let mut stack = Vec::new();
+        let mut bytes = 0usize;
+        push_stack_value(&mut stack, &mut bytes, Value::Str("qorvynt".into())).unwrap();
+        assert_eq!(bytes, 7);
+        let value = pop_stack_value(&mut stack, &mut bytes, "underflow").unwrap();
+        assert_eq!(value, Value::Str("qorvynt".into()));
+        assert_eq!(bytes, 0);
+    }
+
+    #[test]
+    fn stack_pop_reports_the_callers_underflow_message() {
+        let mut stack = Vec::new();
+        let mut bytes = 0usize;
+        let error = pop_stack_value(&mut stack, &mut bytes, "QVM stack underflow").unwrap_err();
+        assert_eq!(error, "QVM stack underflow");
+        assert_eq!(bytes, 0);
+    }
+
+    #[test]
+    fn indexed_array_write_updates_only_an_existing_slot() {
+        let mut value = Value::Array(vec![Value::Int(1), Value::Int(2)]);
+        set_indexed_value(&mut value, Value::Int(1), Value::Int(9)).unwrap();
+        assert_eq!(value, Value::Array(vec![Value::Int(1), Value::Int(9)]));
+        let error = set_indexed_value(&mut value, Value::Int(2), Value::Int(3)).unwrap_err();
+        assert!(error.contains("out of bounds"));
+    }
+
+    #[test]
+    fn indexed_map_write_accepts_string_keys_and_rejects_other_types() {
+        let mut value = Value::Map(std::collections::BTreeMap::new());
+        set_indexed_value(&mut value, Value::Str("mode".into()), Value::Bool(true)).unwrap();
+        assert_eq!(value_to_string(&value), "{\"mode\": true}");
+        let error = set_indexed_value(&mut value, Value::Int(0), Value::Bool(false)).unwrap_err();
+        assert!(error.contains("map index must be a string"));
+    }
+
+    #[test]
+    fn nested_values_obey_depth_and_size_limits() {
+        let mut value = Value::Int(1);
+        for _ in 0..=MAX_VALUE_DEPTH {
+            value = Value::Array(vec![value]);
+        }
+        let error = ensure_value_depth(&value).unwrap_err();
+        assert!(error.contains("nesting exceeds safety limit"));
+    }
+
+    #[test]
+    fn runtime_state_accounting_rejects_over_budget_updates() {
+        let error = runtime_state_bytes_after_sizes(MAX_RUNTIME_STATE_BYTES, 0, 1).unwrap_err();
+        assert!(error.contains("live variable/call-frame values exceed safety limit"));
+        assert_eq!(runtime_state_bytes_after_sizes(100, 40, 60).unwrap(), 120);
+    }
+}
+
