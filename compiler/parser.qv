@@ -2647,3 +2647,18 @@ if not get(malformed_instruction_result, "ok") and get(malformed_instruction_res
   show string_jump_result
   show function_bad_jump_result
 }
+
+
+# Differential regression: every statement in the caller-supplied source must
+# survive parsing, plan construction, and plan-VM execution. This catches silent
+# truncation at the end of an input file before comparing serialized Bytecode v2.
+define input_plan_execution := execute_bytecode_plan(get(input_compile_result, "plan"))
+define input_plan_output := get(input_plan_execution, "output")
+if get(input_compile_result, "ok") and get(input_plan_execution, "ok") and len(input_plan_output) == 33 and get(input_plan_output, 30) == "-" and get(input_plan_output, 31) == "!" and get(input_plan_output, 32) == "not" {
+  show "QORVYNT_INPUT_PLAN_ALL_LINES_PASS"
+} otherwise {
+  show "QORVYNT_INPUT_PLAN_ALL_LINES_FAIL"
+  show input_compile_result
+  show input_plan_execution
+  show len(input_plan_output)
+}
