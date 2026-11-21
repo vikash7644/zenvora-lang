@@ -1,6 +1,6 @@
-# Zenvora Lang — Developer Getting Started
+# QORVYNT Lang — Developer Getting Started
 
-Zenvora Lang is a small, independent programming language for the Zenvora ecosystem. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.qv` extension and run through the `zv` command.
+QORVYNT Lang is a small, independent programming language for the QORVYNT ecosystem. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.qv` extension and run through the `qorvynt` command.
 
 > **Prototype status:** this is an early developer preview. The contract DSL is not a persistent smart-contract runtime, the local chain code is not a public testnet, and Bytecode v2 is experimental. Do not use it for real funds or production contracts.
 
@@ -21,8 +21,8 @@ To run the compiler directly from the repository, prefix commands with `cargo ru
 
 Create `hello.qv` with this source:
 
-```zv
-define name := "Zenvora"
+```qorvynt
+define name := "QORVYNT"
 define answer := multiply(6, 7)
 
 show "Hello, " + name
@@ -43,7 +43,7 @@ cargo run -- --check hello.qv
 Expected output from the first command:
 
 ```text
-Hello, Zenvora
+Hello, QORVYNT
 42
 ```
 
@@ -71,7 +71,7 @@ Run an example with `cargo run -- examples/functions.qv`. GitHub Actions runs th
 
 ### Variables and expressions
 
-```zv
+```qorvynt
 define count := 3
 count := count + 1
 show count
@@ -82,7 +82,7 @@ Values include signed 64-bit integers, booleans, strings, arrays, and maps. Inte
 
 ### Conditions and loops
 
-```zv
+```qorvynt
 define n := 0
 repeat n < 4 {
     show n
@@ -94,7 +94,7 @@ Use `if condition { ... } otherwise { ... }` for branching. `break` exits the ne
 
 ### Functions
 
-```zv
+```qorvynt
 fn square(value) {
     return value * value
 }
@@ -105,7 +105,7 @@ Functions support parameters, expression calls, return values, and recursion. Ea
 
 ### Collections
 
-```zv
+```qorvynt
 define numbers := array(10, 20, 30)
 show numbers[1]
 show len(numbers)
@@ -126,15 +126,15 @@ See [the module example](../examples/modules.qv) and its imported files.
 The default bytecode format is version 1:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.zvb
-cargo run -- --run-bytecode functions.zvb
+cargo run -- --emit-bytecode examples/functions.qv functions.qorvyntb
+cargo run -- --run-bytecode functions.qorvyntb
 ```
 
 Experimental version 2 emission is opt-in:
 
 ```sh
-cargo run -- --emit-bytecode-v2 examples/functions.qv functions.zv2b
-cargo run -- --run-bytecode functions.zv2b
+cargo run -- --emit-bytecode-v2 examples/functions.qv functions.qorvynt2b
+cargo run -- --run-bytecode functions.qorvynt2b
 ```
 
 V2 adds explicit program/function metadata and structural, control-flow, and stack verification. The parser/verifier has deterministic adversarial tests, round-trip/property checks, and fuzz campaigns in CI; this is not an independent security audit. The grammar and opcode set remain provisional, and v1 remains the default. Read [Bytecode v1](bytecode-v1.md) and [Bytecode v2 design and status](bytecode-v2-design.md).
