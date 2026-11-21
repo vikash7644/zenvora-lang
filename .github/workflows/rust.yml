@@ -104,19 +104,19 @@ jobs:
         run: cargo run --locked -- examples/modules.qv
 
       - name: Compile example to bytecode v1
-        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/zenvora-functions.qorvyntb
+        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/qorvynt-functions.qvb
 
       - name: Execute compiled bytecode v1
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.qorvyntb
+        run: cargo run --locked -- --run-bytecode /tmp/qorvynt-functions.qvb
 
       - name: Compile example to experimental bytecode v2
-        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/zenvora-functions.qorvynt2b
+        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/qorvynt-functions.qv2b
 
       - name: Check bytecode v2 header
-        run: grep -q '^QORVYNT_BYTECODE 2$' /tmp/zenvora-functions.qorvynt2b
+        run: grep -q '^QORVYNT_BYTECODE 2$' /tmp/qorvynt-functions.qv2b
 
       - name: Execute verified bytecode v2
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.qorvynt2b
+        run: cargo run --locked -- --run-bytecode /tmp/qorvynt-functions.qv2b
       - name: Compile and execute a QVM artifact
         shell: bash
         run: |
@@ -148,9 +148,9 @@ jobs:
           grep -q '"service":"qorvynt-compiler-api"' /tmp/qorvynt-api-health.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
-            --data '{"source":"define a := 10\\ndefine b := 20\\nshow a + b\\nshow a * 2"}' \
+            --data '{"source":"define a := 10\ndefine b := 20\nshow a + b\nshow a * 2"}' \
             http://127.0.0.1:18787/compile-run > /tmp/qorvynt-api-result.json
-          grep -q '"output":"30\\\\n20"' /tmp/qorvynt-api-result.json
+          grep -Fq '"output":"30\n20"' /tmp/qorvynt-api-result.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
             --data '{"source":"show missing_variable"}' \
