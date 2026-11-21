@@ -14,10 +14,11 @@ pub(super) use helpers::{
     push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update,
     set_indexed_value, value_to_string,
 };
+pub(super) use bytecode::{deserialize_v2, hex_decode};
 pub(crate) use bytecode::Op;
 pub(crate) use value::Value;
 
-use super::{deserialize_bytecode_v2, read_bytecode_source, write_bytecode_v2};
+use super::{read_bytecode_source, write_bytecode_v2};
 use std::collections::HashMap;
 use super::contract_gas;
 
@@ -36,7 +37,7 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
     {
         return Err("QVM requires a verified Bytecode v2 artifact".into());
     }
-    deserialize_bytecode_v2(&serialized)
+    bytecode::deserialize_v2(&serialized)
 }
 
 /// Execute a previously verified QVM artifact using the QVM instruction loop.
