@@ -2810,7 +2810,7 @@ fn write_qvm_bytecode(source_path: &str, output_path: &str) -> Result<(), String
 
 fn read_qvm_bytecode(path: &str) -> Result<Vec<Op>, String> {
     let serialized = read_bytecode_source(path)?;
-    if !serialized.starts_with("ZENVORA_BYTECODE 2\\n") {
+    if !serialized.starts_with("ZENVORA_BYTECODE 2\n") {
         return Err("QVM requires a verified Bytecode v2 artifact".into());
     }
     deserialize_bytecode_v2(&serialized)
@@ -3703,19 +3703,19 @@ mod tests {
         let suffix = std::process::id();
         let source_path = base.join(format!("qorvynt-qvm-{suffix}.qv"));
         let bytecode_path = base.join(format!("qorvynt-qvm-{suffix}.qvmb"));
-        std::fs::write(&source_path, "define answer := 6 * 7\\nshow answer\\n").unwrap();
+        std::fs::write(&source_path, "define answer := 6 * 7\nshow answer\n").unwrap();
         let source_text = source_path.to_string_lossy().to_string();
         let bytecode_text = bytecode_path.to_string_lossy().to_string();
 
         super::write_qvm_bytecode(&source_text, &bytecode_text).unwrap();
         let serialized = std::fs::read_to_string(&bytecode_path).unwrap();
-        assert!(serialized.starts_with("ZENVORA_BYTECODE 2\\n"));
+        assert!(serialized.starts_with("ZENVORA_BYTECODE 2\n"));
         let code = super::read_qvm_bytecode(&bytecode_text).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&code, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["42"]);
 
-        std::fs::write(&bytecode_path, "ZENVORA_BYTECODE 1\\nPUSH 42\\nPRINT\\n").unwrap();
+        std::fs::write(&bytecode_path, "ZENVORA_BYTECODE 1\nPUSH 42\nPRINT\n").unwrap();
         assert!(super::read_qvm_bytecode(&bytecode_text).unwrap_err().contains("Bytecode v2"));
         let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(bytecode_path);
