@@ -1,8 +1,8 @@
 //! QORVYNT Virtual Machine artifact boundary.
 //!
 //! This module owns QVM artifact loading and the instruction-dispatch loop.
-//! Shared value, builtin, and safety-budget helpers are still supplied by the
-//! Rust CLI module and are the next extraction boundary.
+//! Shared value, builtin, and safety-budget helpers now live in the QVM
+//! submodule; CLI entry points import only the compatibility re-exports.
 
 mod bytecode;
 mod value;
