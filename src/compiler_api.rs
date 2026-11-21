@@ -1,4 +1,4 @@
-//! Loopback-only HTTP API for compiling and executing Zenvora Lang source.
+//! Loopback-only HTTP API for compiling and executing QORVYNT Lang source.
 //! This is a development service; it intentionally binds to 127.0.0.1 by default.
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -12,7 +12,7 @@ pub fn serve(port: u16) -> Result<(), String> {
     let address = format!("127.0.0.1:{port}");
     let listener = TcpListener::bind(&address)
         .map_err(|e| format!("cannot bind compiler API at {address}: {e}"))?;
-    println!("Zenvora compiler API listening at http://{address}");
+    println!("QORVYNT compiler API listening at http://{address}");
     println!("Development-only: loopback binding; press Ctrl+C to stop.");
     for incoming in listener.incoming() {
         match incoming {
@@ -54,7 +54,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     return respond(stream, "404 Not Found", &json!({"ok":false,"error":"use GET /health or POST /compile-run"}));
                 }
                 if request_line.starts_with("GET ") {
-                    return respond(stream, "200 OK", &json!({"ok":true,"service":"zenvora-compiler-api","compiler":"Rust","mode":"development"}));
+                    return respond(stream, "200 OK", &json!({"ok":true,"service":"qorvynt-compiler-api","compiler":"Rust","mode":"development"}));
                 }
                 let mut length = None;
                 for line in lines {
