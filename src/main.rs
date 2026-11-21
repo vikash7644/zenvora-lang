@@ -3700,7 +3700,7 @@ mod tests {
         assert_eq!(output, vec!["42"]);
 
         std::fs::write(&bytecode_path, "QORVYNT_BYTECODE 1\nPUSH 42\nPRINT\n").unwrap();
-        assert!(super::read_qvm_bytecode(&bytecode_text).unwrap_err().contains("Bytecode v2"));
+        assert!(super::qvm::load(&bytecode_text).unwrap_err().contains("Bytecode v2"));
         let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(bytecode_path);
     }
