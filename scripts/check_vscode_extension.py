@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXT = ROOT / "editors" / "vscode"
 PACKAGE = EXT / "package.json"
-GRAMMAR = EXT / "syntaxes" / "zenvora.tmLanguage.json"
+GRAMMAR = EXT / "syntaxes" / "qorvynt.tmLanguage.json"
 CONFIG = EXT / "language-configuration.json"
 
 
@@ -43,7 +43,7 @@ if not grammar_entry:
     fail("package.json does not register a grammar for 'qorvynt'")
 if grammar_entry.get("scopeName") != grammar.get("scopeName"):
     fail("package.json and TextMate grammar scopeName differ")
-if grammar_entry.get("path") != "./syntaxes/zenvora.tmLanguage.json":
+if grammar_entry.get("path") != "./syntaxes/qorvynt.tmLanguage.json":
     fail("package.json grammar path does not match the checked-in file")
 
 checked = 0
