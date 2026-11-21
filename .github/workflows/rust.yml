@@ -1,4 +1,4 @@
-name: Zenvora Lang CI
+name: QORVYNT CI
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: zenvora-lang-ci-v3-${{ github.workflow }}-${{ github.ref }}
+  group: qorvynt-lang-ci-v3-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -38,12 +38,12 @@ jobs:
         run: cargo test --locked --all-targets
 
       - name: Build optimized release CLI
-        run: cargo build --locked --release --bin zv
+        run: cargo build --locked --release --bin qorvynt
 
       - name: Validate distributable Rust package
         run: cargo package --locked
 
-      - name: Execute every Zenvora Lang example
+      - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
       - name: Test persistent contract CLI, gas, and rollback
@@ -53,15 +53,15 @@ jobs:
         run: bash scripts/test_contract_artifact.sh
 
       - name: Smoke-test optimized release CLI version
-        run: ./target/release/zv --version
+        run: ./target/release/qorvynt --version
 
       - name: Smoke-test optimized release example
-        run: ./target/release/zv examples/hello.qv | grep -Fxq 35
+        run: ./target/release/qorvynt examples/hello.qv | grep -Fxq 35
 
       - name: Run hello example
         run: cargo run --locked -- examples/hello.qv
 
-      - name: Run Zenvora Lang language tour
+      - name: Run QORVYNT language tour
         run: cargo run --locked -- examples/qorvynt-language-tour.qv
 
       - name: Run loop-control example
@@ -97,26 +97,26 @@ jobs:
       - name: Run contract DSL example
         run: cargo run --locked -- examples/contracts.qv
 
-      - name: Run Zenvora Lang transaction-rule checks
+      - name: Run QORVYNT transaction-rule checks
         run: cargo run --locked -- examples/chain_transfer.qv
 
       - name: Run module import example
         run: cargo run --locked -- examples/modules.qv
 
       - name: Compile example to bytecode v1
-        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/zenvora-functions.qorvyntb
 
       - name: Execute compiled bytecode v1
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.qorvyntb
 
       - name: Compile example to experimental bytecode v2
-        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/zenvora-functions.qorvynt2b
 
       - name: Check bytecode v2 header
-        run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.zv2b
+        run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.qorvynt2b
 
       - name: Execute verified bytecode v2
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.qorvynt2b
 
       - name: Compile and execute a QVM artifact
         shell: bash
