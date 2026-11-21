@@ -107,12 +107,16 @@ fn parse_unary(tokens, pos) {
   }
   define t := at(tokens, pos)
   define op := get(t, "value")
-  if op == "-" or op == "!" or op == "not" {
-    define operand := parse_unary(tokens, pos + 1)
-    if get(operand, "error") != "" {
-      return operand
+  if get(t, "kind") == "operator" {
+    if op == "-" or op == "!" or op == "not" {
+      define operand := parse_unary(tokens, pos + 1)
+      if get(operand, "error") != "" {
+        return operand
+      }
+      return result(node("unary", op, get(operand, "ast"), "", get(t, "line")), get(operand, "pos"), "")
+    } otherwise {
+      return parse_postfix(tokens, pos)
     }
-    return result(node("unary", op, get(operand, "ast"), "", get(t, "line")), get(operand, "pos"), "")
   } otherwise {
     return parse_postfix(tokens, pos)
   }
