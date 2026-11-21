@@ -17,6 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
+use qvm::Op;
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -125,12 +126,6 @@ fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), String> {
     out.push(Token::End);
     columns.push(chars.len() + 1);
     Ok((out, columns))
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Op {
-    Push(i64), PushString(String), PushBool(bool), Load(String), Store(String), Declare(String), Add, Sub, Mul, Div, Neg, Not, And, Or, Print,
-    Eq, Ne, Lt, Le, Gt, Ge, Index, SetIndex(String), JumpIfFalse(usize), JumpIfFalseKeep(usize), JumpIfTrueKeep(usize), Jump(usize), Call(String, usize), Builtin(String, usize), CallTarget { target: usize, params: Vec<String>, arg_count: usize }, Return, ReturnValue,
 }
 
 struct Parser { tokens: Vec<Token>, columns: Vec<usize>, pos: usize, nesting_depth: usize, error_column_override: Option<usize>, code: Vec<Op> }
