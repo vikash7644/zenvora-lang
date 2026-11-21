@@ -1,10 +1,13 @@
 //! QORVYNT Virtual Machine artifact boundary.
+
+mod bytecode;
+pub(super) use bytecode::Op;
 //!
 //! This module owns the QVM-specific compile/load/run entry points. The current
 //! instruction executor is still hosted by the Rust reference CLI; moving this
 //! boundary out first gives the runtime a stable seam for later extraction.
 
-use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2, Op};
+use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2};
 
 /// Compile QORVYNT source into a verified Bytecode v2 QVM artifact.
 pub(super) fn compile(source_path: &str, output_path: &str) -> Result<(), String> {
