@@ -12,10 +12,10 @@ fn run_program(source: &str) -> Output {
         id
     ));
     fs::write(&path, source).expect("write temporary Zenvora program");
-    let output = Command::new(env!("CARGO_BIN_EXE_zenvora"))
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt_reference_interpreter"))
         .arg(&path)
         .output()
-        .expect("run Zenvora interpreter");
+        .expect("run QORVYNT interpreter");
     let _ = fs::remove_file(path);
     output
 }
