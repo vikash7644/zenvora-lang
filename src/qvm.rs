@@ -1,8 +1,8 @@
 //! QORVYNT Virtual Machine artifact boundary.
 //!
-//! This module owns the QVM-specific compile/load/run entry points. The current
-//! instruction executor is still hosted by the Rust reference CLI; moving this
-//! boundary out first gives the runtime a stable seam for later extraction.
+//! This module owns QVM artifact loading and the instruction-dispatch loop.
+//! Shared value, builtin, and safety-budget helpers are still supplied by the
+//! Rust CLI module and are the next extraction boundary.
 
 mod bytecode;
 mod value;
@@ -38,17 +38,17 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
     deserialize_bytecode_v2(&serialized)
 }
 
-/// Execute a previously verified QVM artifact using the current host executor.
+/// Execute a previously verified QVM artifact using the QVM instruction loop.
 pub(super) fn execute(path: &str) -> Result<(), String> {
     let code = load(path)?;
     execute_ops_with_output(&code, &mut |line| println!("{line}"))
 }
 
 
-/// Execute verified in-memory bytecode through the QVM boundary.
+/// Execute verified in-memory bytecode through the QVM-owned instruction loop.
 ///
-/// Compiler services and deterministic runtimes should depend on this API rather
-/// than reaching into the CLI module's host-executor implementation.
+/// Compiler services and deterministic runtimes depend on this API instead of
+/// calling the CLI execution wrapper.
 pub(super) fn execute_ops_with_output<F>(code: &[Op], output: &mut F) -> Result<(), String>
 where
     F: FnMut(String),
