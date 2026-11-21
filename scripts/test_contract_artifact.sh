@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-bin="./target/release/zv"
+bin="./target/release/qorvynt"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-cat > "$tmp/counter.zv" <<'ZV'
+cat > "$tmp/counter.qorvynt" <<'ZV'
 contract Counter {
 state count := 0
 action increment(amount) {
@@ -17,7 +17,7 @@ return count
 }
 ZV
 
-"$bin" --contract-artifact "$tmp/counter.zv" "$tmp/counter.artifact.json"
+"$bin" --contract-artifact "$tmp/counter.qorvynt" "$tmp/counter.artifact.json"
 python3 - "$tmp/counter.artifact.json" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as stream:
