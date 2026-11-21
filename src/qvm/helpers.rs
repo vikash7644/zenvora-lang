@@ -1,10 +1,11 @@
 //! Shared value operations and safety accounting used by the QVM runtime.
 use std::collections::HashMap;
 use super::Value;
-use super::super::{
-    hex_encode, MAX_BYTECODE_STRING_BYTES, MAX_COLLECTION_ITEMS, MAX_RUNTIME_STATE_BYTES,
+use super::{
+    MAX_BYTECODE_STRING_BYTES, MAX_COLLECTION_ITEMS, MAX_RUNTIME_STATE_BYTES,
     MAX_STACK_VALUE_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH,
 };
+use super::super::hex_encode;
 
 pub(crate) fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
     if !items.contains_key(key) && items.len() >= MAX_COLLECTION_ITEMS {
