@@ -30,13 +30,13 @@ The Bytecode v2 format is experimental. The decoder validates framing, instructi
 Compile a QORVYNT source file into a verified QVM artifact:
 
 ```sh
-zv --qvm-compile examples/hello.qv build/hello.qvmb
+qorvynt --qvm-compile examples/hello.qv build/hello.qvmb
 ```
 
 Run the artifact through the QVM v2 loader and execution engine:
 
 ```sh
-zv --qvm-run build/hello.qvmb
+qorvynt --qvm-run build/hello.qvmb
 ```
 
 The `.qvmb` suffix identifies a QVM Bytecode v2 artifact. The current serialized representation is the repository's textual Bytecode v2 framing; it is not yet a compact binary encoding.
@@ -45,7 +45,7 @@ The generic `--run-bytecode` command continues to support legacy v1 and v2 artif
 
 ## Current boundaries
 
-- The compiler, serializer, verifier, and runtime are still hosted in the Rust `zv` executable.
+- The compiler, serializer, verifier, and runtime are still hosted in the Rust `qorvynt` executable.
 - The self-hosted `compiler/parser.qv` is an evolving frontend foundation; it is not yet the complete compiler or a self-hosting bootstrap.
 - QVM currently reuses the existing VM execution engine; the interpreter has not yet been extracted into an independently buildable QVM package.
 - Bytecode v2 remains experimental and must not be described as stable or production-safe before format review and independent security testing.
