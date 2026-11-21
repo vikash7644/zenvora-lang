@@ -1438,7 +1438,13 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
             if *index < 0 {
                 return Err("char_at index out of bounds".into());
             }
-            value.chars().nth(*index as usize)
+            let index = usize::try_from(*index).map_err(|_| "char_at index out of bounds")?;
+            if value.is_ascii() {
+                let byte = value.as_bytes().get(index).copied()
+                    .ok_or_else(|| "char_at index out of bounds".to_string())?;
+                return Ok(Value::Str(char::from(byte).to_string()));
+            }
+            value.chars().nth(index)
                 .map(|character| Value::Str(character.to_string()))
                 .ok_or_else(|| "char_at index out of bounds".into())
         }
@@ -1664,7 +1670,45 @@ where
 fn run_with_output_metered<F>(
     code: &[Op],
     output: &mut F,
+    gas_meter: Option<&mut contract_gas::GasMeter>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    run_with_output_metered_and_bindings(code, output, gas_meter, HashMap::new(), 1_000_000)
+}
+
+fn run_with_output_and_bindings<F>(
+    code: &[Op],
+    output: &mut F,
+    initial_bindings: HashMap<String, Value>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    run_with_output_metered_and_bindings(code, output, None, initial_bindings, 1_000_000)
+}
+
+fn run_with_compiler_bindings<F>(
+    code: &[Op],
+    output: &mut F,
+    initial_bindings: HashMap<String, Value>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    // The compiler frontend runs a substantial regression suite in addition to compiling
+    // the caller's source. Keep ordinary program execution at 1M steps, but allow this
+    // dedicated, still-bounded compiler-host path up to 20M instructions.
+    run_with_output_metered_and_bindings(code, output, None, initial_bindings, 20_000_000)
+}
+
+fn run_with_output_metered_and_bindings<F>(
+    code: &[Op],
+    output: &mut F,
     mut gas_meter: Option<&mut contract_gas::GasMeter>,
+    mut vars: HashMap<String, Value>,
+    max_steps: usize,
 ) -> Result<(), String>
 where
     F: FnMut(String),
@@ -1674,21 +1718,27 @@ where
     }
     let mut stack: Vec<Value> = Vec::new();
     let mut stack_value_bytes = 0usize;
-    let mut runtime_state_bytes = 0usize;
-    let mut vars: HashMap<String, Value> = HashMap::new();
+    let mut runtime_state_bytes = binding_map_size(&vars);
+    if runtime_state_bytes > MAX_RUNTIME_STATE_BYTES {
+        return Err(format!("initial bindings exceed runtime state safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
+    }
+    for name in vars.keys() {
+        if !valid_identifier(name) {
+            return Err(format!("invalid initial binding name '{name}'"));
+        }
+    }
     let mut globals: HashMap<String, Value> = HashMap::new();
     let mut pc = 0usize;
     let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
     let mut steps = 0usize;
-    const MAX_STEPS: usize = 1_000_000;
     const MAX_CALL_DEPTH: usize = 1_024;
     if code.len() > MAX_BYTECODE_INSTRUCTIONS {
         return Err(format!("program instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
     }
     while pc < code.len() {
         steps += 1;
-        if steps > MAX_STEPS {
-            return Err("execution exceeded safety limit (1,000,000 instructions)".into());
+        if steps > max_steps {
+            return Err(format!("execution exceeded safety limit ({max_steps} instructions)"));
         }
         if let Some(meter) = gas_meter.as_deref_mut() {
             let cost = match code.get(pc) {
@@ -2809,6 +2859,70 @@ fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
     fs::write(output_path, serialized).map_err(|error| format!("cannot write {output_path}: {error}"))
 }
 
+fn run_qorvynt_compiler_and_write(
+    compiler_code: &[Op],
+    input_path: &str,
+    output_path: &str,
+) -> Result<(), String> {
+    let input_source = read_program(input_path)?;
+    let bindings = HashMap::from([("source_text".to_string(), Value::Str(input_source))]);
+    let mut output = Vec::new();
+    run_with_compiler_bindings(compiler_code, &mut |line| output.push(line), bindings)?;
+
+    for line in &output {
+        println!("{line}");
+    }
+    let marker = "ZENVORA_INPUT_BYTECODE_V2_JSON";
+    let marker_index = match output.iter().position(|line| line == marker) {
+        Some(index) => index,
+        None => {
+            if let Some(failure_index) = output.iter().position(|line| line == "ZENVORA_INPUT_BYTECODE_V2_FAIL") {
+                let detail = output.get(failure_index + 1).cloned().unwrap_or_else(|| "no compiler diagnostic was emitted".into());
+                return Err(format!("QORVYNT compiler rejected its input: {detail}"));
+            }
+            return Err(format!(
+                "QORVYNT compiler did not emit its input bytecode marker; captured output: {}",
+                output.join("\\n")
+            ));
+        }
+    };
+    let json_line = output.get(marker_index + 1)
+        .ok_or_else(|| "QORVYNT compiler emitted no bytecode JSON payload".to_string())?;
+    let bytecode: String = serde_json::from_str(json_line)
+        .map_err(|error| format!("QORVYNT compiler emitted invalid bytecode JSON: {error}"))?;
+    if !bytecode.starts_with("ZENVORA_BYTECODE 2\n") {
+        return Err("QORVYNT compiler output is not canonical Bytecode v2".into());
+    }
+    if bytecode.len() > bytecode_v2::MAX_V2_FILE_BYTES {
+        return Err("QORVYNT compiler output exceeds the 16 MiB bytecode limit".into());
+    }
+    let _verified_output = deserialize_bytecode_v2(&bytecode)?;
+    fs::write(output_path, bytecode)
+        .map_err(|error| format!("cannot write {output_path}: {error}"))
+}
+
+fn write_qorvynt_compiled_source(
+    compiler_path: &str,
+    input_path: &str,
+    output_path: &str,
+) -> Result<(), String> {
+    let compiler_source = read_program(compiler_path)?;
+    let (compiler_code, compiler_layout) = compile_with_layout(&compiler_source)?;
+    let compiler_bytecode = serialize_bytecode_v2(&compiler_code, &compiler_layout)?;
+    let verified_compiler = deserialize_bytecode_v2(&compiler_bytecode)?;
+    run_qorvynt_compiler_and_write(&verified_compiler, input_path, output_path)
+}
+
+fn write_bytecode_with_source(
+    compiler_bytecode_path: &str,
+    input_path: &str,
+    output_path: &str,
+) -> Result<(), String> {
+    let serialized = read_bytecode_source(compiler_bytecode_path)?;
+    let verified_compiler = deserialize_bytecode_v2(&serialized)?;
+    run_qorvynt_compiler_and_write(&verified_compiler, input_path, output_path)
+}
+
 fn run_bytecode(path: &str) -> Result<(), String> {
     let serialized = read_bytecode_source(path)?;
     // Accept both supported bytecode generations through the same CLI entry point.
@@ -3434,7 +3548,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --compile-with-qorvynt <compiler.zv> <input.zv> <output.zv2b>\n       zv --run-bytecode-with-source <compiler.zv2b> <input.zv> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
@@ -3484,6 +3598,8 @@ fn main() {
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
         [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_plan_bytecode_v2(plan, output),
+        [_, mode, compiler, input, output] if mode == "--compile-with-qorvynt" => write_qorvynt_compiled_source(compiler, input, output),
+        [_, mode, compiler, input, output] if mode == "--run-bytecode-with-source" => write_bytecode_with_source(compiler, input, output),
         [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
@@ -4521,6 +4637,24 @@ show char_at("hé🙂", 2)
         assert!(super::compile_plan_json_to_bytecode_v2(invalid_target).unwrap_err().contains("outside its instruction region"));
         let unknown = r#"{"format":"ZENVORA_BYTECODE_PLAN_1","main":[{"op":"eval_magic"}],"functions":[]}"#;
         assert!(super::compile_plan_json_to_bytecode_v2(unknown).unwrap_err().contains("unsupported instruction"));
+    }
+
+    #[test]
+    fn vm_can_execute_compiler_programs_with_host_supplied_source_bindings() {
+        let (code, _) = super::compile_with_layout("show source_text\n").unwrap();
+        let bindings = std::collections::HashMap::from([(
+            "source_text".to_string(),
+            super::Value::Str("show 42".to_string()),
+        )]);
+        let mut output = Vec::new();
+        super::run_with_output_and_bindings(&code, &mut |line| output.push(line), bindings).unwrap();
+        assert_eq!(output, vec!["show 42"]);
+        let invalid = std::collections::HashMap::from([(
+            "not-valid".to_string(),
+            super::Value::Str("x".to_string()),
+        )]);
+        assert!(super::run_with_output_and_bindings(&code, &mut |_| {}, invalid)
+            .unwrap_err().contains("invalid initial binding name"));
     }
 
     #[test]
