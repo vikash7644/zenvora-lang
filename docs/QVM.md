@@ -57,3 +57,6 @@ The generic `--run-bytecode` command continues to support legacy v1 and v2 artif
 3. Define a versioned, deterministic binary artifact encoding only after the v2 instruction and metadata contract is frozen.
 4. Add a standalone QVM library/runner and prove it can load artifacts without invoking the source compiler.
 5. Port the compiler backend incrementally into QORVYNT and prove clean-environment bootstrap parity before claiming Rust independence.
+
+
+The VM instruction enum has since been moved to `src/qvm/bytecode.rs`; execution and runtime value/environment handling remain in the Rust host pending the next extraction.
