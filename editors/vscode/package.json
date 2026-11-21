@@ -20,8 +20,7 @@
           "qorvynt"
         ],
         "extensions": [
-          ".qv",
-          ".zv"
+          ".qv"
         ],
         "configuration": "./language-configuration.json"
       }
