@@ -2,11 +2,11 @@
 
 ## Official website
 
-- **QORVYNT website:** https://vikash7644.github.io/zenvora-lang/
-- **Browser playground:** https://vikash7644.github.io/zenvora-lang/playground.html
-- **Source repository:** https://github.com/vikash7644/zenvora-lang
+- **QORVYNT website:** https://vikash7644.github.io/qorvynt-lang/
+- **Browser playground:** https://vikash7644.github.io/qorvynt-lang/playground.html
+- **Source repository:** https://github.com/vikash7644/qorvynt-lang
 
-The static site is in `website/` and is deployed by the GitHub Pages workflow when website files change on `main`. If the links do not open yet, check the latest [Pages deployment workflow](https://github.com/vikash7644/zenvora-lang/actions/workflows/pages.yml).
+The static site is in `website/` and is deployed by the GitHub Pages workflow when website files change on `main`. If the links do not open yet, check the latest [Pages deployment workflow](https://github.com/vikash7644/qorvynt-lang/actions/workflows/pages.yml).
 
 QORVYNT is an actively developed programming language. The canonical and only supported source-file extension is `.qv`. This repository contains a working Rust compiler/interpreter, a stack-based bytecode virtual machine, a command-line tool, executable language examples, regression tests, and CI workflows. The underlying Rust-hosted implementation is still in its v0.8.0-era state; the QORVYNT rename and Rust-independent bootstrap are not yet complete. It is real runnable software—not only a blueprint—but it is not yet a stable v1.0 language or a production smart-contract toolchain. Experimental areas and remaining release gates are listed in [the project status checklist](docs/PROJECT_STATUS.md).
 
@@ -14,7 +14,7 @@ QORVYNT is an actively developed programming language. The canonical and only su
 
 A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the QORVYNT Lang release scope** and must be moved to the separate BHYVORIX Chain repository only after that destination and its tests are verified.
 
-- [Legacy chain technical specification draft](docs/zenvora-technical-spec-v1.md)
+- [Legacy chain technical specification draft](docs/qorvynt-technical-spec-v1.md)
 - [Legacy chain protocol specification draft](docs/chain-protocol-specification-draft.md)
 - [Legacy chain implementation roadmap](docs/chain-implementation-roadmap.md)
 
@@ -48,7 +48,7 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
 - `docs/technical_spec.md` — legacy draft architecture for the former chain prototype; planned migration to the separate BHYVORIX Chain repository.
-- `examples/token.qorvyntl` — illustrative smart-contract DSL draft; not executable by the current compiler.
+- `examples/token.qvt` — illustrative smart-contract DSL draft; not executable by the current compiler.
 - `website/` — static responsive ecosystem landing page.
 
 ## See QORVYNT code in action
@@ -78,12 +78,12 @@ This is syntax highlighting only—not a language server, compiler, debugger, or
 
 ## Latest prototype release
 
-The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
+The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/qorvynt-lang/releases/tag/v0.8.0-prototype.1).
 
-- Linux x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-linux-x86_64.tar.gz)
-- macOS Intel x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-macos-x86_64.tar.gz)
-- macOS Apple Silicon ARM64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-macos-aarch64.tar.gz)
-- Windows x86-64: [ZIP](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-windows-x86_64.zip)
+- Linux x86-64: [tar.gz](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-linux-x86_64.tar.gz)
+- macOS Intel x86-64: [tar.gz](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-macos-x86_64.tar.gz)
+- macOS Apple Silicon ARM64: [tar.gz](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-macos-aarch64.tar.gz)
+- Windows x86-64: [ZIP](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-windows-x86_64.zip)
 
 Each archive includes the `qorvynt` CLI, README, and MIT license. These binaries were built by GitHub Actions for the listed platforms; they do not require compiling the project on your phone.
 
@@ -134,8 +134,8 @@ cargo run -- examples/stdlib-strings.qv
 cargo run -- examples/contracts.qv
 cargo run -- examples/modules.qv
 cargo run -- --check examples/functions.qv
-cargo run -- --emit-bytecode examples/functions.qv functions.qorvyntb
-cargo run -- --run-bytecode functions.qorvyntb
+cargo run -- --emit-bytecode examples/functions.qv functions.qvb
+cargo run -- --run-bytecode functions.qvb
 cargo run -- --version
 cargo run -- --help
 ```
@@ -188,22 +188,22 @@ cargo run -- --check examples/functions.qv
 A local-only signed transaction workflow is available in the `qorvynt` CLI:
 
 ```sh
-qorvynt --chain-keygen owner.qorvyntk
-qorvynt --chain-store-init dev.qorvyntb 71 owner.qorvyntk 1000000
-qorvynt --chain-store-transfer dev.qorvyntb 71 owner.qorvyntk bob 125 3
-qorvynt --chain-store-balance dev.qorvyntb 71 bob
-qorvynt --chain-store-info dev.qorvyntb 71
-qorvynt --chain-rpc dev.qorvyntb 71 8545
+qorvynt --chain-keygen owner.qvk
+qorvynt --chain-store-init dev.qvb 71 owner.qvk 1000000
+qorvynt --chain-store-transfer dev.qvb 71 owner.qvk bob 125 3
+qorvynt --chain-store-balance dev.qvb 71 bob
+qorvynt --chain-store-info dev.qvb 71
+qorvynt --chain-rpc dev.qvb 71 8545
 # Signed transaction pool + manual validator block production:
-qorvynt --chain-rpc-pool dev.qorvyntb 71 pending.qorvyntp 8545
-qorvynt --chain-store-produce dev.qorvyntb 71 pending.qorvyntp owner.qorvyntk
+qorvynt --chain-rpc-pool dev.qvb 71 pending.qvp 8545
+qorvynt --chain-store-produce dev.qvb 71 pending.qvp owner.qvk
 # On a trusted private network only:
-qorvynt --chain-p2p-serve dev.qorvyntb 71 0.0.0.0 9000
+qorvynt --chain-p2p-serve dev.qvb 71 0.0.0.0 9000
 # On another node initialized from the exact same genesis:
-qorvynt --chain-p2p-sync node-b.qorvyntb 71 192.168.1.10:9000
+qorvynt --chain-p2p-sync node-b.qvb 71 192.168.1.10:9000
 # Optional manual transaction gossip (pool-enabled peer):
-qorvynt --chain-p2p-serve-pool dev.qorvyntb 71 pending.qorvyntp 0.0.0.0 9000
-qorvynt --chain-p2p-gossip node-b.qorvyntb 71 pending-b.qorvyntp 192.168.1.10:9000
+qorvynt --chain-p2p-serve-pool dev.qvb 71 pending.qvp 0.0.0.0 9000
+qorvynt --chain-p2p-gossip node-b.qvb 71 pending-b.qvp 192.168.1.10:9000
 ```
 
 The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the QORVYNT Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
@@ -221,12 +221,12 @@ The runtime now includes checked integer helpers: `gcd`, `lcm`, `factorial` (0�
 The compiler can write and run versioned stack-machine bytecode files:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.qorvyntb
-cargo run -- --run-bytecode functions.qorvyntb
+cargo run -- --emit-bytecode examples/functions.qv functions.qvb
+cargo run -- --run-bytecode functions.qvb
 
 # Experimental opt-in v2 output:
-cargo run -- --emit-bytecode-v2 examples/functions.qv functions.qorvynt2b
-cargo run -- --run-bytecode functions.qorvynt2b
+cargo run -- --emit-bytecode-v2 examples/functions.qv functions.qv2b
+cargo run -- --run-bytecode functions.qv2b
 ```
 
 Version 1 remains the default and its serializer/loader behavior is unchanged. The experimental v2 format starts with `QORVYNT_BYTECODE 2` and includes explicit main/function regions, parameter names, and return-kind metadata. The v2 compiler emission path verifies the generated file before writing it; the loader verifies a v2 file again before passing its instructions to the VM. The verifier checks region boundaries, opcodes/operands, jumps, calls/argument counts, return kinds, stack underflow/joins, and main exit stack cleanliness. Both versions are bounded by bytecode-size, instruction-count, string-size, argument-count, call-depth, and operand-stack limits.
