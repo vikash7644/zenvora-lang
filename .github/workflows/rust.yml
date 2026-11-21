@@ -62,7 +62,7 @@ jobs:
         run: cargo run --locked -- examples/hello.qv
 
       - name: Run Zenvora Lang language tour
-        run: cargo run --locked -- examples/zenvora-language-tour.qv
+        run: cargo run --locked -- examples/qorvynt-language-tour.qv
 
       - name: Run loop-control example
         run: cargo run --locked -- examples/loops.qv
