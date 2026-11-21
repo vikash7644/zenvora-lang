@@ -23,8 +23,8 @@ cargo test --all-targets
 For a user-facing language change, also run at least one affected example, for example:
 
 ```sh
-cargo run -- examples/zenvora-language-tour.zv
-cargo run -- --check examples/functions.zv
+cargo run -- examples/qorvynt-language-tour.qv
+cargo run -- --check examples/functions.qv
 ```
 
 If you cannot run Rust locally, you can still submit a focused change and clearly say which checks you could not run; GitHub Actions must then validate the exact commit. Do not report a check as passed based only on a planned command or an earlier commit's result.
@@ -41,7 +41,7 @@ If you cannot run Rust locally, you can still submit a focused change and clearl
 
 ## Documentation and examples
 
-- Use `.zv` for executable Zenvora Lang programs.
+- Use `.qv` for executable Zenvora Lang programs.
 - Keep examples minimal and runnable; avoid documenting syntax that the compiler does not accept.
 - State clearly when behavior is experimental, local-only, or a design proposal.
 - Update the README or `docs/language-v0.1.md` when the public feature inventory changes.

@@ -5,7 +5,7 @@ Status: **draft, not frozen for v1.0**. This document describes the current line
 ## Source layout
 
 - One statement or block header per physical line.
-- A top-level `use "relative/path.zv"` directive imports a source module relative to the file containing the directive. The loader expands imports before compilation and rejects cycles, invalid UTF-8, excessive depth/size, absolute paths, and Windows drive-prefixed paths.
+- A top-level `use "relative/path.qv"` directive imports a source module relative to the file containing the directive. The loader expands imports before compilation and rejects cycles, invalid UTF-8, excessive depth/size, absolute paths, and Windows drive-prefixed paths.
 - Blank lines and lines whose first non-whitespace character is `#` are ignored. `#` outside a string literal ends the rest of that physical line, so trailing comments are accepted too.
 - The current compiler strips all trailing semicolons from each ordinary source line, so repeated trailing semicolons are accepted for now. A `use` directive accepts at most one optional trailing semicolon. This permissive behavior is not frozen for stable v1.0.
 - Braces delimit `if`, `repeat`, and function blocks. Indentation is not used to determine block nesting.

@@ -12,26 +12,26 @@ cargo clippy --all-targets
 cargo test --all-targets
 
 cargo run -- --new my-first-project
-cargo run -- --check my-first-project/main.zv
-cargo run -- my-first-project/main.zv
+cargo run -- --check my-first-project/main.qv
+cargo run -- my-first-project/main.qv
 
-cargo run -- examples/hello.zv
-cargo run -- examples/loops.zv
-cargo run -- examples/functions.zv
-cargo run -- examples/functions-basic.zv
-cargo run -- examples/functions-summary.zv
-cargo run -- examples/booleans.zv
-cargo run -- examples/strings.zv
-cargo run -- examples/collections.zv
-cargo run -- examples/indexing.zv
-cargo run -- examples/stdlib.zv
-cargo run -- examples/stdlib-strings.zv
-cargo run -- examples/science.zv
-cargo run -- examples/contracts.zv
-cargo run -- examples/chain_transfer.zv
-cargo run -- examples/modules.zv
+cargo run -- examples/hello.qv
+cargo run -- examples/loops.qv
+cargo run -- examples/functions.qv
+cargo run -- examples/functions-basic.qv
+cargo run -- examples/functions-summary.qv
+cargo run -- examples/booleans.qv
+cargo run -- examples/strings.qv
+cargo run -- examples/collections.qv
+cargo run -- examples/indexing.qv
+cargo run -- examples/stdlib.qv
+cargo run -- examples/stdlib-strings.qv
+cargo run -- examples/science.qv
+cargo run -- examples/contracts.qv
+cargo run -- examples/chain_transfer.qv
+cargo run -- examples/modules.qv
 
-cargo run -- --emit-bytecode examples/functions.zv functions.zvb
+cargo run -- --emit-bytecode examples/functions.qv functions.zvb
 cargo run -- --run-bytecode functions.zvb
 cargo run -- --version
 cargo run -- --help
@@ -62,7 +62,7 @@ The current implementation supports:
 - **Strings:** double-quoted literals, common escapes, equality, concatenation with `+`, and string arguments/returns.
 - **Collections:** `array(...)`, `map(...)`, `get`, `len`, `contains`, `push`, `put`, `keys`, `values`, and postfix indexing such as `items[0]` or `profile["name"]`. Direct indexed assignment is supported; `push` and `put` return updated collections.
 - **Standard library:** `type_of`, `to_string`, checked `abs`, `min`, `max`, bounded end-exclusive `range`, `assert`, and `assert_eq`; string helpers such as `starts_with`, `ends_with`, `replace`, `split`, `join`, `trim`, `lower`, `upper`, `char_count`, and `to_int`; collection helpers such as `first`, `last`, `reverse`, `is_empty`, `unique`, and `index_of`; checked numeric helpers including `sum`, `gcd`, `lcm`, `factorial`, `is_prime`, `fibonacci`, `pow_int`, `mean`, and integer-only introductory science helpers.
-- **Modules:** relative `use "path.zv"` imports resolve from the importing file. Duplicate imports are skipped, cycles are rejected, and import depth is limited.
+- **Modules:** relative `use "path.qv"` imports resolve from the importing file. Duplicate imports are skipped, cycles are rejected, and import depth is limited.
 - **CLI:** `--new` creates a starter project without overwriting an existing path; `--check` validates source and imports without running the program; `--help` and `--version` report CLI information.
 - **Bytecode:** source can be compiled to a versioned text bytecode file and later executed by the VM.
 

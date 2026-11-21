@@ -1,4 +1,5 @@
-# Zenvora-written recursive-descent parser foundation.
+# QORVYNT canonical source compiler frontend (.qv).
+# QORVYNT-written recursive-descent parser foundation.
 # Current supported statements: define name := expression; show expression.
 # Expressions: literals, names, parentheses, unary -, !, not, *, /, +, -, comparisons, and/or.
 fn node(kind, value, left, right, line) {
