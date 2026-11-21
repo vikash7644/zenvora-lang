@@ -1,16 +1,28 @@
 # QORVYNT Lang — Mission Status and Completion Gate
 
 Last audited: 2026-11-21  
-Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; this ledger is not a claim that the project is complete. This ledger is a working checklist, not a claim that the project is complete.
+Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; this ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
 
 - **Implemented, needs current CI proof**: code and tests exist; the current revision still needs green CI.
 - **Prototype / partial**: useful functionality exists, but known limitations remain.
 - **Pending**: not complete enough to claim release-ready.
-- **Out of scope for QORVYNT Lang**: chain-specific work must be handled in the separate BHYVORIX Chain repository after that repository is verified.
+- **Out of scope for QORVYNT Lang**: chain-specific work must live in a separate, independently verified chain repository.
 
-## QORVYNT identity and independence milestone (2026-11-21)\n\n- [x] Rename the root Rust package and canonical executable from the former Zenvora identity to `qorvynt`.\n- [x] Update CLI tests, release/build workflows, integration smoke workflows, and docs to invoke `qorvynt`.\n- [x] Make `QORVYNT_BYTECODE 1/2` the canonical emitted format headers.\n- [x] Keep old `ZENVORA_BYTECODE 1/2` files readable as a migration-only compatibility path; the compiler emits only QORVYNT headers.\n- [ ] Remove old chain-specific runtime modules and CLI commands from the language compiler; chain code must live in its own repository.\n- [ ] Complete the self-hosted compiler and QVM bootstrap so a clean environment can build and run QORVYNT without the Rust reference host.\n- [ ] Rename the GitHub repository itself and migrate Pages/release URLs after the code and CI rename is verified.\n\n**Boundary:** package/CLI/bytecode identity is being migrated; QORVYNT is not yet Rust-independent and the old chain modules are not yet fully separated.\n\n## QORVYNT Virtual Machine (QVM) milestone (2026-11-21)
+## QORVYNT identity and independence milestone (2026-11-21)
+
+- [x] Rename the root Rust package and canonical executable from the former Zenvora identity to `qorvynt`.
+- [x] Update CLI tests, release/build workflows, integration smoke workflows, and docs to invoke `qorvynt`.
+- [x] Make `QORVYNT_BYTECODE 1/2` the canonical emitted format headers.
+- [x] Keep old `ZENVORA_BYTECODE 1/2` files readable as a migration-only compatibility path; the compiler emits only QORVYNT headers.
+- [ ] Remove old chain-specific runtime modules and CLI commands from the language compiler; chain code must live in its own repository.
+- [ ] Complete the self-hosted compiler and QVM bootstrap so a clean environment can build and run QORVYNT without the Rust reference host.
+- [ ] Rename the GitHub repository itself and migrate Pages/release URLs after the code and CI rename is verified.
+
+**Boundary:** package/CLI/bytecode identity is being migrated; QORVYNT is not yet Rust-independent and the old chain modules are not yet fully separated.
+
+## QORVYNT Virtual Machine (QVM) milestone (2026-11-21)
 
 - [x] Add explicit `--qvm-compile <file.qv> <output.qvmb>` command using the compiler's Bytecode v2 layout and verifier.
 - [x] Add explicit `--qvm-run <file.qvmb>` command that accepts v2 only and routes the verified instruction stream through the existing VM engine.
