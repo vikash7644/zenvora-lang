@@ -28,6 +28,9 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
+      - name: Enforce canonical QORVYNT source extension
+        run: bash scripts/check_qv_extension.sh
+
       - name: Check compilation
         run: cargo check --locked --all-targets
 
