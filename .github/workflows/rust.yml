@@ -113,7 +113,7 @@ jobs:
         run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/zenvora-functions.qorvynt2b
 
       - name: Check bytecode v2 header
-        run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.qorvynt2b
+        run: grep -q '^QORVYNT_BYTECODE 2$' /tmp/zenvora-functions.qorvynt2b
 
       - name: Execute verified bytecode v2
         run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.qorvynt2b
@@ -123,7 +123,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo run --locked -- --qvm-compile examples/hello.qv /tmp/qorvynt-hello.qvmb
-          grep -q '^ZENVORA_BYTECODE 2
+          grep -q '^QORVYNT_BYTECODE 2
       - name: Verify CLI version
         run: cargo run --locked -- --version
 
