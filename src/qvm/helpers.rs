@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::Value;
 use super::super::{
     MAX_COLLECTION_ITEMS, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUE_BYTES,
-    MAX_VALUE_BYTES, MAX_VALUE_DEPTH,
+    hex_encode, MAX_BYTECODE_STRING_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH,
 };
 
 pub(crate) fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
