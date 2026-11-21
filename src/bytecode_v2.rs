@@ -1,4 +1,4 @@
-//! Experimental Zenvora Bytecode v2 framing, metadata, and control-flow verification.
+//! Experimental QORVYNT Bytecode v2 framing, metadata, and control-flow verification.
 //!
 //! The v2 parser/verifier is called by the bytecode loader before instructions are passed
 //! to the existing VM. The compiler can emit v2 text on an opt-in CLI path. V1 remains
@@ -149,7 +149,7 @@ pub fn parse_v2_file(input: &str) -> Result<ParsedV2File, String> {
     }
 
     let mut lines = input.lines();
-    if !matches!(lines.next().map(str::trim), Some("QORVYNT_BYTECODE 2" | "ZENVORA_BYTECODE 2")) {
+    if !matches!(lines.next().map(str::trim), Some("QORVYNT_BYTECODE 2")) {
         return Err("bytecode v2: missing or unsupported header".into());
     }
 
@@ -674,9 +674,6 @@ mod tests {
         assert_eq!(parsed.layout.functions[1].return_kind, ReturnKind::Void);
         assert_eq!(serialize_v2_file(&parsed).unwrap(), source);
 
-        let legacy = source.replacen("QORVYNT_BYTECODE 2", "ZENVORA_BYTECODE 2", 1);
-        let legacy_parsed = parse_v2_file(&legacy).unwrap();
-        assert!(serialize_v2_file(&legacy_parsed).unwrap().starts_with("QORVYNT_BYTECODE 2\n"));
     }
 
     #[test]
