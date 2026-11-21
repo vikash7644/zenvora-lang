@@ -15,8 +15,8 @@ pub(super) fn compile(source_path: &str, output_path: &str) -> Result<(), String
 /// Legacy ZENVORA headers remain readable during the migration window.
 pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
     let serialized = read_bytecode_source(path)?;
-    if !(serialized.starts_with("QORVYNT_BYTECODE 2\\n")
-        || serialized.starts_with("ZENVORA_BYTECODE 2\\n"))
+    if !(serialized.starts_with("QORVYNT_BYTECODE 2\n")
+        || serialized.starts_with("ZENVORA_BYTECODE 2\n"))
     {
         return Err("QVM requires a verified Bytecode v2 artifact".into());
     }
