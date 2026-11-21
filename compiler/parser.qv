@@ -1,5 +1,4 @@
 # QORVYNT canonical source compiler frontend (.qv).
-# .zv remains a temporary compatibility copy while migration is verified.
 # QORVYNT-written recursive-descent parser foundation.
 # Current supported statements: define name := expression; show expression.
 # Expressions: literals, names, parentheses, unary -, !, not, *, /, +, -, comparisons, and/or.
