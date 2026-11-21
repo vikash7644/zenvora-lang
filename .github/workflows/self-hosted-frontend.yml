@@ -93,6 +93,7 @@ jobs:
               "14", "42", "7", "7", "120", "7", "3", "v", "true", "ZV",
               "2", "3", "true", "42", "2", "xv", "2", "5", "2", "42",
               "3", "720", "55", "256", "6", "25", "21", "18", "228", "29",
+              "-", "!", "not",
           ]
           with open("self-hosted-bytecode-output.txt", encoding="utf-8") as artifact:
               actual = artifact.read().splitlines()
