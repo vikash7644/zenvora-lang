@@ -23,7 +23,7 @@ Bytecode v2 verifier
 QVM execution (currently hosted in the Rust CLI)
 ```
 
-The Bytecode v2 format is experimental. The decoder validates framing, instruction records, function regions, control-flow targets, and stack behavior before the instruction stream reaches the shared VM engine. The existing v1 path remains available for compatibility; QVM commands intentionally accept v2 only.
+The canonical emitted v1/v2 headers are `QORVYNT_BYTECODE 1` and `QORVYNT_BYTECODE 2`. The loader keeps read-only compatibility for old `ZENVORA_BYTECODE` artifacts during migration; new artifacts are never emitted with the old prefix. The Bytecode v2 format is experimental. The decoder validates framing, instruction records, function regions, control-flow targets, and stack behavior before the instruction stream reaches the shared VM engine. The existing v1 path remains available for compatibility; QVM commands intentionally accept v2 only.
 
 ## CLI
 
