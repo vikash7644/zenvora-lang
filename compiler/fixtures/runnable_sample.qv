@@ -50,3 +50,6 @@ show force(3, 7)
 show kinetic_energy(4, 3)
 show bmi_x10(70, 175)
 show molar_mass(array(12, 16, 1))
+show "-"
+show "!"
+show "not"
