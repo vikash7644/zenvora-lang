@@ -29,12 +29,12 @@ grammar = load_json(GRAMMAR)
 config = load_json(CONFIG)
 
 languages = package.get("contributes", {}).get("languages", [])
-zenvora = next((item for item in languages if item.get("id") == "qorvynt"), None)
-if not zenvora:
+qorvynt = next((item for item in languages if item.get("id") == "qorvynt"), None)
+if not qorvynt:
     fail("package.json does not register language id 'qorvynt'")
-if ".qv" not in zenvora.get("extensions", []):
-    fail("language id 'qorvynt' must register the .zv extension")
-if zenvora.get("configuration") != "./language-configuration.json":
+if ".qv" not in qorvynt.get("extensions", []):
+    fail("language id 'qorvynt' must register the .qv extension")
+if qorvynt.get("configuration") != "./language-configuration.json":
     fail("language configuration path does not match the checked-in file")
 
 grammars = package.get("contributes", {}).get("grammars", [])
