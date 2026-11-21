@@ -10,6 +10,19 @@ Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, 
 - **Pending**: not complete enough to claim release-ready.
 - **Out of scope for Zenvora Lang**: chain-specific work must be handled in the separate BHYVORIX Chain repository after that repository is verified.
 
+## QORVYNT Virtual Machine (QVM) milestone (2026-11-21)
+
+- [x] Add explicit `--qvm-compile <file.qv> <output.qvmb>` command using the compiler's Bytecode v2 layout and verifier.
+- [x] Add explicit `--qvm-run <file.qvmb>` command that accepts v2 only and routes the verified instruction stream through the existing VM engine.
+- [x] Add a round-trip regression test for source → QVM artifact → verified load → execution, plus a v1 rejection check.
+- [x] Document the current pipeline and engineering gates in [QVM.md](QVM.md).
+- [ ] Extract the runtime value model, opcodes, and execution loop from `src/main.rs` into a dedicated QVM module.
+- [ ] Build and test a standalone QVM library/runner that loads artifacts without invoking the source compiler.
+- [ ] Freeze and independently review the bytecode contract before defining a stable binary artifact format.
+- [ ] Complete a clean-environment self-hosted compiler bootstrap before claiming Rust independence.
+
+**Boundary:** QVM currently reuses the Rust-hosted VM implementation. The new CLI is an explicit verified v2 path, not a standalone VM or Rust-independent compiler.
+
 ## Current gate: Bytecode v2
 
 - [x] Add regression tests for malformed instruction records, invalid jump operands, builtin stack underflow, `RETURN` in main, function fallthrough, invalid parameter identifiers, and parser/serializer round trips.
