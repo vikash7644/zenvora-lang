@@ -8,7 +8,7 @@ mod bytecode;
 mod value;
 mod helpers;
 pub(super) use helpers::{
-    binding_map_size, binding_size, builtin, ensure_value_depth, pop_stack_value,
+    binding_map_size, binding_size, builtin, check_map_capacity, ensure_value_depth, pop_stack_value,
     push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update,
     set_indexed_value, value_to_string,
 };
@@ -17,7 +17,6 @@ pub(crate) use value::Value;
 
 use super::{deserialize_bytecode_v2, read_bytecode_source, write_bytecode_v2};
 use std::collections::HashMap;
-use helpers::*;
 use super::{
     MAX_BYTECODE_INSTRUCTIONS, MAX_BYTECODE_STRING_BYTES, MAX_CALL_ARGUMENTS,
     MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUES,
