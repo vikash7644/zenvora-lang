@@ -2802,6 +2802,25 @@ fn write_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String>
     fs::write(output_path, serialized).map_err(|error| format!("cannot write {output_path}: {error}"))
 }
 
+// QVM artifacts are verifier-checked Bytecode v2 programs. The current QVM
+// execution engine is hosted by this Rust CLI; it is not yet a standalone VM.
+fn write_qvm_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
+    write_bytecode_v2(source_path, output_path)
+}
+
+fn read_qvm_bytecode(path: &str) -> Result<Vec<Op>, String> {
+    let serialized = read_bytecode_source(path)?;
+    if !serialized.starts_with("ZENVORA_BYTECODE 2\\n") {
+        return Err("QVM requires a verified Bytecode v2 artifact".into());
+    }
+    deserialize_bytecode_v2(&serialized)
+}
+
+fn run_qvm_bytecode(path: &str) -> Result<(), String> {
+    let code = read_qvm_bytecode(path)?;
+    run(&code)
+}
+
 fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
     let source = read_program(source_path)?;
     let code = compile(&source)?;
@@ -3483,9 +3502,11 @@ fn main() {
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("Zenvora check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
+        [_, mode, source, output] if mode == "--qvm-compile" => write_qvm_bytecode(source, output),
         [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_plan_bytecode_v2(plan, output),
         [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
+        [_, mode, bytecode] if mode == "--qvm-run" => run_qvm_bytecode(bytecode),
         [_, path] if !path.starts_with("--") => {
             let source = read_program(path).unwrap_or_else(|error| {
                 eprintln!("Zenvora error: {error}");
@@ -3494,7 +3515,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.qv> | zv --new <project-name> | zv --check <file.qv> | zv --emit-bytecode <file.qv> <output.zvb> | zv --emit-bytecode-v2 <file.qv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --contract-artifact <contract.qv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.qv> | zv --new <project-name> | zv --check <file.qv> | zv --emit-bytecode <file.qv> <output.zvb> | zv --emit-bytecode-v2 <file.qv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --qvm-compile <file.qv> <output.qvmb> | zv --qvm-run <file.qvmb> | zv --contract-artifact <contract.qv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
@@ -3674,6 +3695,30 @@ mod tests {
         let mut output = Vec::new();
         run_with_output(&code, &mut |line| output.push(line))?;
         Ok(output)
+    }
+
+    #[test]
+    fn qvm_compiler_emits_verified_v2_and_qvm_runs_it() {
+        let base = std::env::temp_dir();
+        let suffix = std::process::id();
+        let source_path = base.join(format!("qorvynt-qvm-{suffix}.qv"));
+        let bytecode_path = base.join(format!("qorvynt-qvm-{suffix}.qvmb"));
+        std::fs::write(&source_path, "define answer := 6 * 7\\nshow answer\\n").unwrap();
+        let source_text = source_path.to_string_lossy().to_string();
+        let bytecode_text = bytecode_path.to_string_lossy().to_string();
+
+        super::write_qvm_bytecode(&source_text, &bytecode_text).unwrap();
+        let serialized = std::fs::read_to_string(&bytecode_path).unwrap();
+        assert!(serialized.starts_with("ZENVORA_BYTECODE 2\\n"));
+        let code = super::read_qvm_bytecode(&bytecode_text).unwrap();
+        let mut output = Vec::new();
+        super::run_with_output(&code, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+
+        std::fs::write(&bytecode_path, "ZENVORA_BYTECODE 1\\nPUSH 42\\nPRINT\\n").unwrap();
+        assert!(super::read_qvm_bytecode(&bytecode_text).unwrap_err().contains("Bytecode v2"));
+        let _ = std::fs::remove_file(source_path);
+        let _ = std::fs::remove_file(bytecode_path);
     }
 
     #[test]
