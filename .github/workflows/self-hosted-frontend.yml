@@ -3,7 +3,7 @@ name: QORVYNT self-hosted compiler and Bytecode v2 validation
 on:
   pull_request:
     paths:
-      - "compiler/parser.zv"
+      - "compiler/parser.qv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -12,7 +12,7 @@ on:
     branches:
       - main
     paths:
-      - "compiler/parser.zv"
+      - "compiler/parser.qv"
       - ".github/workflows/self-hosted-frontend.yml"
       - "src/**"
       - "Cargo.toml"
@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.zv > parser-output.txt
+          cargo run --locked --quiet -- compiler/parser.qv > parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_DRIVER_PASS' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
           grep -F 'ZENVORA_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
@@ -98,7 +98,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.zv > parser-output-repeat.txt
+          cargo run --locked --quiet -- compiler/parser.qv > parser-output-repeat.txt
           awk '/^ZENVORA_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           awk '/^ZENVORA_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-native-v2-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json
