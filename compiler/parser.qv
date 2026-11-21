@@ -2618,6 +2618,8 @@ if get(generic_driver_recursive, "ok") and get(generic_driver_recursive_run, "ok
 # plan construction, and canonical Bytecode v2 serialization happen in QORVYNT.
 define input_compile_result := compile_source(source_text)
 if get(input_compile_result, "ok") {
+  show "QORVYNT_INPUT_BYTECODE_PLAN_JSON"
+  show json_encode(get(input_compile_result, "plan"))
   define input_native_v2 := emit_bytecode_v2(get(input_compile_result, "plan"))
   if get(input_native_v2, "ok") {
     show "ZENVORA_INPUT_BYTECODE_V2_JSON"
