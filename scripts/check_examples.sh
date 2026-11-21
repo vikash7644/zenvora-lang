@@ -12,7 +12,7 @@ fi
 
 for example in "${examples[@]}"; do
   echo "Checking runnable example: ${example}"
-  ./target/release/zv "${example}" >/dev/null
+  ./target/release/qorvynt "${example}" >/dev/null
 done
 
-echo "All ${#examples[@]} Zenvora Lang example files executed successfully."
+echo "All ${#examples[@]} QORVYNT example files executed successfully."

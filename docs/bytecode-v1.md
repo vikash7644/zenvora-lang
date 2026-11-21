@@ -7,7 +7,7 @@
 The source compiler checks reachable function return-kind consistency; the loader runs the full v1 control-flow and stack verifier after decoding a file. A file begins with this exact first line:
 
 ```text
-ZENVORA_BYTECODE 1
+QORVYNT_BYTECODE 1
 ```
 
 Each following non-empty line encodes exactly one instruction. Instructions use ASCII opcode names and whitespace-separated operands. Identifiers use letters, digits, and underscores, and may not begin with a digit. Function parameter names in `CALL_TARGET` are comma-separated. A function with no parameters uses `-`.

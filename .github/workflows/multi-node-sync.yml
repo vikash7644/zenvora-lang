@@ -1,4 +1,4 @@
-name: Zenvora multi-node sync smoke test
+name: QORVYNT multi-node sync smoke test
 
 on:
   pull_request:
@@ -23,8 +23,8 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build Zenvora CLI
-        run: cargo build --bin zv
+      - name: Build QORVYNT CLI
+        run: cargo build --bin qorvynt
 
       - name: Verify independent nodes synchronize and reject mismatched chain IDs
         shell: bash
@@ -38,23 +38,23 @@ jobs:
           }
           trap cleanup EXIT
 
-          cli="./target/debug/zv"
+          cli="./target/debug/qorvynt"
           chain_id=71001
           port=18671
 
           # Both nodes start from the same deterministic genesis configuration.
-          "$cli" --chain-keygen "$tmp/validator.zvk"
-          "$cli" --chain-store-init "$tmp/node-a.zvb" "$chain_id" "$tmp/validator.zvk" 1000000
-          "$cli" --chain-store-init "$tmp/node-b.zvb" "$chain_id" "$tmp/validator.zvk" 1000000
+          "$cli" --chain-keygen "$tmp/validator.qorvyntk"
+          "$cli" --chain-store-init "$tmp/node-a.qorvyntb" "$chain_id" "$tmp/validator.qorvyntk" 1000000
+          "$cli" --chain-store-init "$tmp/node-b.qorvyntb" "$chain_id" "$tmp/validator.qorvyntk" 1000000
 
           # Advance only node A; node B must obtain the block through the peer protocol.
-          "$cli" --chain-store-transfer "$tmp/node-a.zvb" "$chain_id" "$tmp/validator.zvk" bob 125 3
+          "$cli" --chain-store-transfer "$tmp/node-a.qorvyntb" "$chain_id" "$tmp/validator.qorvyntk" bob 125 3
 
-          "$cli" --chain-p2p-serve "$tmp/node-a.zvb" "$chain_id" 127.0.0.1 "$port" >"$tmp/peer.log" 2>&1 &
+          "$cli" --chain-p2p-serve "$tmp/node-a.qorvyntb" "$chain_id" 127.0.0.1 "$port" >"$tmp/peer.log" 2>&1 &
           peer_pid="$!"
           ready=0
           for attempt in $(seq 1 30); do
-            if "$cli" --chain-p2p-sync "$tmp/node-b.zvb" "$chain_id" "127.0.0.1:$port" >"$tmp/sync.log" 2>&1; then
+            if "$cli" --chain-p2p-sync "$tmp/node-b.qorvyntb" "$chain_id" "127.0.0.1:$port" >"$tmp/sync.log" 2>&1; then
               ready=1
               break
             fi
@@ -67,14 +67,14 @@ jobs:
             exit 1
           fi
 
-          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-a.zvb" "$chain_id" 1
-          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.zvb" "$chain_id" 1
-          test "$("$cli" --chain-store-balance "$tmp/node-a.zvb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.zvb" "$chain_id" bob)"
+          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-a.qorvyntb" "$chain_id" 1
+          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.qorvyntb" "$chain_id" 1
+          test "$("$cli" --chain-store-balance "$tmp/node-a.qorvyntb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.qorvyntb" "$chain_id" bob)"
 
           # Matching balances alone are not enough: compare the independently replayed state
           # commitment and canonical tip hash between the two stores.
-          info_a="$("$cli" --chain-store-info "$tmp/node-a.zvb" "$chain_id")"
-          info_b="$("$cli" --chain-store-info "$tmp/node-b.zvb" "$chain_id")"
+          info_a="$("$cli" --chain-store-info "$tmp/node-a.qorvyntb" "$chain_id")"
+          info_b="$("$cli" --chain-store-info "$tmp/node-b.qorvyntb" "$chain_id")"
           field() { printf '%s\n' "$1" | awk -v key="$2" '{ for (i = 1; i <= NF; i++) { split($i, pair, "="); if (pair[1] == key) print pair[2] } }'; }
           for key in height state_root tip_hash; do
             value_a="$(field "$info_a" "$key")"
@@ -85,17 +85,17 @@ jobs:
           echo "PASS: synchronized nodes agree on height, state root, and tip hash."
 
           # A genuinely separate node configured for another chain must reject node A.
-          "$cli" --chain-store-init "$tmp/node-c.zvb" 71002 "$tmp/validator.zvk" 1000000
-          if "$cli" --chain-p2p-sync "$tmp/node-c.zvb" 71002 "127.0.0.1:$port"; then
+          "$cli" --chain-store-init "$tmp/node-c.qorvyntb" 71002 "$tmp/validator.qorvyntk" 1000000
+          if "$cli" --chain-p2p-sync "$tmp/node-c.qorvyntb" 71002 "127.0.0.1:$port"; then
             echo "Node C incorrectly accepted a peer with a mismatched chain ID" >&2
             exit 1
           fi
 
           # A same-chain node with a conflicting block at the same height must not
           # silently overwrite local history; fork choice is intentionally not implemented.
-          "$cli" --chain-store-init "$tmp/node-d.zvb" "$chain_id" "$tmp/validator.zvk" 1000000
-          "$cli" --chain-store-transfer "$tmp/node-d.zvb" "$chain_id" "$tmp/validator.zvk" alice 200 3
-          if "$cli" --chain-p2p-sync "$tmp/node-d.zvb" "$chain_id" "127.0.0.1:$port"; then
+          "$cli" --chain-store-init "$tmp/node-d.qorvyntb" "$chain_id" "$tmp/validator.qorvyntk" 1000000
+          "$cli" --chain-store-transfer "$tmp/node-d.qorvyntb" "$chain_id" "$tmp/validator.qorvyntk" alice 200 3
+          if "$cli" --chain-p2p-sync "$tmp/node-d.qorvyntb" "$chain_id" "127.0.0.1:$port"; then
             echo "Node D incorrectly accepted a conflicting same-height chain" >&2
             exit 1
           fi
@@ -106,11 +106,11 @@ jobs:
           kill "$peer_pid"
           wait "$peer_pid" 2>/dev/null || true
           peer_pid=""
-          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-a.zvb" "$chain_id" 1
-          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.zvb" "$chain_id" 1
-          test "$("$cli" --chain-store-balance "$tmp/node-a.zvb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.zvb" "$chain_id" bob)"
-          info_a="$("$cli" --chain-store-info "$tmp/node-a.zvb" "$chain_id")"
-          info_b="$("$cli" --chain-store-info "$tmp/node-b.zvb" "$chain_id")"
+          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-a.qorvyntb" "$chain_id" 1
+          sh scripts/verify_chain_store.sh "$cli" "$tmp/node-b.qorvyntb" "$chain_id" 1
+          test "$("$cli" --chain-store-balance "$tmp/node-a.qorvyntb" "$chain_id" bob)" = "$("$cli" --chain-store-balance "$tmp/node-b.qorvyntb" "$chain_id" bob)"
+          info_a="$("$cli" --chain-store-info "$tmp/node-a.qorvyntb" "$chain_id")"
+          info_b="$("$cli" --chain-store-info "$tmp/node-b.qorvyntb" "$chain_id")"
           for key in height state_root tip_hash; do
             test "$(field "$info_a" "$key")" = "$(field "$info_b" "$key")"
           done

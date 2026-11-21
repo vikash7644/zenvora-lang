@@ -1,8 +1,12 @@
 [package]
-name = "zenvora"
+name = "qorvynt-reference-interpreter"
 version = "0.1.0"
 edition = "2021"
-description = "Early interpreter MVP for Zenvora Lang"
+description = "Reference interpreter MVP for QORVYNT language tests"
 license = "MIT"
+
+[[bin]]
+name = "qorvynt_reference_interpreter"
+path = "src/main.rs"
 
 [dependencies]

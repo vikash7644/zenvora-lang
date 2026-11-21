@@ -1,4 +1,4 @@
-name: Zenvora Lang CI
+name: QORVYNT CI
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: zenvora-lang-ci-v3-${{ github.workflow }}-${{ github.ref }}
+  group: qorvynt-lang-ci-v3-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,6 +28,9 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
+      - name: Enforce canonical QORVYNT source extension
+        run: bash scripts/check_qv_extension.sh
+
       - name: Check compilation
         run: cargo check --locked --all-targets
 
@@ -38,12 +41,12 @@ jobs:
         run: cargo test --locked --all-targets
 
       - name: Build optimized release CLI
-        run: cargo build --locked --release --bin zv
+        run: cargo build --locked --release --bin qorvynt
 
       - name: Validate distributable Rust package
         run: cargo package --locked
 
-      - name: Execute every Zenvora Lang example
+      - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
       - name: Test persistent contract CLI, gas, and rollback
@@ -53,15 +56,15 @@ jobs:
         run: bash scripts/test_contract_artifact.sh
 
       - name: Smoke-test optimized release CLI version
-        run: ./target/release/zv --version
+        run: ./target/release/qorvynt --version
 
       - name: Smoke-test optimized release example
-        run: ./target/release/zv examples/hello.qv | grep -Fxq 35
+        run: ./target/release/qorvynt examples/hello.qv | grep -Fxq 35
 
       - name: Run hello example
         run: cargo run --locked -- examples/hello.qv
 
-      - name: Run Zenvora Lang language tour
+      - name: Run QORVYNT language tour
         run: cargo run --locked -- examples/qorvynt-language-tour.qv
 
       - name: Run loop-control example
@@ -97,26 +100,35 @@ jobs:
       - name: Run contract DSL example
         run: cargo run --locked -- examples/contracts.qv
 
-      - name: Run Zenvora Lang transaction-rule checks
+      - name: Run QORVYNT transaction-rule checks
         run: cargo run --locked -- examples/chain_transfer.qv
 
       - name: Run module import example
         run: cargo run --locked -- examples/modules.qv
 
       - name: Compile example to bytecode v1
-        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --emit-bytecode examples/functions.qv /tmp/qorvynt-functions.qvb
 
       - name: Execute compiled bytecode v1
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zvb
+        run: cargo run --locked -- --run-bytecode /tmp/qorvynt-functions.qvb
 
       - name: Compile example to experimental bytecode v2
-        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --emit-bytecode-v2 examples/functions.qv /tmp/qorvynt-functions.qv2b
 
       - name: Check bytecode v2 header
-        run: grep -q '^ZENVORA_BYTECODE 2$' /tmp/zenvora-functions.zv2b
+        run: grep -q '^QORVYNT_BYTECODE 2$' /tmp/qorvynt-functions.qv2b
 
       - name: Execute verified bytecode v2
-        run: cargo run --locked -- --run-bytecode /tmp/zenvora-functions.zv2b
+        run: cargo run --locked -- --run-bytecode /tmp/qorvynt-functions.qv2b
+      - name: Compile and execute a QVM artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -- --qvm-compile examples/hello.qv /tmp/qorvynt-hello.qvmb
+          grep -q '^QORVYNT_BYTECODE 2$' /tmp/qorvynt-hello.qvmb
+          cargo run --locked -- examples/hello.qv > /tmp/qorvynt-source-output.txt
+          cargo run --locked -- --qvm-run /tmp/qorvynt-hello.qvmb > /tmp/qorvynt-qvm-output.txt
+          diff -u /tmp/qorvynt-source-output.txt /tmp/qorvynt-qvm-output.txt
 
       - name: Verify CLI version
         run: cargo run --locked -- --version
@@ -127,27 +139,26 @@ jobs:
       - name: Smoke-test Rust compiler HTTP API
         shell: bash
         run: |
-          cargo run --locked -- --compiler-api 18787 > /tmp/zenvora-compiler-api.log 2>&1 &
+          cargo run --locked -- --compiler-api 18787 > /tmp/qorvynt-compiler-api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
-            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/zenvora-api-health.json; then
+            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/qorvynt-api-health.json; then
               break
             fi
             sleep 1
           done
-          grep -q '"service":"zenvora-compiler-api"' /tmp/zenvora-api-health.json
+          grep -q '"service":"qorvynt-compiler-api"' /tmp/qorvynt-api-health.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
             --data '{"source":"define a := 10\ndefine b := 20\nshow a + b\nshow a * 2"}' \
-            http://127.0.0.1:18787/compile-run > /tmp/zenvora-api-result.json
-          grep -q '"output":"30\\n20"' /tmp/zenvora-api-result.json
+            http://127.0.0.1:18787/compile-run > /tmp/qorvynt-api-result.json
+          grep -Fq '"output":"30\n20"' /tmp/qorvynt-api-result.json
           curl --silent --show-error --fail \
             -H 'Content-Type: application/json' \
             --data '{"source":"show missing_variable"}' \
-            http://127.0.0.1:18787/compile-run > /tmp/zenvora-api-error.json
-          grep -q '"ok":false' /tmp/zenvora-api-error.json
-
+            http://127.0.0.1:18787/compile-run > /tmp/qorvynt-api-error.json
+          grep -q '"ok":false' /tmp/qorvynt-api-error.json
   interpreter-mvp:
     name: Interpreter MVP regression suite
     runs-on: ubuntu-latest

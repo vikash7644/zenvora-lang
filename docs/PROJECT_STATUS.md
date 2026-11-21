@@ -1,14 +1,39 @@
-# Zenvora Lang — Mission Status and Completion Gate
+# QORVYNT Lang — Mission Status and Completion Gate
 
-Last audited: 2026-10-23  
-Scope: `vikash7644/zenvora-lang` on `main`. This ledger is a working checklist, not a claim that the project is complete.
+Last audited: 2026-11-21  
+Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; this ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
 
 - **Implemented, needs current CI proof**: code and tests exist; the current revision still needs green CI.
 - **Prototype / partial**: useful functionality exists, but known limitations remain.
 - **Pending**: not complete enough to claim release-ready.
-- **Out of scope for Zenvora Lang**: chain-specific work must be handled in the separate BHYVORIX Chain repository after that repository is verified.
+- **Out of scope for QORVYNT Lang**: chain-specific work must live in a separate, independently verified chain repository.
+
+## QORVYNT identity and independence milestone (2026-11-21)
+
+- [x] Rename the root Rust package and canonical executable from the former Zenvora identity to `qorvynt`.
+- [x] Update CLI tests, release/build workflows, integration smoke workflows, and docs to invoke `qorvynt`.
+- [x] Make `QORVYNT_BYTECODE 1/2` the canonical emitted format headers.
+- [x] Keep old `ZENVORA_BYTECODE 1/2` files readable as a migration-only compatibility path; the compiler emits only QORVYNT headers.
+- [ ] Remove old chain-specific runtime modules and CLI commands from the language compiler; chain code must live in its own repository.
+- [ ] Complete the self-hosted compiler and QVM bootstrap so a clean environment can build and run QORVYNT without the Rust reference host.
+- [ ] Rename the GitHub repository itself and migrate Pages/release URLs after the code and CI rename is verified.
+
+**Boundary:** package/CLI/bytecode identity is being migrated; QORVYNT is not yet Rust-independent and the old chain modules are not yet fully separated.
+
+## QORVYNT Virtual Machine (QVM) milestone (2026-11-21)
+
+- [x] Add explicit `--qvm-compile <file.qv> <output.qvmb>` command using the compiler's Bytecode v2 layout and verifier.
+- [x] Add explicit `--qvm-run <file.qvmb>` command that accepts v2 only and routes the verified instruction stream through the existing VM engine.
+- [x] Add a round-trip regression test for source → QVM artifact → verified load → execution, plus a v1 rejection check.
+- [x] Document the current pipeline and engineering gates in [QVM.md](QVM.md).
+- [ ] Extract the runtime value model, opcodes, and execution loop from `src/main.rs` into a dedicated QVM module.
+- [ ] Build and test a standalone QVM library/runner that loads artifacts without invoking the source compiler.
+- [ ] Freeze and independently review the bytecode contract before defining a stable binary artifact format.
+- [ ] Complete a clean-environment self-hosted compiler bootstrap before claiming Rust independence.
+
+**Boundary:** QVM currently reuses the Rust-hosted VM implementation. The new CLI is an explicit verified v2 path, not a standalone VM or Rust-independent compiler.
 
 ## Current gate: Bytecode v2
 
@@ -31,9 +56,9 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 
 - Added `src/contract_runtime.rs`: the Rust compiler/VM now executes contract `action` and `view` calls against persisted integer state. Actions commit through isolated state overlays; failed execution/out-of-gas leaves prior state unchanged; views do not commit and cannot invoke actions.
 - The VM has an opt-in deterministic gas-metered execution path: base gas is charged once, then each executed opcode is charged using the versioned integer schedule. This is an experimental local schedule, not an activated blockchain protocol parameter.
-- Added `zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]` with versioned atomic snapshots. CI verifies persistent actions, view results, gas reporting, and no snapshot change on out-of-gas.
+- Added `qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]` with versioned atomic snapshots. CI verifies persistent actions, view results, gas reporting, and no snapshot change on out-of-gas.
 - Added `replay_block` to replay ordered contract calls on a candidate state and publish it only when every call succeeds and the final state root matches the supplied commitment. This is a local contract-call replay harness, not full signed block/consensus replay.
-- Added `zv --contract-artifact <contract.qv> <artifact.json>`: emits ABI metadata, source SHA-256, compiler version, and verifier-checked Bytecode v2. ABI output is experimental and currently reports state as integer and method types as dynamic; it is not a chain deployment format.
+- Added `qorvynt --contract-artifact <contract.qv> <artifact.json>`: emits ABI metadata, source SHA-256, compiler version, and verifier-checked Bytecode v2. ABI output is experimental and currently reports state as integer and method types as dynamic; it is not a chain deployment format.
 - Storage/gas tests, contract action/view tests, artifact tests, and the CLI integration test passed in main CI run [39368613130](https://github.com/vikash7644/zenvora-lang/actions/runs/39368613130). Bytecode v2 fuzz is still running on matching compiler-source revision [39368477353](https://github.com/vikash7644/zenvora-lang/actions/runs/39368477353).
 - Still pending: signed contract-call transaction envelope and signer authorization, fee reservation/settlement, chain-specific transaction receipts and replay integration, broad typed state (arrays/maps/strings), real-compiler browser playground backend, deployment ABI freeze and on-chain deployment/verification, independent security review. BHYVORIX Chain must live in its own repository; `vikash7644/bhyvorix-chain` has not been created/verified yet.
 
@@ -93,7 +118,7 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 4. Replace the demo-only playground execution path with a secure real-compiler integration and test parity.
 5. Implement and independently test contract state persistence, atomic rollback, authorization, deterministic gas, ABI, and deployment before describing contracts as production-ready.
 6. Finish editor/LSP and release packaging, then complete the release checklist.
-7. Only after Zenvora Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Do not mix chain branding into the Zenvora Lang name.
+7. Only after QORVYNT Lang's release gate is met, move chain work to the separate BHYVORIX Chain repository. Do not mix chain branding into the QORVYNT Lang name.
 
 ## Continuity note
 

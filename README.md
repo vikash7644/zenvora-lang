@@ -12,7 +12,7 @@ QORVYNT is an actively developed programming language. The canonical and only su
 
 ## Legacy blockchain material — migration pending
 
-A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the Zenvora Lang release scope** and must be moved to the separate BHYVORIX Chain repository only after that destination and its tests are verified.
+A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the QORVYNT Lang release scope** and must be moved to a separate, independently maintained blockchain repository only after that destination and its tests are verified.
 
 - [Legacy chain technical specification draft](docs/zenvora-technical-spec-v1.md)
 - [Legacy chain protocol specification draft](docs/chain-protocol-specification-draft.md)
@@ -26,13 +26,13 @@ The live implementation checklist, known limitations, and CI completion gates ar
 
 ## Repository contents
 
-- `Cargo.toml` and `Cargo.lock` — Rust package manifest and locked dependency versions for the `zv` command.
+- `Cargo.toml` and `Cargo.lock` — Rust package manifest and locked dependency versions for the `qorvynt` command.
 - `CHANGELOG.md` — v0.8.0 release notes and current feature status.
 - `docs/language-grammar.md` — current parser grammar draft and unresolved v1.0 semantics.
 - `src/main.rs` — language lexer/parser, compiler, stack VM, CLI, and regression tests; legacy chain CLI entrypoints are still present pending migration.
-- `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the Zenvora Lang release scope.
+- `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the QORVYNT Lang release scope.
 - `examples/hello.qv` — arithmetic and variable example.
-- `examples/qorvynt-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
+- `examples/zenvora-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.qv` — loop condition, `break`, and `continue` example.
 - `examples/functions.qv` — function parameters, local variables, return values, and loops.
 - `examples/booleans.qv` — native booleans and logical operators.
@@ -48,15 +48,15 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `docs/language-v0.1.md` — current language feature status and roadmap.
 - `docs/bytecode-v1.md` — version 1 bytecode instruction format and loader-validation limits.
 - `docs/technical_spec.md` — legacy draft architecture for the former chain prototype; planned migration to the separate BHYVORIX Chain repository.
-- `examples/token.zvl` — illustrative smart-contract DSL draft; not executable by the current compiler.
+- `examples/token.qvt` — illustrative smart-contract DSL draft; not executable by the current compiler.
 - `website/` — static responsive ecosystem landing page.
 
 ## See QORVYNT code in action
 
-The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/qorvynt-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
+The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/zenvora-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
 
-```zv
-define name := "Zenvora"
+```qorvynt
+define name := "QORVYNT"
 define answer := multiply(6, 7)
 show "Hello, " + name
 show answer
@@ -66,7 +66,7 @@ fn multiply(left, right) {
 }
 ```
 
-GitHub's repository language meter may still show **Rust** because the compiler and virtual machine are implemented in Rust; that meter does not mean the `.qv` programs are Rust. Zenvora Lang is currently a custom language and GitHub does not automatically provide its own syntax-highlighting grammar from a file extension alone.
+GitHub's repository language meter may still show **Rust** because the compiler and virtual machine are implemented in Rust; that meter does not mean the `.qv` programs are Rust. QORVYNT Lang is currently a custom language and GitHub does not automatically provide its own syntax-highlighting grammar from a file extension alone.
 
 ## Editor support
 
@@ -78,14 +78,14 @@ This is syntax highlighting only—not a language server, compiler, debugger, or
 
 ## Latest prototype release
 
-The latest cross-platform CLI build is published as a **pre-release**: [Zenvora Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
+The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
 
 - Linux x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-linux-x86_64.tar.gz)
 - macOS Intel x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-macos-x86_64.tar.gz)
 - macOS Apple Silicon ARM64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-macos-aarch64.tar.gz)
 - Windows x86-64: [ZIP](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-windows-x86_64.zip)
 
-Each archive includes the `zv` CLI, README, and MIT license. These binaries were built by GitHub Actions for the listed platforms; they do not require compiling the project on your phone.
+Each archive includes the `qorvynt` CLI, README, and MIT license. These binaries were built by GitHub Actions for the listed platforms; they do not require compiling the project on your phone.
 
 **Prototype warning:** this is not a production smart-contract toolchain. Do not use real funds or deploy production contracts with it.
 
@@ -134,8 +134,8 @@ cargo run -- examples/stdlib-strings.qv
 cargo run -- examples/contracts.qv
 cargo run -- examples/modules.qv
 cargo run -- --check examples/functions.qv
-cargo run -- --emit-bytecode examples/functions.qv functions.zvb
-cargo run -- --run-bytecode functions.zvb
+cargo run -- --emit-bytecode examples/functions.qv functions.qvb
+cargo run -- --run-bytecode functions.qvb
 cargo run -- --version
 cargo run -- --help
 ```
@@ -159,14 +159,14 @@ cargo run -- my-first-project/main.qv
 cargo run -- --check my-first-project/main.qv
 ```
 
-The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. When using a built release binary, the same commands are `zv --new my-first-project`, `zv my-first-project/main.qv`, and `zv --check my-first-project/main.qv`.
+The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. When using a built release binary, the same commands are `qorvynt --new my-first-project`, `qorvynt my-first-project/main.qv`, and `qorvynt --check my-first-project/main.qv`.
 
 ## Beginner workflow: from idea to runnable project
 
-1. Create a project: `zv --new my-project`.
+1. Create a project: `qorvynt --new my-project`.
 2. Open `my-project/main.qv` in any text editor and change the example.
-3. Compile-check it: `zv --check my-project/main.qv`.
-4. Run it: `zv my-project/main.qv`.
+3. Compile-check it: `qorvynt --check my-project/main.qv`.
+4. Run it: `qorvynt my-project/main.qv`.
 5. Keep a small runnable example for each new feature and add a regression test when changing the compiler or VM.
 
 During development from this repository, prefix each command with `cargo run --`. For example, `cargo run -- --new my-project`. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The current CLI is not yet a full package manager, IDE, debugger, or cross-platform installer.
@@ -177,7 +177,7 @@ During development from this repository, prefix each command with `cargo run --`
 
 ## Compile-only validation
 
-Use `zv --check <file.qv>` to load relative imports and compile the program without executing it. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
+Use `qorvynt --check <file.qv>` to load relative imports and compile the program without executing it. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
 
 ```sh
 cargo run -- --check examples/functions.qv
@@ -185,28 +185,28 @@ cargo run -- --check examples/functions.qv
 
 ## Local signed-chain development prototype
 
-A local-only signed transaction workflow is available in the `zv` CLI:
+A local-only signed transaction workflow is available in the `qorvynt` CLI:
 
 ```sh
-zv --chain-keygen owner.zvk
-zv --chain-store-init dev.zvb 71 owner.zvk 1000000
-zv --chain-store-transfer dev.zvb 71 owner.zvk bob 125 3
-zv --chain-store-balance dev.zvb 71 bob
-zv --chain-store-info dev.zvb 71
-zv --chain-rpc dev.zvb 71 8545
+qorvynt --chain-keygen owner.qvk
+qorvynt --chain-store-init dev.qvb 71 owner.qvk 1000000
+qorvynt --chain-store-transfer dev.qvb 71 owner.qvk bob 125 3
+qorvynt --chain-store-balance dev.qvb 71 bob
+qorvynt --chain-store-info dev.qvb 71
+qorvynt --chain-rpc dev.qvb 71 8545
 # Signed transaction pool + manual validator block production:
-zv --chain-rpc-pool dev.zvb 71 pending.zvp 8545
-zv --chain-store-produce dev.zvb 71 pending.zvp owner.zvk
+qorvynt --chain-rpc-pool dev.qvb 71 pending.qvp 8545
+qorvynt --chain-store-produce dev.qvb 71 pending.qvp owner.qvk
 # On a trusted private network only:
-zv --chain-p2p-serve dev.zvb 71 0.0.0.0 9000
+qorvynt --chain-p2p-serve dev.qvb 71 0.0.0.0 9000
 # On another node initialized from the exact same genesis:
-zv --chain-p2p-sync node-b.zvb 71 192.168.1.10:9000
+qorvynt --chain-p2p-sync node-b.qvb 71 192.168.1.10:9000
 # Optional manual transaction gossip (pool-enabled peer):
-zv --chain-p2p-serve-pool dev.zvb 71 pending.zvp 0.0.0.0 9000
-zv --chain-p2p-gossip node-b.zvb 71 pending-b.zvp 192.168.1.10:9000
+qorvynt --chain-p2p-serve-pool dev.qvb 71 pending.qvp 0.0.0.0 9000
+qorvynt --chain-p2p-gossip node-b.qvb 71 pending-b.qvp 192.168.1.10:9000
 ```
 
-The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the Zenvora Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
+The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the QORVYNT Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
 
 **Development-only warning:** key files contain an unencrypted private seed. Fees are currently reserved for admission but are not charged; the TCP peer prototype supports block sync and manual transaction gossip but has no peer authentication, automatic discovery/gossip, automated voting, full BFT consensus/finality, or production wallet/security review. Quorum signatures alone do not provide decentralized consensus. Never expose it to the public internet. Do not use real funds or treat the local file as a decentralized blockchain.
 
@@ -221,21 +221,21 @@ The runtime now includes checked integer helpers: `gcd`, `lcm`, `factorial` (0�
 The compiler can write and run versioned stack-machine bytecode files:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.zvb
-cargo run -- --run-bytecode functions.zvb
+cargo run -- --emit-bytecode examples/functions.qv functions.qvb
+cargo run -- --run-bytecode functions.qvb
 
 # Experimental opt-in v2 output:
-cargo run -- --emit-bytecode-v2 examples/functions.qv functions.zv2b
-cargo run -- --run-bytecode functions.zv2b
+cargo run -- --emit-bytecode-v2 examples/functions.qv functions.qv2b
+cargo run -- --run-bytecode functions.qv2b
 ```
 
-Version 1 remains the default and its serializer/loader behavior is unchanged. The experimental v2 format starts with `ZENVORA_BYTECODE 2` and includes explicit main/function regions, parameter names, and return-kind metadata. The v2 compiler emission path verifies the generated file before writing it; the loader verifies a v2 file again before passing its instructions to the VM. The verifier checks region boundaries, opcodes/operands, jumps, calls/argument counts, return kinds, stack underflow/joins, and main exit stack cleanliness. Both versions are bounded by bytecode-size, instruction-count, string-size, argument-count, call-depth, and operand-stack limits.
+Version 1 remains the default and its serializer/loader behavior is unchanged. The experimental v2 format starts with `QORVYNT_BYTECODE 2` and includes explicit main/function regions, parameter names, and return-kind metadata. The v2 compiler emission path verifies the generated file before writing it; the loader verifies a v2 file again before passing its instructions to the VM. The verifier checks region boundaries, opcodes/operands, jumps, calls/argument counts, return kinds, stack underflow/joins, and main exit stack cleanliness. Both versions are bounded by bytecode-size, instruction-count, string-size, argument-count, call-depth, and operand-stack limits.
 
 **V2 stability warning:** v2 is experimental and its text grammar/opcode set may change. Deterministic adversarial tests, round-trip/property checks, and dedicated fuzz campaigns are covered by CI; independent security review remains pending. This is not formal verification or an audit; do not use v2 for real funds or production contracts.
 
 ## Current language syntax
 
-```zv
+```qorvynt
 define age := 20
 
 if age >= 18 {

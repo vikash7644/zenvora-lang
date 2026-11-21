@@ -135,7 +135,7 @@ pub fn validate_layout(layout: &ProgramLayout) -> Result<(), String> {
 
 /// Parse the provisional canonical v2 framing:
 ///
-/// `ZENVORA_BYTECODE 2`
+/// `QORVYNT_BYTECODE 2`
 /// `PROGRAM 0 <main-end>`
 /// `FUNCTION <entry> <end> <parameter-count> <void|value> <names...>`
 /// `CODE`
@@ -149,7 +149,7 @@ pub fn parse_v2_file(input: &str) -> Result<ParsedV2File, String> {
     }
 
     let mut lines = input.lines();
-    if lines.next().map(str::trim) != Some("ZENVORA_BYTECODE 2") {
+    if !matches!(lines.next().map(str::trim), Some("QORVYNT_BYTECODE 2" | "ZENVORA_BYTECODE 2")) {
         return Err("bytecode v2: missing or unsupported header".into());
     }
 
@@ -235,7 +235,7 @@ pub fn serialize_v2_file(file: &ParsedV2File) -> Result<String, String> {
     }
     validate_layout(&file.layout)?;
 
-    let mut output = String::from("ZENVORA_BYTECODE 2\n");
+    let mut output = String::from("QORVYNT_BYTECODE 2\n");
     output.push_str(&format!("PROGRAM 0 {}\n", file.layout.main_end));
     for function in &file.layout.functions {
         let kind = match function.return_kind {
@@ -667,32 +667,36 @@ mod tests {
 
     #[test]
     fn parses_and_round_trips_metadata_and_opaque_code() {
-        let source = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value amount\nFUNCTION 4 6 0 void -\nCODE\nPUSH 7\nHALT\nRET\nNOP\nRET\nNOP\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value amount\nFUNCTION 4 6 0 void -\nCODE\nPUSH 7\nHALT\nRET\nNOP\nRET\nNOP\n";
         let parsed = parse_v2_file(source).unwrap();
         assert_eq!(parsed.layout.main_end, 2);
         assert_eq!(parsed.layout.functions[0].parameters, vec!["amount"]);
         assert_eq!(parsed.layout.functions[1].return_kind, ReturnKind::Void);
         assert_eq!(serialize_v2_file(&parsed).unwrap(), source);
+
+        let legacy = source.replacen("QORVYNT_BYTECODE 2", "ZENVORA_BYTECODE 2", 1);
+        let legacy_parsed = parse_v2_file(&legacy).unwrap();
+        assert!(serialize_v2_file(&legacy_parsed).unwrap().starts_with("QORVYNT_BYTECODE 2\n"));
     }
 
     #[test]
     fn rejects_missing_or_unknown_headers_and_missing_code() {
         assert!(parse_v2_file("PROGRAM 0 1\nCODE\nHALT\n").unwrap_err().contains("header"));
         assert!(parse_v2_file("ZENVORA_BYTECODE 9\nPROGRAM 0 1\nCODE\nHALT\n").unwrap_err().contains("header"));
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nHALT\n").unwrap_err().contains("FUNCTION record or CODE"));
+        assert!(parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 1\nHALT\n").unwrap_err().contains("FUNCTION record or CODE"));
     }
 
     #[test]
     fn rejects_malformed_metadata_and_parameter_mismatch() {
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 1 2\nCODE\nHALT\n").unwrap_err().contains("start at instruction zero"));
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 x\nCODE\nHALT\n").unwrap_err().contains("main end"));
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 2 value only\nCODE\nHALT\n").unwrap_err().contains("parameter count"));
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 maybe -\nCODE\nHALT\n").unwrap_err().contains("return kind"));
+        assert!(parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 1 2\nCODE\nHALT\n").unwrap_err().contains("start at instruction zero"));
+        assert!(parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 x\nCODE\nHALT\n").unwrap_err().contains("main end"));
+        assert!(parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 2 value only\nCODE\nHALT\n").unwrap_err().contains("parameter count"));
+        assert!(parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 maybe -\nCODE\nHALT\n").unwrap_err().contains("return kind"));
     }
 
     #[test]
     fn rejects_embedded_carriage_return_in_instruction_record() {
-        let input = "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\r JUMP 2\nJUMP 2\n";
+        let input = "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\r JUMP 2\nJUMP 2\n";
         assert!(parse_v2_file(input).unwrap_err().contains("embedded carriage return"));
     }
 
@@ -714,8 +718,8 @@ mod tests {
 
     #[test]
     fn rejects_blank_code_and_uncovered_regions() {
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\n\n").unwrap_err().contains("blank instruction"));
-        assert!(parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\nNOP\n").unwrap_err().contains("undeclared instruction region"));
+        assert!(parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\n\n").unwrap_err().contains("blank instruction"));
+        assert!(parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 1\nCODE\nHALT\nNOP\n").unwrap_err().contains("undeclared instruction region"));
     }
 
     #[test]
@@ -730,7 +734,7 @@ mod tests {
     #[test]
     fn verifier_accepts_metadata_driven_function_call_and_return() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
     }
@@ -738,54 +742,54 @@ mod tests {
     #[test]
     fn verifier_rejects_unknown_builtin_and_accepts_supported_builtin() {
         let unknown = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN not_a_real_builtin 0\nJUMP 2\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN not_a_real_builtin 0\nJUMP 2\n",
         ).unwrap();
         assert!(verify_v2_file(&unknown).unwrap_err().contains("malformed instruction"));
 
         let known = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nCODE\nPUSH_STRING_HEX 61\nBUILTIN len 1\nPRINT\nJUMP 4\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 4\nCODE\nPUSH_STRING_HEX 61\nBUILTIN len 1\nPRINT\nJUMP 4\n",
         ).unwrap();
         assert!(verify_v2_file(&known).is_ok());
     }
 
     #[test]
     fn verifier_rejects_unknown_opcode_and_bad_call_target() {
-        let unknown = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nMAGIC\nJUMP 3\n").unwrap();
+        let unknown = parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nMAGIC\nJUMP 3\n").unwrap();
         assert!(verify_v2_file(&unknown).unwrap_err().contains("malformed instruction"));
 
-        let bad_call = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nCALL 2 0\nJUMP 2\n").unwrap();
+        let bad_call = parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nCALL 2 0\nJUMP 2\n").unwrap();
         assert!(verify_v2_file(&bad_call).unwrap_err().contains("undeclared function"));
     }
 
     #[test]
     fn verifier_rejects_cross_region_jumps_and_wrong_argument_count() {
-        let cross_jump = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 3\nPUSH 1\nJUMP 3\n").unwrap();
+        let cross_jump = parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 3\nPUSH 1\nJUMP 3\n").unwrap();
         assert!(verify_v2_file(&cross_jump).unwrap_err().contains("escapes its region"));
 
         let wrong_args = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value item\nCODE\nCALL 2 0\nJUMP 2\nPUSH 1\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value item\nCODE\nCALL 2 0\nJUMP 2\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&wrong_args).unwrap_err().contains("passes 0 argument(s)"));
     }
 
     #[test]
     fn verifier_rejects_stack_underflow_inconsistent_joins_and_main_residue() {
-        let underflow = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n").unwrap();
+        let underflow = parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nPRINT\nJUMP 2\n").unwrap();
         assert!(verify_v2_file(&underflow).unwrap_err().contains("stack underflow"));
 
         let join = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 7\nCODE\nPUSH_BOOL true\nJUMP_IF_FALSE 5\nPUSH 1\nJUMP 5\nPUSH 2\nPRINT\nJUMP 7\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 7\nCODE\nPUSH_BOOL true\nJUMP_IF_FALSE 5\nPUSH 1\nJUMP 5\nPUSH 2\nPRINT\nJUMP 7\n",
         ).unwrap();
         assert!(verify_v2_file(&join).unwrap_err().contains("inconsistent stack depth"));
 
-        let residue = parse_v2_file("ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\nJUMP 2\n").unwrap();
+        let residue = parse_v2_file("QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1\nJUMP 2\n").unwrap();
         assert!(verify_v2_file(&residue).unwrap_err().contains("main exits with 1 operand value(s)"));
     }
 
     #[test]
     fn verifier_rejects_function_return_kind_mismatch() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 void -\nCODE\nJUMP 1\nPUSH 1\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 void -\nCODE\nJUMP 1\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("return kind does not match"));
     }
@@ -794,12 +798,12 @@ mod tests {
     #[test]
     fn verifier_checks_disconnected_unreachable_components_with_empty_stack_policy() {
         let unreachable_underflow = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nPRINT\nJUMP 3\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nPRINT\nJUMP 3\n",
         ).unwrap();
         assert!(verify_v2_file(&unreachable_underflow).unwrap_err().contains("stack underflow"));
 
         let unreachable_loop = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 1\nJUMP 3\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 1\nJUMP 3\n",
         ).unwrap();
         assert!(verify_v2_file(&unreachable_loop).is_ok());
     }
@@ -808,7 +812,7 @@ mod tests {
     #[test]
     fn verifier_checks_declared_but_uncalled_function_regions() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 0 void -\nCODE\nJUMP 1\nJUMP 2\nPRINT\nRETURN\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 0 void -\nCODE\nJUMP 1\nJUMP 2\nPRINT\nRETURN\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("stack underflow"));
     }
@@ -817,14 +821,14 @@ mod tests {
     fn parser_survives_deterministic_bounded_fuzz_smoke_inputs() {
         // Deterministic, dependency-free parser fuzz smoke test for CI. This is
         // not a substitute for longer-running cargo-fuzz/property-based campaigns.
-        const ALPHABET: &[u8] = b"ZENVORA_BYTECODE 2\nPROGRAM FUNCTION CODE PUSH CALL JUMP RETURN_VALUE true false -_0123456789";
+        const ALPHABET: &[u8] = b"QORVYNT_BYTECODE 2\nPROGRAM FUNCTION CODE PUSH CALL JUMP RETURN_VALUE true false -_0123456789";
         let mut state = 0x5eed_u64;
         for case_index in 0..4_096usize {
             state ^= (case_index as u64).wrapping_mul(0x9e37_79b9);
             let length = (state as usize) % 192;
             let mut input = String::with_capacity(length + 32);
             if case_index % 3 == 0 {
-                input.push_str("ZENVORA_BYTECODE 2\n");
+                input.push_str("QORVYNT_BYTECODE 2\n");
             }
             for _ in 0..length {
                 state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
@@ -836,7 +840,7 @@ mod tests {
 
     #[test]
     fn rejects_integer_boundaries_and_malformed_instruction_operands() {
-        let too_large = "ZENVORA_BYTECODE 2\nPROGRAM 0 184467440737095516160\nCODE\nJUMP 1\n";
+        let too_large = "QORVYNT_BYTECODE 2\nPROGRAM 0 184467440737095516160\nCODE\nJUMP 1\n";
         assert!(parse_v2_file(too_large).unwrap_err().contains("invalid main end"));
 
         let malformed = [
@@ -861,7 +865,7 @@ mod tests {
     #[test]
     fn verifier_rejects_invalid_jump_in_unreachable_code() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 99\nJUMP 3\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nJUMP 2\nJUMP 99\nJUMP 3\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("escapes its region"));
     }
@@ -880,12 +884,12 @@ mod tests {
     #[test]
     fn rejects_branch_targets_at_region_end_except_main_exit_jump() {
         let main_conditional_exit = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nJUMP_IF_FALSE 1\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nCODE\nJUMP_IF_FALSE 1\n",
         ).unwrap();
         assert!(verify_v2_file(&main_conditional_exit).unwrap_err().contains("escapes its region"));
 
         let function_end_jump = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 void -\nCODE\nJUMP 1\nJUMP 3\nRETURN\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 void -\nCODE\nJUMP 1\nJUMP 3\nRETURN\n",
         ).unwrap();
         assert!(verify_v2_file(&function_end_jump).unwrap_err().contains("escapes its region"));
     }
@@ -893,7 +897,7 @@ mod tests {
     #[test]
     fn rejects_extreme_branch_and_call_operands_without_panicking() {
         let extreme_jump = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nJUMP 18446744073709551615\nJUMP 2\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nJUMP 18446744073709551615\nJUMP 2\n",
         ).unwrap();
         assert!(verify_v2_file(&extreme_jump).unwrap_err().contains("escapes its region"));
 
@@ -929,7 +933,7 @@ mod tests {
     #[test]
     fn verifier_accepts_nested_metadata_driven_calls_with_consistent_stack_effects() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 7 1 value x\nFUNCTION 7 11 1 value y\nCODE\nPUSH 40\nCALL 4 1\nPRINT\nJUMP 4\nLOAD x\nCALL 7 1\nRETURN_VALUE\nLOAD y\nPUSH 2\nMUL\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 7 1 value x\nFUNCTION 7 11 1 value y\nCODE\nPUSH 40\nCALL 4 1\nPRINT\nJUMP 4\nLOAD x\nCALL 7 1\nRETURN_VALUE\nLOAD y\nPUSH 2\nMUL\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
     }
@@ -937,7 +941,7 @@ mod tests {
     #[test]
     fn verifier_rejects_call_when_metadata_matches_but_operand_stack_lacks_arguments() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value x\nCODE\nCALL 2 1\nJUMP 2\nLOAD x\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nFUNCTION 2 4 1 value x\nCODE\nCALL 2 1\nJUMP 2\nLOAD x\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("stack underflow"));
     }
@@ -945,7 +949,7 @@ mod tests {
     #[test]
     fn verifier_rejects_value_return_with_extra_stack_values_on_one_branch() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 8 1 value flag\nCODE\nJUMP 1\nLOAD flag\nJUMP_IF_FALSE 6\nPUSH 7\nPUSH 8\nRETURN_VALUE\nPUSH 9\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 8 1 value flag\nCODE\nJUMP 1\nLOAD flag\nJUMP_IF_FALSE 6\nPUSH 7\nPUSH 8\nRETURN_VALUE\nPUSH 9\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("return at instruction"));
     }
@@ -954,12 +958,12 @@ mod tests {
     #[test]
     fn serializer_parser_round_trip_preserves_verified_program_metadata_and_code() {
         let original = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 4\nFUNCTION 4 6 1 value amount\nCODE\nPUSH 9\nCALL 4 1\nPRINT\nJUMP 4\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&original).is_ok());
 
         let serialized = serialize_v2_file(&original).unwrap();
-        assert!(serialized.starts_with("ZENVORA_BYTECODE 2\n"));
+        assert!(serialized.starts_with("QORVYNT_BYTECODE 2\n"));
 
         let reparsed = parse_v2_file(&serialized).unwrap();
         assert_eq!(reparsed, original);
@@ -970,7 +974,7 @@ mod tests {
     #[test]
     fn verifier_accepts_unary_negation_without_losing_the_stack_value() {
         let file = parse_v2_file(
-            r#"ZENVORA_BYTECODE 2
+            r#"QORVYNT_BYTECODE 2
 PROGRAM 0 4
 CODE
 PUSH 1
@@ -985,7 +989,7 @@ JUMP 4
     #[test]
     fn verifier_accepts_boolean_not_without_losing_the_stack_value() {
         let file = parse_v2_file(
-            r#"ZENVORA_BYTECODE 2
+            r#"QORVYNT_BYTECODE 2
 PROGRAM 0 4
 CODE
 PUSH_BOOL true
@@ -1000,7 +1004,7 @@ JUMP 4
     #[test]
     fn verifier_rejects_unary_operators_when_the_operand_stack_is_empty() {
         let negation = parse_v2_file(
-            r#"ZENVORA_BYTECODE 2
+            r#"QORVYNT_BYTECODE 2
 PROGRAM 0 2
 CODE
 NEG
@@ -1010,7 +1014,7 @@ JUMP 2
         assert!(verify_v2_file(&negation).unwrap_err().contains("stack underflow"));
 
         let boolean_not = parse_v2_file(
-            r#"ZENVORA_BYTECODE 2
+            r#"QORVYNT_BYTECODE 2
 PROGRAM 0 2
 CODE
 NOT
@@ -1023,7 +1027,7 @@ JUMP 2
     #[test]
     fn verifier_preserves_stack_depth_on_keep_branches_and_accepts_balanced_join() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 6\nCODE\nPUSH_BOOL true\nJUMP_IF_FALSE_KEEP 4\nPRINT\nPUSH_BOOL false\nPRINT\nJUMP 6\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 6\nCODE\nPUSH_BOOL true\nJUMP_IF_FALSE_KEEP 4\nPRINT\nPUSH_BOOL false\nPRINT\nJUMP 6\n",
         ).unwrap();
         assert!(verify_v2_file(&file).is_ok());
     }
@@ -1031,7 +1035,7 @@ JUMP 2
     #[test]
     fn verifier_rejects_keep_branch_join_with_different_stack_depths() {
         let file = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 4\nCODE\nPUSH_BOOL true\nJUMP_IF_TRUE_KEEP 3\nPRINT\nJUMP 4\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 4\nCODE\nPUSH_BOOL true\nJUMP_IF_TRUE_KEEP 3\nPRINT\nJUMP 4\n",
         ).unwrap();
         assert!(verify_v2_file(&file).unwrap_err().contains("inconsistent stack depth"));
     }
@@ -1075,12 +1079,12 @@ JUMP 2
     #[test]
     fn verifier_rejects_builtin_underflow_and_return_in_main() {
         let builtin_underflow = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN len 1\nJUMP 2\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN len 1\nJUMP 2\n",
         ).unwrap();
         assert!(verify_v2_file(&builtin_underflow).unwrap_err().contains("stack underflow"));
 
         let return_in_main = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nCODE\nRETURN\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nCODE\nRETURN\n",
         ).unwrap();
         assert!(verify_v2_file(&return_in_main).unwrap_err().contains("return instruction outside a function"));
     }
@@ -1088,7 +1092,7 @@ JUMP 2
     #[test]
     fn verifier_rejects_conditional_function_fallthrough_and_bad_parameter_names() {
         let fallthrough = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 4 1 value flag\nCODE\nJUMP 1\nLOAD flag\nJUMP_IF_FALSE 3\nPUSH 1\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 4 1 value flag\nCODE\nJUMP 1\nLOAD flag\nJUMP_IF_FALSE 3\nPUSH 1\n",
         ).unwrap();
         assert!(verify_v2_file(&fallthrough).unwrap_err().contains("function falls through"));
 
@@ -1099,9 +1103,9 @@ JUMP 2
     #[test]
     fn parser_and_serializer_reject_noncanonical_instruction_records() {
         let malformed = [
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1 extra\nJUMP 2\n",
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN unknown 0\nJUMP 2\n",
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 2\nCODE\nJUMP -1\nJUMP 2\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nPUSH 1 extra\nJUMP 2\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nBUILTIN unknown 0\nJUMP 2\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nJUMP -1\nJUMP 2\n",
         ];
         for source in malformed {
             let parsed = parse_v2_file(source).unwrap();
@@ -1119,17 +1123,17 @@ JUMP 2
     #[test]
     fn verifier_enforces_exact_stack_shape_for_void_and_value_returns() {
         let void_with_residue = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 void -\nCODE\nJUMP 1\nPUSH 9\nRETURN\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 void -\nCODE\nJUMP 1\nPUSH 9\nRETURN\n",
         ).unwrap();
         assert!(verify_v2_file(&void_with_residue).unwrap_err().contains("return at instruction 2 has 1 operand value(s), expected 0"));
 
         let valid_void = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 void -\nCODE\nJUMP 1\nRETURN\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 void -\nCODE\nJUMP 1\nRETURN\n",
         ).unwrap();
         assert!(verify_v2_file(&valid_void).is_ok());
 
         let valid_value = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 value -\nCODE\nJUMP 1\nPUSH 9\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 3 0 value -\nCODE\nJUMP 1\nPUSH 9\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&valid_value).is_ok());
     }
@@ -1138,7 +1142,7 @@ JUMP 2
     #[test]
     fn verifier_rejects_value_return_with_more_than_one_stack_value() {
         let extra_value = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 4 0 value -\nCODE\nJUMP 1\nPUSH 9\nPUSH 10\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 4 0 value -\nCODE\nJUMP 1\nPUSH 9\nPUSH 10\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&extra_value).unwrap_err().contains(
             "return at instruction 3 has 2 operand value(s), expected 1"
@@ -1148,12 +1152,12 @@ JUMP 2
     #[test]
     fn verifier_rejects_value_return_without_a_value_and_call_into_function_body() {
         let missing_value = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 value -\nCODE\nJUMP 1\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 1\nFUNCTION 1 2 0 value -\nCODE\nJUMP 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&missing_value).unwrap_err().contains("operand stack underflow"));
 
         let call_into_body = parse_v2_file(
-            "ZENVORA_BYTECODE 2\nPROGRAM 0 3\nFUNCTION 3 5 0 value -\nCODE\nCALL 4 0\nPRINT\nJUMP 3\nPUSH 1\nRETURN_VALUE\n",
+            "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nFUNCTION 3 5 0 value -\nCODE\nCALL 4 0\nPRINT\nJUMP 3\nPUSH 1\nRETURN_VALUE\n",
         ).unwrap();
         assert!(verify_v2_file(&call_into_body).unwrap_err().contains("undeclared function"));
     }
@@ -1183,7 +1187,7 @@ JUMP 2
     #[test]
     fn parser_accepts_windows_crlf_bytecode_without_preserving_carriage_returns() {
         let windows_source = concat!(
-            "ZENVORA_BYTECODE 2\r\n",
+            "QORVYNT_BYTECODE 2\r\n",
             "PROGRAM 0 3\r\n",
             "CODE\r\n",
             "PUSH 7\r\n",
@@ -1204,7 +1208,7 @@ JUMP 2
     #[test]
     fn parser_rejects_embedded_carriage_return_inside_instruction_record() {
         let malformed = concat!(
-            "ZENVORA_BYTECODE 2\n",
+            "QORVYNT_BYTECODE 2\n",
             "PROGRAM 0 2\n",
             "CODE\n",
             "PUSH 7\rX\n",
@@ -1218,7 +1222,7 @@ JUMP 2
     #[test]
     fn parser_accepts_crlf_file_without_a_final_line_terminator() {
         let source = concat!(
-            "ZENVORA_BYTECODE 2\r\n",
+            "QORVYNT_BYTECODE 2\r\n",
             "PROGRAM 0 3\r\n",
             "CODE\r\n",
             "PUSH 7\r\n",
@@ -1235,7 +1239,7 @@ JUMP 2
     #[test]
     fn parser_accepts_mixed_lf_and_crlf_line_endings() {
         let source = concat!(
-            "ZENVORA_BYTECODE 2\n",
+            "QORVYNT_BYTECODE 2\n",
             "PROGRAM 0 3\r\n",
             "CODE\n",
             "PUSH 7\r\n",

@@ -1,4 +1,4 @@
-name: Build Zenvora Lang release artifacts
+name: Build QORVYNT Lang release artifacts
 
 on:
   push:
@@ -34,10 +34,10 @@ jobs:
         run: cargo test --locked --all-targets
 
       - name: Build optimized CLI
-        run: cargo build --locked --release --bin zv
+        run: cargo build --locked --release --bin qorvynt
 
       - name: Smoke-test release CLI
-        run: ./target/release/zv examples/hello.zv | grep -Fxq 35
+        run: ./target/release/qorvynt examples/hello.qorvynt | grep -Fxq 35
 
       - name: Export dependency inventory
         run: |
@@ -84,7 +84,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build CLI
-        run: cargo build --locked --release --bin zv --target ${{ matrix.target }}
+        run: cargo build --locked --release --bin qorvynt --target ${{ matrix.target }}
 
       - name: Package Unix binary
         if: runner.os != 'Windows'
@@ -92,22 +92,22 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp "target/${{ matrix.target }}/release/zv" dist/zv
+          cp "target/${{ matrix.target }}/release/qorvynt" dist/qorvynt
           cp README.md dist/README.md
           cp LICENSE dist/LICENSE
-          tar -czf "dist/zenvora-lang-${{ matrix.name }}.tar.gz" -C dist zv README.md LICENSE
-          rm dist/zv dist/README.md dist/LICENSE
+          tar -czf "dist/zenvora-lang-${{ matrix.name }}.tar.gz" -C dist qorvynt README.md LICENSE
+          rm dist/qorvynt dist/README.md dist/LICENSE
 
       - name: Package Windows binary
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/zv.exe" "dist/zv.exe"
+          Copy-Item "target/${{ matrix.target }}/release/qorvynt.exe" "dist/qorvynt.exe"
           Copy-Item README.md "dist/README.md"
           Copy-Item LICENSE "dist/LICENSE"
-          Compress-Archive -Path dist/zv.exe,dist/README.md,dist/LICENSE -DestinationPath "dist/zenvora-lang-${{ matrix.name }}.zip" -Force
-          Remove-Item dist/zv.exe,dist/README.md,dist/LICENSE
+          Compress-Archive -Path dist/qorvynt.exe,dist/README.md,dist/LICENSE -DestinationPath "dist/zenvora-lang-${{ matrix.name }}.zip" -Force
+          Remove-Item dist/qorvynt.exe,dist/README.md,dist/LICENSE
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
@@ -135,7 +135,7 @@ jobs:
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.8.0-prototype.1' }}
           target_commitish: main
-          name: Zenvora Lang v0.8.0 Prototype 1
+          name: QORVYNT Lang v0.8.0 Prototype 1
           prerelease: true
           generate_release_notes: true
           files: dist/*

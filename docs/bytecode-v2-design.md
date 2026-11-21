@@ -20,7 +20,7 @@ Bytecode v1 infers function regions from `CALL_TARGET` instructions. This leaves
 The current **provisional canonical grammar** used by `parse_v2_file` is:
 
 ```text
-ZENVORA_BYTECODE 2
+QORVYNT_BYTECODE 2
 PROGRAM 0 2
 FUNCTION 2 4 1 value amount
 CODE
