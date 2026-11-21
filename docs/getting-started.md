@@ -1,6 +1,6 @@
 # Zenvora Lang — Developer Getting Started
 
-Zenvora Lang is a small, independent programming language for the Zenvora ecosystem. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.zv` extension and run through the `zv` command.
+Zenvora Lang is a small, independent programming language for the Zenvora ecosystem. Its current compiler and stack-based virtual machine are implemented in Rust. Programs use the `.qv` extension and run through the `zv` command.
 
 > **Prototype status:** this is an early developer preview. The contract DSL is not a persistent smart-contract runtime, the local chain code is not a public testnet, and Bytecode v2 is experimental. Do not use it for real funds or production contracts.
 
@@ -19,7 +19,7 @@ To run the compiler directly from the repository, prefix commands with `cargo ru
 
 ## 2. Run your first program
 
-Create `hello.zv` with this source:
+Create `hello.qv` with this source:
 
 ```zv
 define name := "Zenvora"
@@ -36,8 +36,8 @@ fn multiply(left, right) {
 Run and compile-check it:
 
 ```sh
-cargo run -- hello.zv
-cargo run -- --check hello.zv
+cargo run -- hello.qv
+cargo run -- --check hello.qv
 ```
 
 Expected output from the first command:
@@ -53,19 +53,19 @@ The `--check` command parses and compiles the file and its relative imports with
 
 Start with these files in the repository:
 
-- [Language tour](../examples/zenvora-language-tour.zv) — variables, strings, arrays, conditionals, loops, and functions.
-- [Hello world and arithmetic](../examples/hello.zv).
-- [Loops and loop control](../examples/loops.zv).
-- [Functions](../examples/functions.zv).
-- [Booleans](../examples/booleans.zv).
-- [Strings](../examples/strings.zv) and [string helpers](../examples/stdlib-strings.zv).
-- [Arrays and maps](../examples/collections.zv) and [indexing](../examples/indexing.zv).
-- [Standard library](../examples/stdlib.zv).
-- [Integer-only science helpers](../examples/science.zv).
-- [Relative imports](../examples/modules.zv).
-- [Experimental contract syntax](../examples/contracts.zv) — syntax demonstration only, not persistent chain execution.
+- [Language tour](../examples/zenvora-language-tour.qv) — variables, strings, arrays, conditionals, loops, and functions.
+- [Hello world and arithmetic](../examples/hello.qv).
+- [Loops and loop control](../examples/loops.qv).
+- [Functions](../examples/functions.qv).
+- [Booleans](../examples/booleans.qv).
+- [Strings](../examples/strings.qv) and [string helpers](../examples/stdlib-strings.qv).
+- [Arrays and maps](../examples/collections.qv) and [indexing](../examples/indexing.qv).
+- [Standard library](../examples/stdlib.qv).
+- [Integer-only science helpers](../examples/science.qv).
+- [Relative imports](../examples/modules.qv).
+- [Experimental contract syntax](../examples/contracts.qv) — syntax demonstration only, not persistent chain execution.
 
-Run an example with `cargo run -- examples/functions.zv`. GitHub Actions runs the language tour and a wider set of examples as regression checks.
+Run an example with `cargo run -- examples/functions.qv`. GitHub Actions runs the language tour and a wider set of examples as regression checks.
 
 ## 4. Core syntax at a glance
 
@@ -117,23 +117,23 @@ For the broader feature inventory, limitations, and roadmap, read [Language impl
 
 ## 5. Modules
 
-A source file can import a relative `.zv` module using `use "relative/path.zv"`. Imports resolve from the importing file. Duplicate imports are skipped, cycles are rejected, and import depth is bounded. A full package manager, namespace/visibility system, and deterministic package registry are not implemented yet.
+A source file can import a relative `.qv` module using `use "relative/path.qv"`. Imports resolve from the importing file. Duplicate imports are skipped, cycles are rejected, and import depth is bounded. A full package manager, namespace/visibility system, and deterministic package registry are not implemented yet.
 
-See [the module example](../examples/modules.zv) and its imported files.
+See [the module example](../examples/modules.qv) and its imported files.
 
 ## 6. Bytecode
 
 The default bytecode format is version 1:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.zv functions.zvb
+cargo run -- --emit-bytecode examples/functions.qv functions.zvb
 cargo run -- --run-bytecode functions.zvb
 ```
 
 Experimental version 2 emission is opt-in:
 
 ```sh
-cargo run -- --emit-bytecode-v2 examples/functions.zv functions.zv2b
+cargo run -- --emit-bytecode-v2 examples/functions.qv functions.zv2b
 cargo run -- --run-bytecode functions.zv2b
 ```
 
@@ -152,7 +152,7 @@ cargo test --all-targets
 
 When changing behavior:
 1. Add a focused regression test for the reported case.
-2. Add an executable `.zv` example if the change is user-facing.
+2. Add an executable `.qv` example if the change is user-facing.
 3. Run the relevant example and the full test suite.
 4. Update the language status/bytecode documentation if behavior or compatibility changed.
 5. Check the Actions run for the exact commit; a successful older run does not validate a newer commit.

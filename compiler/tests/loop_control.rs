@@ -7,7 +7,7 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 fn run_program(source: &str) -> Output {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!(
-        "zenvora_loop_test_{}_{}.zv",
+        "zenvora_loop_test_{}_{}.qv",
         std::process::id(),
         id
     ));

@@ -34,7 +34,7 @@ fn append_bounded(expanded: &mut String, text: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Loads a .zv program and expands use "relative/path.zv" directives.
+/// Loads a .qv program and expands use "relative/path.qv" directives.
 /// Paths are resolved relative to the file containing the directive.
 pub fn load(path: &Path) -> Result<String, String> {
     let mut loaded = HashSet::new();
@@ -106,7 +106,7 @@ fn parse_module_path(input: &str) -> Result<&str, &'static str> {
     let trimmed = input.trim();
     let input = trimmed.strip_suffix(';').unwrap_or(trimmed).trim();
     let Some(rest) = input.strip_prefix('"') else {
-        return Err("expected module path as use \"relative/path.zv\"");
+        return Err("expected module path as use \"relative/path.qv\"");
     };
     let Some(end) = rest.find('"') else {
         return Err("unterminated module path string");
@@ -165,12 +165,12 @@ mod tests {
     #[test]
     fn rejects_module_source_that_is_not_utf8() {
         let temp = TempDir::new();
-        let path = temp.0.join("invalid_utf8.zv");
+        let path = temp.0.join("invalid_utf8.qv");
         fs::write(&path, [0xff, 0xfe, 0x80]).unwrap();
 
         let error = load(&path).unwrap_err();
         assert!(error.contains("module source is not valid UTF-8"), "{error}");
-        assert!(error.contains("invalid_utf8.zv"), "{error}");
+        assert!(error.contains("invalid_utf8.qv"), "{error}");
     }
 
     #[test]
@@ -180,21 +180,21 @@ mod tests {
             let source = if index == super::MAX_MODULE_DEPTH {
                 "show 1\n".to_string()
             } else {
-                format!("use \"module_{next}.zv\"\n", next = index + 1)
+                format!("use \"module_{next}.qv\"\n", next = index + 1)
             };
-            fs::write(temp.0.join(format!("module_{index}.zv")), source).unwrap();
+            fs::write(temp.0.join(format!("module_{index}.qv")), source).unwrap();
         }
 
-        let error = load(&temp.0.join("module_0.zv")).unwrap_err();
+        let error = load(&temp.0.join("module_0.qv")).unwrap_err();
         assert!(error.contains("module import depth exceeds safety limit"), "{error}");
     }
 
     #[test]
     fn rejects_absolute_and_drive_prefixed_module_paths_portably() {
         let temp = TempDir::new();
-        for module_path in ["/tmp/secret.zv", "C:/private/secret.zv", "D:relative-on-windows.zv"] {
-            fs::write(temp.0.join("main.zv"), format!("use \"{module_path}\"\n")).unwrap();
-            let error = load(&temp.0.join("main.zv")).unwrap_err();
+        for module_path in ["/tmp/secret.qv", "C:/private/secret.qv", "D:relative-on-windows.qv"] {
+            fs::write(temp.0.join("main.qv"), format!("use \"{module_path}\"\n")).unwrap();
+            let error = load(&temp.0.join("main.qv")).unwrap_err();
             assert!(error.contains("module path must be relative"), "{module_path}: {error}");
         }
     }
@@ -202,18 +202,18 @@ mod tests {
     #[test]
     fn rejects_trailing_text_after_a_quoted_module_path() {
         let temp = TempDir::new();
-        fs::write(temp.0.join("main.zv"), "use \"child.zv\" extra\n").unwrap();
-        fs::write(temp.0.join("child.zv"), "show 1\n").unwrap();
+        fs::write(temp.0.join("main.qv"), "use \"child.qv\" extra\n").unwrap();
+        fs::write(temp.0.join("child.qv"), "show 1\n").unwrap();
 
-        let error = load(&temp.0.join("main.zv")).unwrap_err();
+        let error = load(&temp.0.join("main.qv")).unwrap_err();
         assert!(error.contains("unexpected text after module path"), "{error}");
-        assert!(error.contains("main.zv:1"), "{error}");
+        assert!(error.contains("main.qv:1"), "{error}");
     }
 
     #[test]
     fn rejects_oversized_module_source_before_unbounded_reading() {
         let temp = TempDir::new();
-        let path = temp.0.join("large.zv");
+        let path = temp.0.join("large.qv");
         fs::write(&path, "x".repeat(super::MAX_MODULE_SOURCE_BYTES as usize + 1)).unwrap();
         let error = load(&path).unwrap_err();
         assert!(error.contains("module source exceeds safety limit"), "{error}");
@@ -231,10 +231,10 @@ mod tests {
     fn expands_relative_modules_and_ignores_duplicate_imports() {
         let temp = TempDir::new();
         fs::create_dir_all(temp.0.join("lib")).unwrap();
-        fs::write(temp.0.join("main.zv"), "use \"lib/math.zv\"\nuse \"lib/math.zv\"\nshow add(2, 3)\n").unwrap();
-        fs::write(temp.0.join("lib/math.zv"), "fn add(a, b) {\n return a + b\n}\n").unwrap();
+        fs::write(temp.0.join("main.qv"), "use \"lib/math.qv\"\nuse \"lib/math.qv\"\nshow add(2, 3)\n").unwrap();
+        fs::write(temp.0.join("lib/math.qv"), "fn add(a, b) {\n return a + b\n}\n").unwrap();
 
-        let source = load(&temp.0.join("main.zv")).unwrap();
+        let source = load(&temp.0.join("main.qv")).unwrap();
         assert_eq!(source.matches("fn add").count(), 1);
         assert!(source.contains("show add(2, 3)"));
     }
@@ -242,28 +242,28 @@ mod tests {
     #[test]
     fn reports_cyclic_imports() {
         let temp = TempDir::new();
-        fs::write(temp.0.join("a.zv"), "use \"b.zv\"\n").unwrap();
-        fs::write(temp.0.join("b.zv"), "use \"a.zv\"\n").unwrap();
+        fs::write(temp.0.join("a.qv"), "use \"b.qv\"\n").unwrap();
+        fs::write(temp.0.join("b.qv"), "use \"a.qv\"\n").unwrap();
 
-        let error = load(&temp.0.join("a.zv")).unwrap_err();
+        let error = load(&temp.0.join("a.qv")).unwrap_err();
         assert!(error.contains("cyclic module import"));
     }
 
     #[test]
     fn reports_missing_modules_with_import_location() {
         let temp = TempDir::new();
-        fs::write(temp.0.join("main.zv"), "use \"missing.zv\"\n").unwrap();
+        fs::write(temp.0.join("main.qv"), "use \"missing.qv\"\n").unwrap();
 
-        let error = load(&temp.0.join("main.zv")).unwrap_err();
-        assert!(error.contains("main.zv:1"));
-        assert!(error.contains("missing.zv"));
+        let error = load(&temp.0.join("main.qv")).unwrap_err();
+        assert!(error.contains("main.qv:1"));
+        assert!(error.contains("missing.qv"));
     }
 
     #[test]
     fn rejects_malformed_use_directives() {
         let temp = TempDir::new();
-        fs::write(temp.0.join("main.zv"), "use lib.zv\n").unwrap();
+        fs::write(temp.0.join("main.qv"), "use lib.qv\n").unwrap();
 
-        assert!(load(&temp.0.join("main.zv")).unwrap_err().contains("expected module path"));
+        assert!(load(&temp.0.join("main.qv")).unwrap_err().contains("expected module path"));
     }
 }

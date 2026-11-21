@@ -15,7 +15,7 @@ This folder contains an isolated line-based Rust interpreter used for syntax exp
 
 ## Automated verification
 
-GitHub Actions runs `cargo test` in this folder and executes the shared hello example on every relevant push. The main bytecode VM has its own root-level test suite and also runs `examples/loops.zv` in CI. You do not need to run commands on your phone to keep these cloud checks working.
+GitHub Actions runs `cargo test` in this folder and executes the shared hello example on every relevant push. The main bytecode VM has its own root-level test suite and also runs `examples/loops.qv` in CI. You do not need to run commands on your phone to keep these cloud checks working.
 
 ## Syntax
 

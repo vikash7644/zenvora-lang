@@ -1,10 +1,10 @@
 # QORVYNT editor support
 
-This folder contains a small Visual Studio Code language extension for QORVYNT source files (`.qv`; `.zv` is temporarily accepted for compatibility).
+This folder contains a small Visual Studio Code language extension for QORVYNT source files (`.qv`).
 
 ## Included
 
-- Registers the **QORVYNT** language ID for `.qv` files and temporarily accepts `.zv` as a legacy alias.
+- Registers the **QORVYNT** language ID for `.qv` files.
 - TextMate syntax highlighting for the current draft syntax: declarations, control flow, functions, strings and escapes, comments, booleans, integers, operators, punctuation, and common built-ins.
 - Basic bracket matching, quote pairing, and `#` line comments.
 
@@ -15,7 +15,7 @@ This folder contains a small Visual Studio Code language extension for QORVYNT s
 3. Press `F5` if the VS Code Extension Development Host is available.
 4. In the development host, open a `.qv` example from the repository.
 
-This is editor syntax support, not a compiler or language server. Diagnostics, autocomplete, go-to-definition, formatting, and debugging are not provided yet. The grammar tracks the current draft syntax and may need updates as the language evolves. The legacy `.zv` alias will be removed only after source files, examples, CLI behavior, and CI have all migrated.
+This is editor syntax support, not a compiler or language server. Diagnostics, autocomplete, go-to-definition, formatting, and debugging are not provided yet. The grammar tracks the current draft syntax and may need updates as the language evolves.
 
 ## Install a packaged VSIX
 

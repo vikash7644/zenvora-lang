@@ -3387,13 +3387,13 @@ fn create_project(name: &str) -> Result<(), String> {
         } else { format!("cannot create project '{name}': {error}") }
     })?;
     let main_source = "# Welcome to your first Zenvora project!\ndefine student := \"Creator\"\nshow \"Hello, \" + student\nshow \"Your first calculation:\"\nshow 6 * 7\n\ndefine scores := array(10, 20, 30)\nshow \"Total score:\"\nshow sum(scores)\n";
-    let readme = format!("# {name}\n\nA starter project written in Zenvora Lang.\n\nRun from the Zenvora Lang repository root:\n\n    cargo run -- {name}/main.zv\n    cargo run -- --check {name}/main.zv\n\nEdit main.zv to make this project your own.\n");
-    if let Err(error) = fs::write(path.join("main.zv"), main_source).and_then(|_| fs::write(path.join("README.md"), readme)) {
+    let readme = format!("# {name}\n\nA starter project written in Zenvora Lang.\n\nRun from the Zenvora Lang repository root:\n\n    cargo run -- {name}/main.qv\n    cargo run -- --check {name}/main.qv\n\nEdit main.qv to make this project your own.\n");
+    if let Err(error) = fs::write(path.join("main.qv"), main_source).and_then(|_| fs::write(path.join("README.md"), readme)) {
         let _ = fs::remove_dir_all(path);
         return Err(format!("cannot write starter project files: {error}"));
     }
     println!("Created Zenvora project '{name}'");
-    println!("Next: zv {name}/main.zv");
+    println!("Next: zv {name}/main.qv");
     Ok(())
 }
 fn run_contract_command(
@@ -3434,12 +3434,12 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.zv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.zv>\n       zv --emit-bytecode <file.zv> <output.zvb>\n       zv --emit-bytecode-v2 <file.zv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("Zenvora Lang v0.8.0\nUsage: zv <file.qv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.qv>\n       zv --emit-bytecode <file.qv> <output.zvb>\n       zv --emit-bytecode-v2 <file.qv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
         if args.len() != 7 && args.len() != 8 {
-            eprintln!("Usage: zv --contract-run <file.zv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]");
+            eprintln!("Usage: zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]");
             process::exit(2);
         }
         let gas_limit = if args.len() == 8 {
@@ -3494,7 +3494,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.zv> | zv --new <project-name> | zv --check <file.zv> | zv --emit-bytecode <file.zv> <output.zvb> | zv --emit-bytecode-v2 <file.zv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --contract-artifact <contract.zv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: zv <file.qv> | zv --new <project-name> | zv --check <file.qv> | zv --emit-bytecode <file.qv> <output.zvb> | zv --emit-bytecode-v2 <file.qv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --contract-artifact <contract.qv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
@@ -3682,9 +3682,9 @@ mod tests {
         let path = std::path::Path::new(&name);
         let _ = std::fs::remove_dir_all(path);
         super::create_project(&name).unwrap();
-        assert!(path.join("main.zv").is_file());
+        assert!(path.join("main.qv").is_file());
         assert!(path.join("README.md").is_file());
-        let source = std::fs::read_to_string(path.join("main.zv")).unwrap();
+        let source = std::fs::read_to_string(path.join("main.qv")).unwrap();
         assert_eq!(execute_source_for_test(&source).unwrap(), vec!["Hello, Creator", "Your first calculation:", "42", "Total score:", "60"]);
         assert!(super::create_project(&name).unwrap_err().contains("refusing to overwrite"));
         std::fs::remove_dir_all(path).unwrap();
@@ -3706,7 +3706,7 @@ mod tests {
     }
     #[test]
     fn check_program_compiles_without_running_side_effects() {
-        let path = std::env::temp_dir().join(format!("zenvora-check-{}.zv", std::process::id()));
+        let path = std::env::temp_dir().join(format!("zenvora-check-{}.qv", std::process::id()));
         std::fs::write(&path, concat!("show 1 / 0", "\n")).unwrap();
         let path_text = path.to_string_lossy().to_string();
         // Compilation succeeds even though executing this program would divide by zero.
