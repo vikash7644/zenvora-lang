@@ -676,7 +676,7 @@ mod tests {
 
         let legacy = source.replacen("QORVYNT_BYTECODE 2", "ZENVORA_BYTECODE 2", 1);
         let legacy_parsed = parse_v2_file(&legacy).unwrap();
-        assert!(serialize_v2_file(&legacy_parsed).unwrap().starts_with("QORVYNT_BYTECODE 2\\n"));
+        assert!(serialize_v2_file(&legacy_parsed).unwrap().starts_with("QORVYNT_BYTECODE 2\n"));
     }
 
     #[test]
