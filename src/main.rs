@@ -16,6 +16,7 @@ mod compiler_api;
 mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
+mod qvm;
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -2804,25 +2805,6 @@ fn write_bytecode_v2(source_path: &str, output_path: &str) -> Result<(), String>
     fs::write(output_path, serialized).map_err(|error| format!("cannot write {output_path}: {error}"))
 }
 
-// QVM artifacts are verifier-checked Bytecode v2 programs. The current QVM
-// execution engine is hosted by this Rust CLI; it is not yet a standalone VM.
-fn write_qvm_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
-    write_bytecode_v2(source_path, output_path)
-}
-
-fn read_qvm_bytecode(path: &str) -> Result<Vec<Op>, String> {
-    let serialized = read_bytecode_source(path)?;
-    if !(serialized.starts_with("QORVYNT_BYTECODE 2\n") || serialized.starts_with("ZENVORA_BYTECODE 2\n")) {
-        return Err("QVM requires a verified Bytecode v2 artifact".into());
-    }
-    deserialize_bytecode_v2(&serialized)
-}
-
-fn run_qvm_bytecode(path: &str) -> Result<(), String> {
-    let code = read_qvm_bytecode(path)?;
-    run(&code)
-}
-
 fn write_bytecode(source_path: &str, output_path: &str) -> Result<(), String> {
     let source = read_program(source_path)?;
     let code = compile(&source)?;
@@ -3504,11 +3486,11 @@ fn main() {
         [_, mode, path] if mode == "--check" => check_program(path).map(|_| println!("QORVYNT check passed: {path}")),
         [_, mode, source, output] if mode == "--emit-bytecode" => write_bytecode(source, output),
         [_, mode, source, output] if mode == "--emit-bytecode-v2" => write_bytecode_v2(source, output),
-        [_, mode, source, output] if mode == "--qvm-compile" => write_qvm_bytecode(source, output),
+        [_, mode, source, output] if mode == "--qvm-compile" => qvm::compile(source, output),
         [_, mode, plan, output] if mode == "--emit-plan-bytecode-v2" => write_plan_bytecode_v2(plan, output),
         [_, mode, source, output] if mode == "--contract-artifact" => write_contract_artifact(source, output),
         [_, mode, bytecode] if mode == "--run-bytecode" => run_bytecode(bytecode),
-        [_, mode, bytecode] if mode == "--qvm-run" => run_qvm_bytecode(bytecode),
+        [_, mode, bytecode] if mode == "--qvm-run" => qvm::execute(bytecode),
         [_, path] if !path.starts_with("--") => {
             let source = read_program(path).unwrap_or_else(|error| {
                 eprintln!("QORVYNT error: {error}");
@@ -3709,10 +3691,10 @@ mod tests {
         let source_text = source_path.to_string_lossy().to_string();
         let bytecode_text = bytecode_path.to_string_lossy().to_string();
 
-        super::write_qvm_bytecode(&source_text, &bytecode_text).unwrap();
+        super::qvm::compile(&source_text, &bytecode_text).unwrap();
         let serialized = std::fs::read_to_string(&bytecode_path).unwrap();
         assert!(serialized.starts_with("QORVYNT_BYTECODE 2\n"));
-        let code = super::read_qvm_bytecode(&bytecode_text).unwrap();
+        let code = super::qvm::load(&bytecode_text).unwrap();
         let mut output = Vec::new();
         super::run_with_output(&code, &mut |line| output.push(line)).unwrap();
         assert_eq!(output, vec!["42"]);
