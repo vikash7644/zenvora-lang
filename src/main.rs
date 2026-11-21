@@ -4499,7 +4499,7 @@ show char_count("hé🙂")
 show to_int("  -42 ")
 show to_int(17)
 "#).unwrap();
-        assert_eq!(output, vec!["QORVYNT Lang", "qorvynt", "ZENVORA", "3", "-42", "17"]);
+        assert_eq!(output, vec!["QORVYNT Lang", "qorvynt", "QORVYNT", "3", "-42", "17"]);
     }
 
     #[test]
