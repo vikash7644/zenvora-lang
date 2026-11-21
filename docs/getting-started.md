@@ -9,8 +9,8 @@ QORVYNT Lang is a small, independent programming language for the QORVYNT ecosys
 Install a current stable Rust toolchain and Cargo from the official Rust installation instructions, then:
 
 ```sh
-git clone https://github.com/vikash7644/qorvynt-lang.git
-cd qorvynt-lang
+git clone https://github.com/vikash7644/zenvora-lang.git
+cd zenvora-lang
 cargo check --all-targets
 cargo test --all-targets
 ```
@@ -53,7 +53,7 @@ The `--check` command parses and compiles the file and its relative imports with
 
 Start with these files in the repository:
 
-- [Language tour](../examples/qorvynt-language-tour.qv) — variables, strings, arrays, conditionals, loops, and functions.
+- [Language tour](../examples/zenvora-language-tour.qv) — variables, strings, arrays, conditionals, loops, and functions.
 - [Hello world and arithmetic](../examples/hello.qv).
 - [Loops and loop control](../examples/loops.qv).
 - [Functions](../examples/functions.qv).
