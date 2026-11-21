@@ -118,18 +118,23 @@ fn parse_unary(tokens, pos) {
   }
   define t := at(tokens, pos)
   define op := get(t, "value")
-  if op == "-" {
-    return parse_unary_operand(tokens, pos, t, op)
-  } otherwise {
-    if op == "!" {
+  define kind := get(t, "kind")
+  if kind == "operator" {
+    if op == "-" {
       return parse_unary_operand(tokens, pos, t, op)
     } otherwise {
-      if op == "not" {
+      if op == "!" {
         return parse_unary_operand(tokens, pos, t, op)
       } otherwise {
-        return parse_postfix(tokens, pos)
+        if op == "not" {
+          return parse_unary_operand(tokens, pos, t, op)
+        } otherwise {
+          return parse_postfix(tokens, pos)
+        }
       }
     }
+  } otherwise {
+    return parse_postfix(tokens, pos)
   }
 }
 
