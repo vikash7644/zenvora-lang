@@ -51,7 +51,7 @@ fn bytecode_cli_round_trip_preserves_output() {
     assert!(
         fs::read_to_string(&bytecode_path)
             .unwrap()
-            .starts_with("ZENVORA_BYTECODE 1\n")
+            .starts_with("QORVYNT_BYTECODE 1\n")
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
@@ -99,7 +99,7 @@ fn version_flag_reports_current_language_version() {
 fn reads_legacy_zenvora_v1_bytecode_during_identity_migration() {
     let id = NEXT_BYTECODE_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!("qorvynt_legacy_bytecode_{}_{}.zvb", std::process::id(), id));
-    fs::write(&path, "ZENVORA_BYTECODE 1\\nPUSH 42\\nPRINT\\nJUMP 3\\n").unwrap();
+    fs::write(&path, "ZENVORA_BYTECODE 1\nPUSH 42\nPRINT\nJUMP 3\n").unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
         .arg("--run-bytecode")
