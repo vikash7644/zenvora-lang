@@ -17,7 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
-use qvm::Op;
+use qvm::{Op, Value};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -1003,15 +1003,6 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
     };
     bytecode_v2::validate_layout(&layout)?;
     Ok((code, layout))
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Value {
-    Int(i64),
-    Str(String),
-    Bool(bool),
-    Array(Vec<Value>),
-    Map(std::collections::BTreeMap<String, Value>),
 }
 
 fn is_builtin(name: &str) -> bool { bytecode_v2::is_supported_builtin(name) }
