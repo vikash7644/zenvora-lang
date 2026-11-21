@@ -33,3 +33,35 @@ pub(super) fn execute(path: &str) -> Result<(), String> {
     let code = load(path)?;
     run(&code)
 }
+
+
+/// Execute verified in-memory bytecode through the QVM boundary.
+///
+/// Compiler services and deterministic runtimes should depend on this API rather
+/// than reaching into the CLI module's host-executor implementation.
+pub(super) fn execute_ops_with_output<F>(code: &[Op], output: &mut F) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    super::run_with_output(code, output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{execute_ops_with_output, Op};
+
+    #[test]
+    fn execution_api_runs_in_memory_bytecode_and_captures_output() {
+        let code = [Op::Push(42), Op::Print];
+        let mut output = Vec::new();
+        execute_ops_with_output(&code, &mut |line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn execution_api_propagates_runtime_errors() {
+        let code = [Op::Div];
+        let error = execute_ops_with_output(&code, &mut |_| {}).unwrap_err();
+        assert!(error.contains("stack underflow"));
+    }
+}
