@@ -18,9 +18,9 @@ mod tx_pool;
 mod bytecode_v2;
 mod qvm;
 use qvm::{
-    binding_map_size, binding_size, builtin, ensure_value_depth, pop_stack_value,
+    binding_map_size, binding_size, builtin, check_map_capacity, ensure_value_depth, pop_stack_value,
     push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update,
-    set_indexed_value, value_to_string, Op, Value,
+    set_indexed_value, value_to_string, Op,
 };
 mod contract_state;
 mod contract_runtime;
