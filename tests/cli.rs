@@ -109,5 +109,5 @@ fn reads_legacy_zenvora_v1_bytecode_during_identity_migration() {
     let _ = fs::remove_file(path);
 
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(String::from_utf8_lossy(&output.stdout), "42\\n");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
 }
