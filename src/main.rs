@@ -2540,7 +2540,7 @@ fn contract_abi_and_artifact(source: &str) -> Result<serde_json::Value, String> 
     let source_hash = Sha256::digest(source.as_bytes());
     let source_hash = source_hash.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     Ok(serde_json::json!({
-        "format": "ZENVORA_CONTRACT_ARTIFACT_V1",
+        "format": "QORVYNT_CONTRACT_ARTIFACT_V1",
         "compiler_version": env!("CARGO_PKG_VERSION"),
         "contract": name,
         "source_sha256": source_hash,
@@ -4354,7 +4354,7 @@ mod tests {
     fn contract_artifact_contains_abi_source_hash_and_verified_bytecode_v2() {
         let source = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
         let artifact = super::contract_abi_and_artifact(source).unwrap();
-        assert_eq!(artifact["format"], "ZENVORA_CONTRACT_ARTIFACT_V1");
+        assert_eq!(artifact["format"], "QORVYNT_CONTRACT_ARTIFACT_V1");
         assert_eq!(artifact["contract"], "Counter");
         assert_eq!(artifact["abi"]["states"][0]["name"], "count");
         assert_eq!(artifact["abi"]["methods"][0]["name"], "increment");
