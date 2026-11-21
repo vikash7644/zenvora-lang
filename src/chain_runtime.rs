@@ -396,10 +396,10 @@ impl ChainRuntime {
             .replace("state recipient_balance := 0", &format!("state recipient_balance := {recipient_before}"))
             .replace("state transfer_amount := 0", &format!("state transfer_amount := {amount}"));
 
-        let bytecode = compile(&source).map_err(|e| format!("Zenvora compile error: {e}"))?;
+        let bytecode = compile(&source).map_err(|e| format!("QORVYNT compile error: {e}"))?;
         let mut output = Vec::new();
         super::qvm::execute_ops_with_output(&bytecode, &mut |line| output.push(line))
-            .map_err(|e| format!("Zenvora VM error: {e}"))?;
+            .map_err(|e| format!("QORVYNT VM error: {e}"))?;
 
         if output.len() != 3 {
             return Err("Zenvora VM returned an invalid transfer result".into());
