@@ -3412,7 +3412,7 @@ fn create_project(name: &str) -> Result<(), String> {
         return Err(format!("cannot write starter project files: {error}"));
     }
     println!("Created Zenvora project '{name}'");
-    println!("Next: zv {name}/main.qv");
+    println!("Next: qorvynt {name}/main.qv");
     Ok(())
 }
 fn run_contract_command(
@@ -3449,16 +3449,16 @@ fn run_contract_command(
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
-        println!("Zenvora Lang v0.8.0");
+        println!("QORVYNT v0.8.0");
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("Zenvora Lang v0.8.0\nUsage: zv <file.qv>\n       zv --compiler-api [port]  (loopback development API, default 8787)\n       zv --new <project-name>\n       zv --check <file.qv>\n       zv --emit-bytecode <file.qv> <output.zvb>\n       zv --emit-bytecode-v2 <file.qv> <output.zv2b>\n       zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       zv --run-bytecode <file.zvb>\n       zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       zv --chain-init <ledger.zvr> <address> <balance>\n       zv --chain-transfer <ledger.zvr> <from> <to> <amount>\n       zv --chain-balance <ledger.zvr> <address>\n       zv --chain-receipts <ledger.zvr>\n       zv --chain-keygen <keyfile>\n       zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       zv --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       zv --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       zv --chain-store-balance <store.zvb> <chain-id> <address>\n       zv --chain-store-info <store.zvb> <chain-id>\n       zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       zv --chain-rpc <store.zvb> <chain-id> [port]\n       zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("QORVYNT v0.8.0\nUsage: qorvynt <file.qv>\n       qorvynt --compiler-api [port]  (loopback development API, default 8787)\n       qorvynt --new <project-name>\n       qorvynt --check <file.qv>\n       qorvynt --emit-bytecode <file.qv> <output.zvb>\n       qorvynt --emit-bytecode-v2 <file.qv> <output.zv2b>\n       qorvynt --emit-plan-bytecode-v2 <plan.json> <output.zv2b>\n       qorvynt --run-bytecode <file.zvb>\n       qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       qorvynt --chain-init <ledger.zvr> <address> <balance>\n       qorvynt --chain-transfer <ledger.zvr> <from> <to> <amount>\n       qorvynt --chain-balance <ledger.zvr> <address>\n       qorvynt --chain-receipts <ledger.zvr>\n       qorvynt --chain-keygen <keyfile>\n       qorvynt --chain-store-init <store.zvb> <chain-id> <keyfile> <balance>\n       qorvynt --chain-store-init-multi <store.zvb> <chain-id> <genesis.txt>\n       qorvynt --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       qorvynt --chain-store-transfer-multi <store.zvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       qorvynt --chain-store-balance <store.zvb> <chain-id> <address>\n       qorvynt --chain-store-info <store.zvb> <chain-id>\n       qorvynt --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>...\n       qorvynt --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       qorvynt --chain-rpc <store.zvb> <chain-id> [port]\n       qorvynt --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]\n       qorvynt --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       qorvynt --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port>\n       qorvynt --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
         if args.len() != 7 && args.len() != 8 {
-            eprintln!("Usage: zv --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]");
+            eprintln!("Usage: qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit]");
             process::exit(2);
         }
         let gas_limit = if args.len() == 8 {
@@ -3515,7 +3515,7 @@ fn main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: zv <file.qv> | zv --new <project-name> | zv --check <file.qv> | zv --emit-bytecode <file.qv> <output.zvb> | zv --emit-bytecode-v2 <file.qv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --qvm-compile <file.qv> <output.qvmb> | zv --qvm-run <file.qvmb> | zv --contract-artifact <contract.qv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: qorvynt <file.qv> | zv --new <project-name> | zv --check <file.qv> | zv --emit-bytecode <file.qv> <output.zvb> | zv --emit-bytecode-v2 <file.qv> <output.zv2b> | zv --emit-plan-bytecode-v2 <plan.json> <output.zv2b> | zv --qvm-compile <file.qv> <output.qvmb> | zv --qvm-run <file.qvmb> | zv --contract-artifact <contract.qv> <artifact.json> | zv --run-bytecode <file.zvb> | zv --chain-init <ledger.zvr> <address> <balance> | zv --chain-transfer <ledger.zvr> <from> <to> <amount> | zv --chain-balance <ledger.zvr> <address> | zv --chain-receipts <ledger.zvr> | zv --chain-keygen <keyfile> | zv --chain-store-init <store.zvb> <chain-id> <keyfile> <balance> | zv --chain-store-transfer <store.zvb> <chain-id> <keyfile> <recipient> <amount> <max-fee> | zv --chain-store-balance <store.zvb> <chain-id> <address> | zv --chain-store-info <store.zvb> <chain-id> | zv --chain-rpc <store.zvb> <chain-id> [port] | zv --chain-p2p-serve <store.zvb> <chain-id> <bind-ip> <port> | zv --chain-p2p-sync <store.zvb> <chain-id> <peer-ip:port> | zv --chain-p2p-serve-pool <store.zvb> <chain-id> <pool-file> <bind-ip> <port> | zv --chain-p2p-serve-validator <store.zvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | zv --chain-p2p-gossip <store.zvb> <chain-id> <pool-file> <peer-ip:port> | zv --chain-store-produce <store.zvb> <chain-id> <pool-file> <validator-key>... | zv --chain-store-produce-peer-quorum <store.zvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | zv --chain-rpc-pool <store.zvb> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
@@ -3543,17 +3543,17 @@ mod tests {
         let store_text = store_path.to_string_lossy().to_string();
         let second_store_text = second_store_path.to_string_lossy().to_string();
 
-        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
-        assert!(run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).is_err());
+        run_chain_command(&vec!["qorvynt".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
+        assert!(run_chain_command(&vec!["qorvynt".into(), "--chain-keygen".into(), key_text.clone()]).is_err());
         let key = read_chain_key(&key_text).unwrap();
         let address = crate::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
 
         run_chain_command(&vec![
-            "zv".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
+            "qorvynt".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
             key_text.clone(), "1000".into(),
         ]).unwrap();
         run_chain_command(&vec![
-            "zv".into(), "--chain-store-init".into(), second_store_text.clone(), "71".into(),
+            "qorvynt".into(), "--chain-store-init".into(), second_store_text.clone(), "71".into(),
             key_text.clone(), "1000".into(),
         ]).unwrap();
         let (first_genesis, _) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
@@ -3563,7 +3563,7 @@ mod tests {
             second_genesis.blocks()[0].header.header_hash().unwrap(),
         );
         run_chain_command(&vec![
-            "zv".into(), "--chain-store-transfer".into(), store_text.clone(), "71".into(),
+            "qorvynt".into(), "--chain-store-transfer".into(), store_text.clone(), "71".into(),
             key_text.clone(), "bob".into(), "100".into(), "1".into(),
         ]).unwrap();
 
@@ -3591,9 +3591,9 @@ mod tests {
         let key_text = key_path.to_string_lossy().to_string();
         let store_text = store_path.to_string_lossy().to_string();
         let pool_text = pool_path.to_string_lossy().to_string();
-        run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
+        run_chain_command(&vec!["qorvynt".into(), "--chain-keygen".into(), key_text.clone()]).unwrap();
         run_chain_command(&vec![
-            "zv".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
+            "qorvynt".into(), "--chain-store-init".into(), store_text.clone(), "71".into(),
             key_text.clone(), "1000".into(),
         ]).unwrap();
 
@@ -3615,7 +3615,7 @@ mod tests {
         pool.save_to_file(&pool_text).unwrap();
 
         run_chain_command(&vec![
-            "zv".into(), "--chain-store-produce".into(), store_text.clone(), "71".into(),
+            "qorvynt".into(), "--chain-store-produce".into(), store_text.clone(), "71".into(),
             pool_text.clone(), key_text.clone(),
         ]).unwrap();
         let (store, runtime) = crate::block_store::BlockStore::load_from_file(&store_text, 71).unwrap();
@@ -3642,7 +3642,7 @@ mod tests {
         }
         let key_texts: Vec<String> = key_paths.iter().map(|path| path.to_string_lossy().to_string()).collect();
         for path in &key_texts {
-            run_chain_command(&vec!["zv".into(), "--chain-keygen".into(), path.clone()]).unwrap();
+            run_chain_command(&vec!["qorvynt".into(), "--chain-keygen".into(), path.clone()]).unwrap();
         }
         let mut allocations = Vec::new();
         for path in &key_texts {
@@ -3655,11 +3655,11 @@ mod tests {
         let store_text = store_path.to_string_lossy().to_string();
         let config_text = config_path.to_string_lossy().to_string();
         run_chain_command(&vec![
-            "zv".into(), "--chain-store-init-multi".into(), store_text.clone(), "71".into(), config_text,
+            "qorvynt".into(), "--chain-store-init-multi".into(), store_text.clone(), "71".into(), config_text,
         ]).unwrap();
 
         let insufficient = vec![
-            "zv".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
+            "qorvynt".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
             key_texts[0].clone(), "bob".into(), "100".into(), "1".into(),
             key_texts[0].clone(), key_texts[1].clone(),
         ];
@@ -3669,7 +3669,7 @@ mod tests {
         assert_eq!(before_runtime.balance("bob"), 0);
 
         let sufficient = vec![
-            "zv".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
+            "qorvynt".into(), "--chain-store-transfer-multi".into(), store_text.clone(), "71".into(),
             key_texts[0].clone(), "bob".into(), "100".into(), "1".into(),
             key_texts[0].clone(), key_texts[1].clone(), key_texts[2].clone(),
         ];
@@ -4642,7 +4642,7 @@ show index_of(array(7, "x", true), false)
     #[test]
     fn v2_file_writer_creates_a_loadable_executable_file() {
         let base = std::env::temp_dir().join(format!("zenvora-v2-smoke-{}", std::process::id()));
-        let source_path = base.with_extension("zv");
+        let source_path = base.with_extension("qv");
         let bytecode_path = base.with_extension("zv2b");
         std::fs::write(
             &source_path,
