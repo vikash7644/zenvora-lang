@@ -179,7 +179,7 @@ jobs:
         run: cargo run -- ../examples/hello.zv
 
   editor-support:
-    name: Validate Zenvora editor support
+    name: Validate QORVYNT editor support
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -200,12 +200,12 @@ jobs:
 
       - name: Package installable VS Code extension
         working-directory: editors/vscode
-        run: npx --yes @vscode/vsce package --no-dependencies --out zenvora-lang.vsix
+        run: npx --yes @vscode/vsce package --no-dependencies --out qorvynt.vsix
 
       - name: Upload VS Code extension artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zenvora-vscode-extension
-          path: editors/vscode/zenvora-lang.vsix
+          name: qorvynt-vscode-extension
+          path: editors/vscode/qorvynt.vsix
           if-no-files-found: error
           retention-days: 7
