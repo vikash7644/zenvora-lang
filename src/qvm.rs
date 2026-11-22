@@ -27,9 +27,7 @@ impl VerifiedProgram {
 /// Load only verified Bytecode v2 artifacts. Legacy ZENVORA headers remain readable.
 pub(crate) fn load_verified(path: &str) -> Result<VerifiedProgram, String> {
     let serialized = read_bytecode_source(path)?;
-    if !(serialized.starts_with("QORVYNT_BYTECODE 2\\n")
-        || serialized.starts_with("ZENVORA_BYTECODE 2\\n"))
-    {
+    if !matches!(serialized.lines().next().map(str::trim), Some("QORVYNT_BYTECODE 2" | "ZENVORA_BYTECODE 2")) {
         return Err("QVM requires a verified Bytecode v2 artifact".into());
     }
     let instructions = deserialize_bytecode_v2(&serialized)?;
