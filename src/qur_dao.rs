@@ -804,6 +804,27 @@ mod tests {
     }
 
     #[test]
+    fn treasury_vote_signature_rejects_wrong_snapshot_anchor() {
+        let mut state = ContractState::new();
+        create_treasury_proposal_at_anchor(&mut state, test_anchor(), "community", "pay-fork", "founder",
+            "Fork-bound payout", "recipient", 5, 1, 2, 30_000).unwrap();
+        let key = SigningKey::from_bytes(&[32u8; 32]);
+        let wrong_anchor_message = vote_signing_message_for_anchor(72, 12,
+            &super::hex_digest(&[1u8; 32]), &super::hex_digest(&[2u8; 32]),
+            "community", "pay-fork", VoteChoice::Yes).unwrap();
+        let signature = key.sign(&wrong_anchor_message);
+        let root = state.state_root();
+        assert!(cast_vote_signed(&mut state, "community", "pay-fork",
+            &key.verifying_key(), &signature, VoteChoice::Yes, 30_000).is_err());
+        assert_eq!(state.state_root(), root);
+        let proposal = get_proposal(&state, "community", "pay-fork").unwrap();
+        assert_eq!(proposal.snapshot_chain_id, Some(71));
+        assert_eq!(proposal.snapshot_block_height, Some(12));
+        assert_eq!(proposal.snapshot_block_hash.as_deref(), Some(super::hex_digest(&[1u8; 32]).as_str()));
+        assert_eq!(proposal.snapshot_chain_state_root.as_deref(), Some(super::hex_digest(&[2u8; 32]).as_str()));
+    }
+
+    #[test]
     fn treasury_transfer_waits_for_timelock_and_executes_once_atomically() {
         let mut state = ContractState::new();
         fund_treasury(&mut state, "community", 100, 30_000).unwrap();
