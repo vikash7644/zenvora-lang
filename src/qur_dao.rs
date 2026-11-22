@@ -112,7 +112,7 @@ fn append_field(out: &mut Vec<u8>, bytes: &[u8]) {
 fn receipt(operation: &'static str, dao_id: &str, proposal_id: &str,
     payload: &[u8], gas: &GasMeter, state: &ContractState) -> DaoReceipt {
     let mut h = Sha256::new();
-    h.update(b"QORVYNT_DAO_EVENT_V1\\0");
+    h.update(b"QORVYNT_DAO_EVENT_V1\0");
     h.update((operation.len() as u32).to_be_bytes());
     h.update(operation.as_bytes());
     h.update((dao_id.len() as u32).to_be_bytes());
