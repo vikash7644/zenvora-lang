@@ -8,29 +8,33 @@ on:
     paths:
       - "website/**"
       - ".github/workflows/pages.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "website/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: github-pages
+  group: qorvynt-pages-check-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  validate:
+    name: Validate website content
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Validate website files
+      - name: Validate website files and navigation
+        shell: bash
         run: |
+          set -euo pipefail
           test -s website/index.html
           test -s website/playground.html
           test -s website/developers.html
@@ -41,15 +45,26 @@ jobs:
           grep -q 'developers.html' website/index.html
           grep -q 'developers.html' website/developers.html
           ! grep -Eqi '>[^<]*ZENVORA[^<]*<' website/index.html website/playground.html website/developers.html
+          echo "QORVYNT_PAGES_CONTENT_VALIDATION_PASS"
 
-      - name: Generate Google-compatible raster favicons
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y librsvg2-bin imagemagick
-          rsvg-convert -w 48 -h 48 website/zenvora-favicon.svg -o website/favicon-48.png
-          convert website/favicon-48.png -define icon:auto-resize=16,32,48 website/favicon.ico
-          test -s website/favicon-48.png
-          test -s website/favicon.ico
+  deploy:
+    name: Deploy GitHub Pages
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
