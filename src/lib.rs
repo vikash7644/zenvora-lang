@@ -4253,6 +4253,24 @@ mod tests {
         let _ = std::fs::remove_file(output_path);
     }
 
+    #[test]
+    fn qorvynt_icon_example_renders_svg_without_external_script() {
+        let base = std::env::temp_dir();
+        let suffix = std::process::id();
+        let output_path = base.join(format!("qorvynt-icon-example-{suffix}.svg"));
+        let _ = std::fs::remove_file(&output_path);
+        let output_text = output_path.to_string_lossy().to_string();
+
+        super::render_source_to_file("examples/qorvynt-icon.qv", &output_text).unwrap();
+        let rendered = std::fs::read_to_string(&output_path).unwrap();
+        assert!(rendered.starts_with("<svg "));
+        assert!(rendered.contains("<title>QORVYNT icon</title>"));
+        assert!(rendered.contains("#aab5ff"));
+        assert!(rendered.ends_with("</svg>\\n"));
+
+        let _ = std::fs::remove_file(output_path);
+    }
+
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
         let mut output = Vec::new();
