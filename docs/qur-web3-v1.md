@@ -26,7 +26,7 @@ wallet MyWallet {
 
 Run `qorvynt --qur-check examples/qur/manifest.qv` for a human-readable validation summary, or `qorvynt --qur-json examples/qur/manifest.qv` for a stable JSON manifest suitable for editor integrations and future cloud tooling.
 
-The validator checks declaration names, duplicates, allowed and required fields, supported consensus/governance/token modes, positive u64 token supply, ticker shape, and wallet-to-chain references. It enforces a 1 MiB source limit and a 256-declaration limit.
+The validator checks declaration names, duplicates, allowed and required fields, supported consensus/governance/token modes, positive u64 token supply, ticker shape, and wallet-to-chain references. It enforces a 1 MiB source limit and a 256-declaration limit. The CI suite also checks a deliberately invalid wallet-to-chain reference and requires `--qur-json` to return `valid: false` with a non-zero exit status.
 
 ## Execution boundary
 
