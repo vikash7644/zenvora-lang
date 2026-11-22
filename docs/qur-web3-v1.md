@@ -135,3 +135,14 @@ qorvynt --qur-dao-treasury-token-execute token-ledger.json dao-state.bin communi
 ```
 
 The execution API clones the token ledger, validates the transfer, stages DAO proposal and token-balance writes in one contract-state overlay, commits that overlay, and only then publishes the in-memory ledger candidate. The CLI stages both files before replacing them, but two separate filesystem renames are not a crash-atomic database transaction. This remains a local QUR runtime integration: the CLI-supplied height is not checked against a canonical block header, token balances are not yet part of consensus replay, and wallet signatures authenticate votes but not a network transaction envelope. Do not use it as production chain treasury custody yet.
+
+
+### Token-balance-weighted wallet voting
+
+The signed DAO voting API includes a token-weighted path. It verifies the Ed25519 domain-separated vote message, derives the wallet address from the verified public key, reads the selected token balance, and records that balance as the vote weight. Zero-balance wallets cannot vote; each derived wallet address can vote only once per proposal.
+
+```sh
+qorvynt --qur-dao-vote-weighted token-ledger.json dao-state.bin community proposal1 alice.qvk GOLD yes 30000
+```
+
+This is a balance-at-vote-time prototype, not yet secure token governance: balances are not snapshotted at proposal creation and tokens are not locked, so holders may transfer tokens between wallets and potentially reuse voting power. Production governance must use a consensus-authenticated snapshot height, immutable voting-power accounting or token locking/delegation, and chain-enforced replay protection.
