@@ -3,6 +3,8 @@
 use std::collections::BTreeMap;
 use sha2::{Digest, Sha256};
 use super::qur::QurManifest;
+use super::contract_gas::{GasMeter, BASE_EXECUTION_GAS, STORAGE_READ_GAS, STORAGE_WRITE_GAS};
+use super::contract_state::{AccessMode, ContractState};
 
 const DOMAIN: &[u8] = b"QORVYNT_QUR_TOKEN_LEDGER_V1\\0";
 const MAX_ACCOUNT_BYTES: usize = 128;
@@ -12,6 +14,9 @@ pub struct QurLedger {
     supplies: BTreeMap<String, u64>,
     balances: BTreeMap<(String, String), u64>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QurTransferReceipt { pub token: String, pub from: String, pub to: String, pub amount: u64, pub gas_used: u64, pub contract_state_root: [u8; 32] }
 
 impl QurLedger {
     /// Allocate each declared token's complete genesis supply to the reserved genesis account.
@@ -52,6 +57,31 @@ impl QurLedger {
         if candidate.supplies.get(token) != Some(&supply) { return Err("token supply changed during transfer".into()); }
         *self = candidate;
         Ok(())
+    }
+
+
+    /// Apply a token transfer with deterministic gas charges and an atomic contract-storage overlay.
+    pub fn transfer_with_contract_gas(&mut self, state: &mut ContractState, contract_id: &str,
+        token: &str, from: &str, to: &str, amount: u64, gas_limit: u64) -> Result<QurTransferReceipt, String> {
+        let mut meter = GasMeter::new(gas_limit);
+        meter.charge(BASE_EXECUTION_GAS)?;
+        meter.charge(STORAGE_READ_GAS.checked_mul(2).ok_or("gas calculation overflow")?)?;
+        meter.charge(STORAGE_WRITE_GAS.checked_mul(2).ok_or("gas calculation overflow")?)?;
+        let mut candidate = self.clone();
+        candidate.transfer(token, from, to, amount)?;
+        let supply = candidate.total_supply(token).ok_or_else(|| format!("unknown token '{token}'"))?;
+        let mut overlay = state.begin(contract_id, AccessMode::Action)?;
+        overlay.set(&format!("token/{token}/supply"), supply.to_string().into_bytes())?;
+        for account in [from, to] {
+            let key = format!("token/{token}/balance/{account}");
+            let balance = candidate.balance(token, account);
+            if balance == 0 { overlay.delete(&key)?; }
+            else { overlay.set(&key, balance.to_string().into_bytes())?; }
+        }
+        state.commit(overlay)?;
+        *self = candidate;
+        Ok(QurTransferReceipt { token: token.into(), from: from.into(), to: to.into(), amount,
+            gas_used: meter.used(), contract_state_root: state.state_root() })
     }
 
     pub fn state_root(&self) -> [u8; 32] {
@@ -178,6 +208,33 @@ supply = 100000000
     }
 
     #[test]
+
+    #[test]
+    fn gas_metered_transfer_updates_contract_storage_atomically() {
+        use super::super::contract_state::ContractState;
+        let manifest = qur::parse(MANIFEST).unwrap();
+        let mut ledger = QurLedger::from_manifest(&manifest).unwrap();
+        let mut state = ContractState::new();
+        let receipt = ledger.transfer_with_contract_gas(&mut state, "qur_tokens", "GOLD", "genesis", "alice", 25, 30_000).unwrap();
+        assert!(receipt.gas_used > 21_000);
+        assert_eq!(state.get("qur_tokens", "token/GOLD/supply").unwrap(), Some(&b"100000000"[..]));
+        assert_eq!(state.get("qur_tokens", "token/GOLD/balance/alice").unwrap(), Some(&b"25"[..]));
+        assert_eq!(receipt.contract_state_root, state.state_root());
+    }
+
+    #[test]
+    fn out_of_gas_does_not_change_ledger_or_contract_storage() {
+        use super::super::contract_state::ContractState;
+        let manifest = qur::parse(MANIFEST).unwrap();
+        let mut ledger = QurLedger::from_manifest(&manifest).unwrap();
+        let mut state = ContractState::new();
+        let ledger_root = ledger.state_root();
+        let storage_root = state.state_root();
+        assert!(ledger.transfer_with_contract_gas(&mut state, "qur_tokens", "GOLD", "genesis", "alice", 25, 21_001).is_err());
+        assert_eq!(ledger.state_root(), ledger_root);
+        assert_eq!(state.state_root(), storage_root);
+    }
+
     fn ledger_json_round_trip_verifies_state_root() {
         let manifest = qur::parse(MANIFEST).unwrap();
         let mut ledger = QurLedger::from_manifest(&manifest).unwrap();
