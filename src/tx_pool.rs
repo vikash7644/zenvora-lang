@@ -74,10 +74,20 @@ impl TransactionPool {
 
     pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> Result<(), String> {
         let path = path.as_ref();
-        let temporary = path.with_extension("zpool.tmp");
+        let file_name = path.file_name()
+            .ok_or_else(|| "transaction-pool path must name a file".to_string())?;
+        let mut temporary_name = file_name.to_os_string();
+        temporary_name.push(format!(".zpool-tmp-{}", std::process::id()));
+        let temporary = path.with_file_name(temporary_name);
+        let mut created_temporary = false;
         let result = (|| -> Result<(), String> {
-            let mut file = std::fs::File::create(&temporary)
-                .map_err(|error| format!("cannot create pool temporary file: {error}"))?;
+            // Exclusive creation prevents following or truncating a pre-existing path/symlink.
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+                .map_err(|error| format!("cannot create exclusive pool temporary file: {error}"))?;
+            created_temporary = true;
             writeln!(file, "{POOL_VERSION}").map_err(|error| format!("cannot write pool: {error}"))?;
             writeln!(file, "C\t{}", self.chain_id).map_err(|error| format!("cannot write pool chain ID: {error}"))?;
             writeln!(file, "H\t{}", self.next_height).map_err(|error| format!("cannot write pool height: {error}"))?;
@@ -95,7 +105,7 @@ impl TransactionPool {
                 .map_err(|error| format!("cannot replace transaction pool: {error}"))?;
             Ok(())
         })();
-        if result.is_err() {
+        if result.is_err() && created_temporary {
             let _ = std::fs::remove_file(&temporary);
         }
         result
@@ -247,5 +257,27 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert!(TransactionPool::load_from_file(&path, &runtime, 71, 2).is_err());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn save_does_not_overwrite_or_remove_preexisting_temp_path() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "zenvora-pool-temp-safe-{}-{nonce}.zvp",
+            std::process::id()
+        ));
+        let mut temporary_name = path.file_name().unwrap().to_os_string();
+        temporary_name.push(format!(".zpool-tmp-{}", std::process::id()));
+        let temporary = path.with_file_name(temporary_name);
+        std::fs::write(&temporary, b"do not overwrite").unwrap();
+
+        let pool = TransactionPool::new(71, 1).unwrap();
+        let error = pool.save_to_file(&path).unwrap_err();
+        assert!(error.contains("cannot create exclusive pool temporary file"), "{error}");
+        assert_eq!(std::fs::read(&temporary).unwrap(), b"do not overwrite");
+        assert!(!path.exists());
+
+        std::fs::remove_file(temporary).unwrap();
     }
 }
