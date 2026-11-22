@@ -6,6 +6,7 @@
 
 mod bytecode;
 pub(crate) mod runtime_support;
+pub(crate) mod builtins;
 pub(super) mod runtime;
 mod value;
 pub(crate) use bytecode::Op;
