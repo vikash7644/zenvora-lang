@@ -3501,8 +3501,7 @@ fn main() {
                     let quorum = args[9].parse::<u64>().map_err(|_| "quorum must be an unsigned integer".to_string())?;
                     let delay = args[10].parse::<u64>().map_err(|_| "timelock blocks must be an unsigned integer".to_string())?;
                     let gas = args[11].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
-                    qur_dao::create_treasury_proposal(&mut state, &args[3], &args[4], &args[5],
-                        &args[6], &args[7], amount, quorum, delay, gas)?
+                    qur_dao::create_treasury_proposal(&mut state, &args[3], &args[4], &args[5], &args[6], &args[7], amount, quorum, delay, gas)?
                 }
                 "--qur-dao-treasury-fund" => {
                     let amount = args[4].parse::<u64>().map_err(|_| "treasury amount must be an unsigned integer".to_string())?;
@@ -3519,33 +3518,23 @@ fn main() {
                     let gas = args[6].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
                     qur_dao::execute_treasury_proposal(&mut state, &args[3], &args[4], height, gas)?
                 }
-            let receipt = match mode {
                 "--qur-dao-propose" => {
                     let quorum = args[7].parse::<u64>().map_err(|_| "quorum must be an unsigned integer".to_string())?;
                     let gas = args[8].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
                     qur_dao::create_proposal(&mut state, &args[3], &args[4], &args[5], &args[6], quorum, gas)?
                 }
                 "--qur-dao-vote" => {
-                    let choice = match args[6].as_str() {
-                        "yes" => qur_dao::VoteChoice::Yes,
-                        "no" => qur_dao::VoteChoice::No,
-                        _ => return Err("vote choice must be yes or no".into()),
-                    };
+                    let choice = match args[6].as_str() { "yes" => qur_dao::VoteChoice::Yes, "no" => qur_dao::VoteChoice::No, _ => return Err("vote choice must be yes or no".into()) };
                     let gas = args[7].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
                     qur_dao::cast_vote(&mut state, &args[3], &args[4], &args[5], choice, gas)?
                 }
                 "--qur-dao-vote-signed" => {
-                    let choice = match args[6].as_str() {
-                        "yes" => qur_dao::VoteChoice::Yes,
-                        "no" => qur_dao::VoteChoice::No,
-                        _ => return Err("vote choice must be yes or no".into()),
-                    };
+                    let choice = match args[6].as_str() { "yes" => qur_dao::VoteChoice::Yes, "no" => qur_dao::VoteChoice::No, _ => return Err("vote choice must be yes or no".into()) };
                     let gas = args[7].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
                     let signing_key = read_chain_key(&args[5])?;
                     let message = qur_dao::vote_signing_message(&args[3], &args[4], choice)?;
                     let signature = signing_key.sign(&message);
-                    qur_dao::cast_vote_signed(&mut state, &args[3], &args[4],
-                        &signing_key.verifying_key(), &signature, choice, gas)?
+                    qur_dao::cast_vote_signed(&mut state, &args[3], &args[4], &signing_key.verifying_key(), &signature, choice, gas)?
                 }
                 "--qur-dao-finalize" => {
                     let gas = args[5].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
