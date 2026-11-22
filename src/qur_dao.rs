@@ -367,7 +367,7 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
 /// Canonical message for legacy, local-only DAO votes without a chain anchor.
 pub fn vote_signing_message(dao_id: &str, proposal_id: &str, choice: VoteChoice) -> Result<Vec<u8>, String> {
     if !valid_id(dao_id) || !valid_id(proposal_id) { return Err("invalid DAO or proposal identifier".into()); }
-    let mut message = b"QORVYNT_DAO_VOTE_V1\\0".to_vec();
+    let mut message = b"QORVYNT_DAO_VOTE_V1\0".to_vec();
     append_field(&mut message, dao_id.as_bytes());
     append_field(&mut message, proposal_id.as_bytes());
     message.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
@@ -380,7 +380,7 @@ pub fn vote_signing_message_for_chain(chain_id: u64, dao_id: &str, proposal_id: 
     if chain_id == 0 || !valid_id(dao_id) || !valid_id(proposal_id) {
         return Err("invalid chain, DAO, or proposal identifier".into());
     }
-    let mut message = b"QORVYNT_DAO_VOTE_V2\\0".to_vec();
+    let mut message = b"QORVYNT_DAO_VOTE_V2\0".to_vec();
     message.extend_from_slice(&chain_id.to_be_bytes());
     append_field(&mut message, dao_id.as_bytes());
     append_field(&mut message, proposal_id.as_bytes());
