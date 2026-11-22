@@ -83,7 +83,7 @@ fn hex_digest(bytes: &[u8; 32]) -> String {
 
 fn weighted_snapshot_digest(token: &str, holders: &[(String, u64)]) -> [u8; 32] {
     let mut h = Sha256::new();
-    h.update(b"QORVYNT_DAO_WEIGHTED_SNAPSHOT_V1\\0");
+    h.update(b"QORVYNT_DAO_WEIGHTED_SNAPSHOT_V1\0");
     h.update((token.len() as u32).to_be_bytes());
     h.update(token.as_bytes());
     h.update((holders.len() as u64).to_be_bytes());
