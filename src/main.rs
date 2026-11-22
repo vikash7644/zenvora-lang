@@ -1046,7 +1046,11 @@ fn run_with_output_metered<F>(
 where
     F: FnMut(String),
 {
-    qvm::runtime::run_with_output_metered(code, output, gas_meter)
+    qvm::runtime::run_with_output_metered(
+        code,
+        output,
+        gas_meter.map(|meter| meter as &mut dyn qvm::gas::GasMeter),
+    )
 }
 
 
