@@ -6,6 +6,7 @@ import { tags } from '@lezer/highlight';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import './style.css';
 
 const keywords = new Set(['fn','define','show','print','call','return','if','otherwise','repeat','break','continue','true','false','and','or','not','contract','state','action','view','module','import','as']);
@@ -114,6 +115,32 @@ const editor = new EditorView({
     })
   ]
 });
+
+async function runCompilerAction(command, successLabel) {
+  const source = editor.state.doc.toString();
+  status.textContent = successLabel === 'COMPILE SUCCESS' ? 'COMPILING...' : 'RUNNING...';
+  output.textContent = 'Working...';
+  const compileButton = document.querySelector('#compile-file');
+  const runButton = document.querySelector('#run-file');
+  compileButton.disabled = true;
+  runButton.disabled = true;
+  try {
+    const result = await invoke(command, { source });
+    output.textContent = Array.isArray(result)
+      ? (result.length ? result.join('\\n') : 'Program completed successfully (no output).')
+      : result;
+    status.textContent = successLabel;
+  } catch (error) {
+    output.textContent = String(error);
+    status.textContent = successLabel === 'COMPILE SUCCESS' ? 'COMPILE FAILED' : 'RUN FAILED';
+  } finally {
+    compileButton.disabled = false;
+    runButton.disabled = false;
+  }
+}
+
+document.querySelector('#compile-file').addEventListener('click',()=>void runCompilerAction('compile_qv','COMPILE SUCCESS'));
+document.querySelector('#run-file').addEventListener('click',()=>void runCompilerAction('run_qv','RUN SUCCESS'));
 document.querySelector('#open-file').addEventListener('click',()=>void openFile());
 document.querySelector('#save-file').addEventListener('click',()=>void saveFile());
 document.querySelector('#example-file').addEventListener('click',()=>editor.focus());
