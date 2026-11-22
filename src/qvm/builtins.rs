@@ -5,7 +5,7 @@
 
 use crate::qvm::Value;
 use crate::qvm::runtime_support::{check_map_capacity, value_to_string};
-use crate::MAX_COLLECTION_ITEMS;
+use crate::{hex_encode, MAX_BYTECODE_STRING_BYTES, MAX_COLLECTION_ITEMS};
 
 pub(crate) fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let arg_len = args.len();
