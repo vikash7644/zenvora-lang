@@ -534,6 +534,20 @@ mod tests {
     }
 
     #[test]
+    fn treasury_proposal_initializes_weighted_voting_fields() {
+        let mut state = ContractState::new();
+        create_treasury_proposal(&mut state, "community", "pay-metadata", "founder",
+            "Metadata defaults", "recipient", 5, 1, 2, 30_000).unwrap();
+        let proposal = get_proposal(&state, "community", "pay-metadata").unwrap();
+        assert_eq!(proposal.treasury_recipient.as_deref(), Some("recipient"));
+        assert_eq!(proposal.treasury_amount, 5);
+        assert_eq!(proposal.voting_token, None);
+        assert_eq!(proposal.snapshot_total_weight, 0);
+        assert_eq!(proposal.approved_at_height, None);
+        assert!(!proposal.executed);
+    }
+
+    #[test]
     fn treasury_transfer_waits_for_timelock_and_executes_once_atomically() {
         let mut state = ContractState::new();
         fund_treasury(&mut state, "community", 100, 30_000).unwrap();
