@@ -1,4 +1,6 @@
-# QORVYNT Lang ↔ Zenvora Chain integration
+# QORVYNT Lang ↔ legacy Zenvora Chain integration
+
+> Historical integration notes for the former in-repository chain prototype. QORVYNT Lang and the current chain project are separate; this document does not describe a supported production integration.
 
 ## Current milestone: VM-backed transaction runtime prototype
 
@@ -140,7 +142,7 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 1. **QORVYNT Lang source** — contract logic and developer-facing syntax.
 2. **QORVYNT compiler** — parse and validate source, then emit versioned QORVYNT bytecode.
 3. **QORVYNT VM/runtime** — deterministic execution with instruction limits and a narrowly defined host API.
-4. **Zenvora Chain node** — validates signed transactions, executes contract calls against a transactional state overlay, commits state only on success, and records receipts/events.
+4. **Legacy Zenvora Chain node** — validates signed transactions, executes contract calls against a transactional state overlay, commits state only on success, and records receipts/events.
 5. **RPC, wallet, faucet and explorer** — client interfaces around the node.
 
 ## Next implementation gates
@@ -150,7 +152,7 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 - Add transaction fee charging, gas metering, per-operation cost schedule, and deterministic execution limits.
 - Add automatic peer discovery/periodic transaction gossip, authenticated RPC for non-loopback deployments, peer authentication, rate limits, and abuse controls.
 - Add indexed block/receipt storage, snapshots, recovery tests, and state/receipt proof APIs.
-- Replace the illustrative transfer rule with compiled Zenvora contract artifacts and a typed contract ABI/state host interface.
+- Replace the illustrative transfer rule with compiled legacy-chain contract artifacts and a typed contract ABI/state host interface.
 - Add fuzzing, property tests, multi-node adversarial tests, reproducible builds, and an external security review before any public testnet with value.
 
 ## Safety/status
