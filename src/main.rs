@@ -3474,6 +3474,39 @@ fn main() {
         }
         return;
     }
+    if args.get(1).is_some_and(|mode| mode == "--qur-json") {
+        if args.len() != 3 {
+            eprintln!("Usage: qorvynt --qur-json <file.qv>");
+            process::exit(2);
+        }
+        match read_program(&args[2]).and_then(|source| qur::parse(&source)) {
+            Ok(manifest) => {
+                let output = serde_json::json!({
+                    "schema": "qorvynt.qur.manifest.v1",
+                    "valid": true,
+                    "chains": manifest.chains.iter().map(|item| serde_json::json!({
+                        "name": item.name, "consensus": item.consensus, "native_token": item.native_token
+                    })).collect::<Vec<_>>(),
+                    "tokens": manifest.tokens.iter().map(|item| serde_json::json!({
+                        "name": item.name, "standard": item.standard, "supply": item.supply
+                    })).collect::<Vec<_>>(),
+                    "daos": manifest.daos.iter().map(|item| serde_json::json!({
+                        "name": item.name, "governance": item.governance
+                    })).collect::<Vec<_>>(),
+                    "wallets": manifest.wallets.iter().map(|item| serde_json::json!({
+                        "name": item.name, "network": item.network
+                    })).collect::<Vec<_>>()
+                });
+                println!("{}", serde_json::to_string_pretty(&output).expect("QUR JSON serialization is infallible"));
+            }
+            Err(error) => {
+                let output = serde_json::json!({ "schema": "qorvynt.qur.manifest.v1", "valid": false, "error": error });
+                println!("{}", serde_json::to_string(&output).expect("QUR JSON serialization is infallible"));
+                process::exit(1);
+            }
+        }
+        return;
+    }
     if args.get(1).is_some_and(|mode| mode == "--compiler-api") {
         let port = args.get(2).map(|value| value.parse::<u16>().map_err(|_| "compiler API port must be between 1 and 65535".to_string())).transpose().unwrap_or_else(|error| { eprintln!("QORVYNT API error: {error}"); process::exit(2) }).unwrap_or(8787);
         if let Err(error) = compiler_api::serve(port) { eprintln!("QORVYNT API error: {error}"); process::exit(1); }
