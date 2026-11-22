@@ -29,9 +29,10 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `Cargo.toml` and `Cargo.lock` — Rust package manifest and locked dependency versions for the `qorvynt` command.
 - `CHANGELOG.md` — v0.8.0 release notes and current feature status.
 - `docs/language-grammar.md` — current parser grammar draft and unresolved v1.0 semantics.
-- `src/main.rs` — language lexer/parser, compiler, stack VM, CLI, and regression tests; legacy chain CLI entrypoints are still present pending migration.
+- `src/lib.rs` — language lexer/parser, compiler, stack VM, CLI, and regression tests; `src/main.rs` is the thin binary entrypoint. Legacy chain CLI entrypoints are still present pending migration.
 - `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the QORVYNT Lang release scope.
 - `examples/hello.qv` — arithmetic and variable example.
+- `examples/qorvynt-icon.qv` — QORVYNT source that emits a scalable SVG icon using the language's string and output features.
 - `examples/zenvora-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.qv` — loop condition, `break`, and `continue` example.
 - `examples/functions.qv` — function parameters, local variables, return values, and loops.
@@ -121,6 +122,7 @@ cargo test
 cargo run -- --new my-first-project
 cargo run -- my-first-project/main.qv
 cargo run -- --check my-first-project/main.qv
+cargo run -- --render examples/qorvynt-icon.qv qorvynt-icon.svg
 cargo run -- examples/hello.qv
 cargo run -- examples/loops.qv
 cargo run -- examples/functions.qv
@@ -177,7 +179,7 @@ During development from this repository, prefix each command with `cargo run --`
 
 ## Compile-only validation
 
-Use `qorvynt --check <file.qv>` to load relative imports and compile the program without executing it. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
+Use `qorvynt --check <file.qv>` to load relative imports and compile the program without executing it. Use `qorvynt --render <file.qv> <output.txt>` to execute a source program and save its printed lines as a text asset (for example, SVG). This is a host CLI operation; it is not available inside the deterministic contract VM. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
 
 ```sh
 cargo run -- --check examples/functions.qv
