@@ -99,6 +99,11 @@ jobs:
           cargo run --locked -- --chain-keygen /tmp/qorvynt-dao-alice.qvk
           cargo run --locked -- --chain-keygen /tmp/qorvynt-dao-bob.qvk
           cargo run --locked -- --chain-keygen /tmp/qorvynt-dao-carol.qvk
+          set +e
+          cargo run --locked -- --qur-dao-vote /tmp/qorvynt-dao-state.bin community unsigned1 alice yes 30000
+          unsigned_vote_status=$?
+          set -e
+          test "$unsigned_vote_status" -ne 0
           cargo run --locked -- --qur-dao-propose /tmp/qorvynt-dao-state.bin community proposal1 founder "Fund public goods" 2 30000
           cargo run --locked -- --qur-dao-vote-signed /tmp/qorvynt-dao-state.bin community proposal1 /tmp/qorvynt-dao-alice.qvk yes 30000
           cargo run --locked -- --qur-dao-vote-signed /tmp/qorvynt-dao-state.bin community proposal1 /tmp/qorvynt-dao-bob.qvk yes 30000
