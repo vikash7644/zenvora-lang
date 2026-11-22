@@ -137,7 +137,7 @@ Experimental version 2 emission is opt-in:
 
 ```sh
 qorvynt --emit-bytecode-v2 examples/functions.qv functions.qv2b
-cargo run -- --run-bytecode functions.qv2b
+qorvynt --run-bytecode functions.qv2b
 ```
 
 V2 adds explicit program/function metadata and structural, control-flow, and stack verification. The parser/verifier has deterministic adversarial tests, round-trip/property checks, and fuzz campaigns in CI; this is not an independent security audit. The grammar and opcode set remain provisional, and v1 remains the default. Read [Bytecode v1](bytecode-v1.md) and [Bytecode v2 design and status](bytecode-v2-design.md).
