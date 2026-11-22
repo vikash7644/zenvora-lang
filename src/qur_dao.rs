@@ -251,6 +251,10 @@ pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
 
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     gas_limit: u64) -> Result<DaoReceipt, String> {
+    let proposal = get_proposal(state, dao_id, id)?;
+    if proposal.treasury_recipient.is_some() {
+        return Err("treasury proposals must be finalized with an authenticated block height".into());
+    }
     finalize_proposal_at_height(state, dao_id, id, 0, gas_limit)
 }
 
