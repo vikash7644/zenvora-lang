@@ -30,6 +30,17 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Build standalone QORVYNT CLI
+        run: cargo build --locked --release --bin qorvynt
+
+      - name: Upload standalone QORVYNT CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: qorvynt-cli-windows-x64
+          path: target/release/qorvynt.exe
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Install frontend dependencies
         working-directory: studio
         run: npm install
