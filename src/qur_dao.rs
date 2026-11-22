@@ -350,7 +350,7 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, cast_vote_signed, create_proposal, finalize_proposal, get_proposal, vote_signing_message, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, create_proposal, create_treasury_proposal, execute_treasury_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
     use ed25519_dalek::{Signer, SigningKey, Signature};
 
@@ -385,6 +385,47 @@ mod tests {
         assert!(cast_vote_signed(&mut state, "community", "signed2",
             &other.verifying_key(), &forged, VoteChoice::Yes, 30_000).is_err());
         assert_eq!(state.state_root(), root);
+    }
+
+    #[test]
+    fn treasury_transfer_waits_for_timelock_and_executes_once_atomically() {
+        let mut state = ContractState::new();
+        fund_treasury(&mut state, "community", 100, 30_000).unwrap();
+        create_treasury_proposal(&mut state, "community", "pay1", "founder",
+            "Pay contributor", "contributor", 40, 1, 10, 30_000).unwrap();
+        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let msg = vote_signing_message("community", "pay1", VoteChoice::Yes).unwrap();
+        let sig = key.sign(&msg);
+        cast_vote_signed(&mut state, "community", "pay1", &key.verifying_key(), &sig,
+            VoteChoice::Yes, 30_000).unwrap();
+        finalize_proposal_at_height(&mut state, "community", "pay1", 100, 30_000).unwrap();
+        let root = state.state_root();
+        assert!(execute_treasury_proposal(&mut state, "community", "pay1", 109, 30_000).is_err());
+        assert_eq!(state.state_root(), root);
+        let receipt = execute_treasury_proposal(&mut state, "community", "pay1", 110, 30_000).unwrap();
+        assert_eq!(receipt.operation, "TreasuryTransferExecuted");
+        assert_eq!(treasury_balance(&state, "community").unwrap(), 60);
+        assert!(get_proposal(&state, "community", "pay1").unwrap().executed);
+        let committed_root = state.state_root();
+        assert!(execute_treasury_proposal(&mut state, "community", "pay1", 120, 30_000).is_err());
+        assert_eq!(state.state_root(), committed_root);
+    }
+
+    #[test]
+    fn treasury_execution_rejects_insufficient_funds_without_partial_writes() {
+        let mut state = ContractState::new();
+        create_treasury_proposal(&mut state, "community", "pay2", "founder",
+            "Pay contributor", "contributor", 40, 1, 1, 30_000).unwrap();
+        let key = SigningKey::from_bytes(&[12u8; 32]);
+        let msg = vote_signing_message("community", "pay2", VoteChoice::Yes).unwrap();
+        let sig = key.sign(&msg);
+        cast_vote_signed(&mut state, "community", "pay2", &key.verifying_key(), &sig,
+            VoteChoice::Yes, 30_000).unwrap();
+        finalize_proposal_at_height(&mut state, "community", "pay2", 5, 30_000).unwrap();
+        let root = state.state_root();
+        assert!(execute_treasury_proposal(&mut state, "community", "pay2", 6, 30_000).is_err());
+        assert_eq!(state.state_root(), root);
+        assert_eq!(treasury_balance(&state, "community").unwrap(), 0);
     }
 
     #[test]
