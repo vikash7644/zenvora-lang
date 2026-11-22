@@ -496,6 +496,26 @@ mod tests {
     }
 
     #[test]
+    fn block_store_refuses_to_clobber_existing_staging_file() {
+        let key = SigningKey::from_bytes(&[86; 32]);
+        let (_runtime, store, _genesis_header) = genesis(&key);
+        let path = std::env::temp_dir().join(format!("qorvynt-block-store-exclusive-{}.zvb", std::process::id()));
+        let mut staging_name = path.file_name().unwrap().to_os_string();
+        staging_name.push(format!(".zblocks-tmp-{}", std::process::id()));
+        let staging = path.with_file_name(staging_name);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&staging);
+        std::fs::write(&staging, b"do-not-overwrite").unwrap();
+
+        let error = store.save_to_file(&path).unwrap_err();
+        assert!(error.contains("exclusive block-store temporary file"));
+        assert_eq!(std::fs::read(&staging).unwrap(), b"do-not-overwrite");
+        assert!(!path.exists());
+
+        std::fs::remove_file(staging).unwrap();
+    }
+
+    #[test]
     fn failed_persistence_does_not_advance_store_tip_or_runtime_cache() {
         let key = SigningKey::from_bytes(&[84; 32]);
         let (runtime, mut store, genesis_header) = genesis(&key);
