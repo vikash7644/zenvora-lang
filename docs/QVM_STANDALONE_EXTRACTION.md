@@ -39,3 +39,7 @@ Status: engineering plan based on the current `qorvynt/phase1-chain-separation` 
 ## Verifier-gated program boundary
 
 The current extraction adds `qvm::VerifiedProgram`, whose instruction vector is private. It can only be created by `load_verified`, which checks the QORVYNT/legacy migration header and then calls the existing Bytecode v2 decoder/verifier. Existing CLI callers retain a compatibility `load` function, while the QVM execution path consumes the verified wrapper directly. This is an API boundary inside the current root crate, not yet a separately compiled VM package.
+
+## Runtime execution API
+
+The QVM artifact path now executes through `runtime::run_with_output_metered` directly after `load_verified` succeeds. `execute_with_output` accepts a host-provided `FnMut(String)` sink and does not call the compiler crate's general-purpose `run()` wrapper. The CLI convenience wrapper supplies `println!` as that sink. Gas-meter injection remains available at the lower runtime API, while the current artifact convenience API uses no meter by default.
