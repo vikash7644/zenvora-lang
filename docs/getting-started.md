@@ -129,14 +129,14 @@ See [the module example](../examples/modules.qv) and its imported files.
 The default bytecode format is version 1:
 
 ```sh
-qorvynt --emit-bytecode examples/functions.qv functions.qvb
-qorvynt --run-bytecode functions.qvb
+qorvynt compile examples/functions.qv functions.qv2b
+qorvynt --run-bytecode functions.qv2b
 ```
 
 Experimental version 2 emission is opt-in:
 
 ```sh
-qorvynt --emit-bytecode-v2 examples/functions.qv functions.qv2b
+qorvynt compile examples/functions.qv functions.qv2b
 qorvynt --run-bytecode functions.qv2b
 ```
 
