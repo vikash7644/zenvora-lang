@@ -92,6 +92,8 @@ The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT 
 
 Each archive includes the `qorvynt` CLI, README, and MIT license. These binaries were built by GitHub Actions for the listed platforms; they do not require compiling the project on your phone.
 
+**CLI transition note:** the published v0.8.0 Prototype 1 binaries predate the new `run`, `check`, `new`, and `compile` verbs. Until the next release is published, use the compatible forms `qorvynt file.qv`, `qorvynt --check file.qv`, and `qorvynt --new project-name`. The new verbs are implemented and tested on [PR #83](https://github.com/vikash7644/zenvora-lang/pull/83); they will be available in the next release after its checks and merge.
+
 **Prototype warning:** this is not a production smart-contract toolchain. Do not use real funds or deploy production contracts with it.
 
 ## Local Rust compiler HTTP API (development preview)
