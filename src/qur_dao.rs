@@ -584,6 +584,15 @@ token GOLD {
         assert_eq!(proposal.yes_votes, 70);
         assert_eq!(proposal.no_votes, 30);
         assert_eq!(proposal.total_votes(), 100);
+        assert!(cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+            &yes_key.verifying_key(), &yes_signature, VoteChoice::Yes, 30_000).is_err());
+        let empty_key = SigningKey::from_bytes(&[33u8; 32]);
+        let empty_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
+        let empty_signature = empty_key.sign(&empty_message);
+        assert!(cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+            &empty_key.verifying_key(), &empty_signature, VoteChoice::Yes, 30_000).is_err());
+        let unchanged = get_proposal(&state, "community", "weighted1").unwrap();
+        assert_eq!(unchanged.total_votes(), 100);
     }
 
     #[test]
