@@ -137,12 +137,13 @@ qorvynt --qur-dao-treasury-token-execute token-ledger.json dao-state.bin communi
 The execution API clones the token ledger, validates the transfer, stages DAO proposal and token-balance writes in one contract-state overlay, commits that overlay, and only then publishes the in-memory ledger candidate. The CLI stages both files before replacing them, but two separate filesystem renames are not a crash-atomic database transaction. This remains a local QUR runtime integration: the CLI-supplied height is not checked against a canonical block header, token balances are not yet part of consensus replay, and wallet signatures authenticate votes but not a network transaction envelope. Do not use it as production chain treasury custody yet.
 
 
-### Token-balance-weighted wallet voting
+### Proposal-snapshot token-weighted wallet voting
 
-The signed DAO voting API includes a token-weighted path. It verifies the Ed25519 domain-separated vote message, derives the wallet address from the verified public key, reads the selected token balance, and records that balance as the vote weight. Zero-balance wallets cannot vote; each derived wallet address can vote only once per proposal.
+Weighted proposals now capture the selected token's holder balances when the proposal is created. The snapshot is stored in DAO contract state with a 4,096-holder limit; later token transfers do not change that proposal's voting power. Signed votes derive the voter address from the verified Ed25519 key and read the fixed snapshot weight. Zero-snapshot-balance wallets and duplicate votes are rejected.
 
 ```sh
-qorvynt --qur-dao-vote-weighted token-ledger.json dao-state.bin community proposal1 alice.qvk GOLD yes 30000
+qorvynt --qur-dao-propose-weighted token-ledger.json dao-state.bin community proposal1 founder "Weighted governance vote" GOLD 100 50000
+qorvynt --qur-dao-vote-weighted dao-state.bin community proposal1 alice.qvk GOLD yes 30000
 ```
 
-This is a balance-at-vote-time prototype, not yet secure token governance: balances are not snapshotted at proposal creation and tokens are not locked, so holders may transfer tokens between wallets and potentially reuse voting power. Production governance must use a consensus-authenticated snapshot height, immutable voting-power accounting or token locking/delegation, and chain-enforced replay protection.
+The snapshot is currently taken from the local QUR token ledger supplied at proposal creation. It is not yet anchored to a canonical block height or consensus state root, and snapshot entries are not yet generated from chain replay. Production governance must authenticate the snapshot against a finalized chain block, and the wallet signature CLI must be replaced or complemented by externally signed transaction admission.
