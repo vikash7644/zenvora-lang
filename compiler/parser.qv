@@ -2680,3 +2680,19 @@ if get(otherwise_if_program, "ok") and get(otherwise_if_run, "ok") and get(get(o
   show otherwise_if_program
   show otherwise_if_run
 }
+
+
+# Chained conditional regressions: multiple otherwise-if branches and a final otherwise.
+define chained_otherwise_program := compile_source("define branch_value := 3\nif branch_value == 1 {\nshow \"one\"\n} otherwise if branch_value == 2 {\nshow \"two\"\n} otherwise if branch_value == 3 {\nshow \"three\"\n} otherwise {\nshow \"fallback\"\n}\n")
+define chained_otherwise_run := execute_bytecode_plan(get(chained_otherwise_program, "plan"))
+define final_otherwise_program := compile_source("define branch_value := 9\nif branch_value == 1 {\nshow \"one\"\n} otherwise {\nshow \"fallback\"\n}\n")
+define final_otherwise_run := execute_bytecode_plan(get(final_otherwise_program, "plan"))
+if get(chained_otherwise_program, "ok") and get(chained_otherwise_run, "ok") and get(get(chained_otherwise_run, "output"), 0) == "three" and get(final_otherwise_program, "ok") and get(final_otherwise_run, "ok") and get(get(final_otherwise_run, "output"), 0) == "fallback" {
+  show "QORVYNT_CHAINED_OTHERWISE_IF_AND_FINAL_OTHERWISE_PASS"
+} otherwise {
+  show "QORVYNT_CHAINED_OTHERWISE_IF_AND_FINAL_OTHERWISE_FAIL"
+  show chained_otherwise_program
+  show chained_otherwise_run
+  show final_otherwise_program
+  show final_otherwise_run
+}
