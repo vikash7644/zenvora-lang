@@ -158,3 +158,32 @@ fn first_class_compile_command_emits_verified_bytecode_v2() {
     assert!(fs::read_to_string(&output_path).unwrap().starts_with("QORVYNT_BYTECODE 2\n"));
     let _ = fs::remove_file(output_path);
 }
+
+
+#[test]
+fn first_class_new_command_creates_a_qorvynt_project() {
+    let name = format!("qorvynt_cli_new_{}", std::process::id());
+    let path = std::path::Path::new(&name);
+    let _ = fs::remove_dir_all(path);
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
+        .arg("new")
+        .arg(&name)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(path.join("main.qv").is_file());
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn help_lists_the_first_class_qorvynt_verbs() {
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    for verb in ["qorvynt run", "qorvynt check", "qorvynt new", "qorvynt compile"] {
+        assert!(help.contains(verb), "help is missing {verb}");
+    }
+}
