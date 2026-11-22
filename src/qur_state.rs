@@ -3,7 +3,7 @@
 //! This binds the token ledger and contract storage roots into one deterministic
 //! commitment. It is a composition primitive, not yet a consensus state transition.
 use sha2::{Digest, Sha256};
-use super::contract_state::{AccessMode, ContractState};
+use super::contract_state::ContractState;
 use super::qur_runtime::QurLedger;
 
 /// Combine independently canonicalized runtime components under a versioned domain.
