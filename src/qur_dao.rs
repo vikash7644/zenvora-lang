@@ -576,6 +576,113 @@ pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &s
         gas_limit.saturating_sub(gas.used()), true)
 }
 
+fn validate_treasury_anchor_commitments(
+    proposal: &DaoProposal,
+    snapshot: super::block_store::VerifiedBlockAnchor,
+    tip: super::block_store::VerifiedBlockAnchor,
+) -> Result<(), String> {
+    let (chain_id, height, block_hash, state_root) = match (
+        proposal.snapshot_chain_id,
+        proposal.snapshot_block_height,
+        proposal.snapshot_block_hash.as_deref(),
+        proposal.snapshot_chain_state_root.as_deref(),
+    ) {
+        (Some(chain_id), Some(height), Some(block_hash), Some(state_root))
+            if chain_id != 0 && is_lower_hex_digest(block_hash) && is_lower_hex_digest(state_root) =>
+                (chain_id, height, block_hash, state_root),
+        _ => return Err("treasury proposal has no complete verified snapshot anchor".into()),
+    };
+    if snapshot.chain_id() != chain_id || snapshot.height() != height
+        || hex_digest(snapshot.block_hash()) != block_hash
+        || hex_digest(snapshot.state_root()) != state_root {
+        return Err("treasury proposal snapshot anchor does not match the replay-verified block store".into());
+    }
+    if tip.chain_id() != chain_id || tip.height() < height {
+        return Err("verified block-store tip is not on the proposal snapshot chain or is behind it".into());
+    }
+    Ok(())
+}
+
+fn verified_treasury_tip(
+    store: &super::block_store::BlockStore,
+    proposal: &DaoProposal,
+) -> Result<super::block_store::VerifiedBlockAnchor, String> {
+    let height = proposal.snapshot_block_height
+        .ok_or("treasury proposal snapshot height is missing")?;
+    let snapshot = store.verified_anchor_at(height)?
+        .ok_or("treasury snapshot block is not present in the replay-verified block store")?;
+    let tip = store.verified_tip_anchor()?
+        .ok_or("replay-verified block store has no committed tip")?;
+    validate_treasury_anchor_commitments(proposal, snapshot, tip)?;
+    Ok(tip)
+}
+
+/// Finalize a treasury proposal using the tip height of its replay-verified local block store.
+/// This does not provide distributed consensus finality and is not exposed as a CLI command.
+pub fn finalize_treasury_proposal_at_verified_tip(
+    state: &mut ContractState,
+    store: &super::block_store::BlockStore,
+    dao_id: &str,
+    id: &str,
+    gas_limit: u64,
+) -> Result<DaoReceipt, String> {
+    let proposal = get_proposal(state, dao_id, id)?;
+    if proposal.treasury_recipient.is_none() {
+        return Err("proposal is not a treasury proposal".into());
+    }
+    let tip = verified_treasury_tip(store, &proposal)?;
+    finalize_proposal_at_height(state, dao_id, id, tip.height(), gas_limit)
+}
+
+/// Execute a local treasury accounting transfer using the same verified store tip and
+/// rechecking the proposal's exact snapshot commitment before applying its timelock.
+pub fn execute_treasury_proposal_at_verified_tip(
+    state: &mut ContractState,
+    store: &super::block_store::BlockStore,
+    dao_id: &str,
+    id: &str,
+    gas_limit: u64,
+) -> Result<DaoReceipt, String> {
+    let proposal = get_proposal(state, dao_id, id)?;
+    if proposal.treasury_recipient.is_none() {
+        return Err("proposal is not a treasury proposal".into());
+    }
+    let tip = verified_treasury_tip(store, &proposal)?;
+    let approved_at = proposal.approved_at_height
+        .ok_or("treasury proposal approval height is missing")?;
+    let snapshot_height = proposal.snapshot_block_height
+        .ok_or("treasury proposal snapshot height is missing")?;
+    if approved_at < snapshot_height || approved_at > tip.height() {
+        return Err("treasury proposal approval height is outside the verified snapshot-to-tip range".into());
+    }
+    execute_treasury_proposal(state, dao_id, id, tip.height(), gas_limit)
+}
+
+/// Execute a QUR token-ledger treasury transfer using the same replay-verified local tip.
+pub fn execute_treasury_token_proposal_at_verified_tip(
+    state: &mut ContractState,
+    ledger: &mut super::qur_runtime::QurLedger,
+    store: &super::block_store::BlockStore,
+    dao_id: &str,
+    id: &str,
+    token: &str,
+    gas_limit: u64,
+) -> Result<DaoReceipt, String> {
+    let proposal = get_proposal(state, dao_id, id)?;
+    if proposal.treasury_recipient.is_none() {
+        return Err("proposal is not a treasury proposal".into());
+    }
+    let tip = verified_treasury_tip(store, &proposal)?;
+    let approved_at = proposal.approved_at_height
+        .ok_or("treasury proposal approval height is missing")?;
+    let snapshot_height = proposal.snapshot_block_height
+        .ok_or("treasury proposal snapshot height is missing")?;
+    if approved_at < snapshot_height || approved_at > tip.height() {
+        return Err("treasury proposal approval height is outside the verified snapshot-to-tip range".into());
+    }
+    execute_treasury_token_proposal(state, ledger, dao_id, id, token, tip.height(), gas_limit)
+}
+
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     gas_limit: u64) -> Result<DaoReceipt, String> {
     let proposal = get_proposal(state, dao_id, id)?;
