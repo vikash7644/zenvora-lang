@@ -5413,6 +5413,23 @@ fn factorial(n) {
     }
 
     #[test]
+    fn dao_token_transaction_persists_both_outputs_and_clears_journal() {
+        let base = std::env::temp_dir();
+        let ledger = base.join(format!("qorvynt-dao-persist-ledger-{}.json", std::process::id()));
+        let state = base.join(format!("qorvynt-dao-persist-state-{}.bin", std::process::id()));
+        let journal_path = super::dao_tx_journal_path(&ledger);
+        for path in [&ledger, &state, &journal_path] { let _ = std::fs::remove_file(path); }
+
+        super::persist_dao_token_transaction(&ledger, &state, b"ledger-v2", b"state-v2").unwrap();
+        assert_eq!(std::fs::read(&ledger).unwrap(), b"ledger-v2");
+        assert_eq!(std::fs::read(&state).unwrap(), b"state-v2");
+        assert!(!journal_path.exists());
+        assert!(super::persist_dao_token_transaction(&ledger, &ledger, b"x", b"y").is_err());
+
+        for path in [&ledger, &state, &journal_path] { let _ = std::fs::remove_file(path); }
+    }
+
+    #[test]
     fn dao_token_journal_recovers_interrupted_two_file_publish() {
         let base = std::env::temp_dir();
         let ledger = base.join(format!("qorvynt-dao-journal-ledger-{}.json", std::process::id()));
