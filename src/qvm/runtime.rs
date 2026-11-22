@@ -23,7 +23,7 @@ where
     F: FnMut(String),
 {
     if let Some(meter) = gas_meter.as_deref_mut() {
-        meter.charge(crate::contract_gas::BASE_EXECUTION_GAS)?;
+        meter.charge(crate::qvm::gas::BASE_EXECUTION_GAS)?;
     }
     let mut stack: Vec<Value> = Vec::new();
     let mut stack_value_bytes = 0usize;
@@ -45,12 +45,12 @@ where
         }
         if let Some(meter) = gas_meter.as_deref_mut() {
             let cost = match code.get(pc) {
-                Some(Op::Load(_)) => crate::contract_gas::LOCAL_READ_GAS,
-                Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => crate::contract_gas::LOCAL_WRITE_GAS,
-                Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => crate::contract_gas::CONDITIONAL_BRANCH_GAS,
-                Some(Op::Call(_, _) | Op::CallTarget { .. }) => crate::contract_gas::FUNCTION_CALL_GAS,
+                Some(Op::Load(_)) => crate::qvm::gas::LOCAL_READ_GAS,
+                Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => crate::qvm::gas::LOCAL_WRITE_GAS,
+                Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => crate::qvm::gas::CONDITIONAL_BRANCH_GAS,
+                Some(Op::Call(_, _) | Op::CallTarget { .. }) => crate::qvm::gas::FUNCTION_CALL_GAS,
                 Some(Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Neg | Op::Not | Op::And | Op::Or
-                    | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge) => crate::contract_gas::INTEGER_OPERATION_GAS,
+                    | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge) => crate::qvm::gas::INTEGER_OPERATION_GAS,
                 Some(_) => 1,
                 None => return Err("instruction pointer out of range".into()),
             };
