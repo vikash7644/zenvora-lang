@@ -890,6 +890,23 @@ token GOLD {
         assert_eq!(restored.snapshot_block_height, proposal.snapshot_block_height);
         assert_eq!(restored.snapshot_block_hash, proposal.snapshot_block_hash);
         assert_eq!(restored.snapshot_chain_state_root, proposal.snapshot_chain_state_root);
+
+        // A partially persisted anchor must be rejected before any weighted vote mutates state.
+        let mut malformed_state = state.clone();
+        let mut malformed_json: serde_json::Value =
+            serde_json::from_slice(&super::proposal_bytes(&proposal).unwrap()).unwrap();
+        malformed_json["snapshot_block_hash"] = serde_json::Value::Null;
+        let mut overlay = malformed_state.begin("community",
+            super::super::contract_state::AccessMode::Action).unwrap();
+        overlay.set(&super::proposal_key("anchored1"),
+            serde_json::to_vec(&malformed_json).unwrap()).unwrap();
+        malformed_state.commit(overlay).unwrap();
+        let before = malformed_state.state_root();
+        let message = vote_signing_message("community", "anchored1", VoteChoice::Yes).unwrap();
+        let signature = wallet.sign(&message);
+        assert!(cast_vote_weighted_signed(&mut malformed_state, "community", "anchored1", "GOLD",
+            &wallet.verifying_key(), &signature, VoteChoice::Yes, 100_000).is_err());
+        assert_eq!(malformed_state.state_root(), before);
     }
 
     #[test]
