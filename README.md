@@ -2,11 +2,11 @@
 
 ## Official website
 
-- **QORVYNT website:** https://vikash7644.github.io/zenvora-lang/
-- **Browser playground:** https://vikash7644.github.io/zenvora-lang/playground.html
-- **Source repository:** https://github.com/vikash7644/zenvora-lang
+- **QORVYNT website:** https://vikash7644.github.io/qorvynt-lang/
+- **Browser playground:** https://vikash7644.github.io/qorvynt-lang/playground.html
+- **Source repository:** https://github.com/vikash7644/qorvynt-lang
 
-The static site is in `website/` and is deployed by the GitHub Pages workflow when website files change on `main`. If the links do not open yet, check the latest [Pages deployment workflow](https://github.com/vikash7644/zenvora-lang/actions/workflows/pages.yml).
+The static site is in `website/` and is deployed by the GitHub Pages workflow when website files change on `main`. If the links do not open yet, check the latest [Pages deployment workflow](https://github.com/vikash7644/qorvynt-lang/actions/workflows/pages.yml).
 
 QORVYNT is an actively developed programming language. The canonical and only supported source-file extension is `.qv`. This repository contains a working Rust compiler/interpreter, a stack-based bytecode virtual machine, a command-line tool, executable language examples, regression tests, and CI workflows. The underlying Rust-hosted implementation is still in its v0.8.0-era state; the QORVYNT rename and Rust-independent bootstrap are not yet complete. It is real runnable software—not only a blueprint—but it is not yet a stable v1.0 language or a production smart-contract toolchain. Experimental areas and remaining release gates are listed in [the project status checklist](docs/PROJECT_STATUS.md).
 
@@ -33,7 +33,7 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the QORVYNT Lang release scope.
 - `examples/hello.qv` — arithmetic and variable example.
 - `examples/qorvynt-icon.qv` — QORVYNT source that emits a scalable SVG icon using the language's string and output features.
-- `examples/zenvora-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
+- `examples/qorvynt-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.qv` — loop condition, `break`, and `continue` example.
 - `examples/functions.qv` — function parameters, local variables, return values, and loops.
 - `examples/booleans.qv` — native booleans and logical operators.
@@ -54,7 +54,7 @@ The live implementation checklist, known limitations, and CI completion gates ar
 
 ## See QORVYNT code in action
 
-The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/zenvora-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
+The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/qorvynt-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
 
 ```qorvynt
 define name := "QORVYNT"
@@ -79,12 +79,12 @@ This is syntax highlighting only—not a language server, compiler, debugger, or
 
 ## Latest prototype release
 
-The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
+The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/qorvynt-lang/releases/tag/v0.8.0-prototype.1).
 
-- Linux x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-linux-x86_64.tar.gz)
-- macOS Intel x86-64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-macos-x86_64.tar.gz)
-- macOS Apple Silicon ARM64: [tar.gz](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-macos-aarch64.tar.gz)
-- Windows x86-64: [ZIP](https://github.com/vikash7644/zenvora-lang/releases/download/v0.8.0-prototype.1/zenvora-lang-windows-x86_64.zip)
+- Linux x86-64: [tar.gz](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-linux-x86_64.tar.gz)
+- macOS Intel x86-64: [tar.gz](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-macos-x86_64.tar.gz)
+- macOS Apple Silicon ARM64: [tar.gz](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-macos-aarch64.tar.gz)
+- Windows x86-64: [ZIP](https://github.com/vikash7644/qorvynt-lang/releases/download/v0.8.0-prototype.1/qorvynt-lang-windows-x86_64.zip)
 
 Each archive includes the `qorvynt` CLI, README, and MIT license. These binaries were built by GitHub Actions for the listed platforms; they do not require compiling the project on your phone.
 
@@ -270,7 +270,7 @@ QORVYNT is developed in the open. If the language, compiler, VM, documentation, 
 
 - **GitHub Sponsors:** [View sponsorship options](https://github.com/sponsors/vikash7644). The Sponsor page and its available payment methods depend on GitHub account eligibility and the creator's configured tiers.
 - **Contribute code:** see [CONTRIBUTING.md](CONTRIBUTING.md) for tests and review expectations.
-- **Report a reproducible issue:** use [GitHub Issues](https://github.com/vikash7644/zenvora-lang/issues).
+- **Report a reproducible issue:** use [GitHub Issues](https://github.com/vikash7644/qorvynt-lang/issues).
 
 Suggested voluntary support levels, if enabled on the GitHub Sponsors profile, are **$1, $5, $10, $25, or $100**. These are suggestions only—not configured or guaranteed payment tiers. A small contribution is appreciated, but never required.
 
