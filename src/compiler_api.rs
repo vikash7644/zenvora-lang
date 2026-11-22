@@ -99,10 +99,10 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                         let mut lines = Vec::new();
                         match super::run_with_output(&code, &mut |line| lines.push(line)) {
                             Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":"qorvynt-v0.8"}),
-                            Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":"zenvora-rust-v0.8"}),
+                            Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":"qorvynt-v0.8"}),
                         }
                     }
-                    Err(error) => json!({"ok":false,"error":error,"phase":"compile","compiler":"zenvora-rust-v0.8"}),
+                    Err(error) => json!({"ok":false,"error":error,"phase":"compile","compiler":"qorvynt-v0.8"}),
                 };
                 return respond(stream, "200 OK", &result);
             }
