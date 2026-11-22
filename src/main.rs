@@ -3634,6 +3634,44 @@ fn main() {
         }
         return;
     }
+    if args.get(1).is_some_and(|mode| mode == "--qur-dao-propose-treasury-anchored") {
+        if args.len() != 15 {
+            eprintln!("Usage: qorvynt --qur-dao-propose-treasury-anchored <state.bin> <block-store> <chain-id> <snapshot-height> <dao-id> <proposal-id> <proposer> <title> <recipient> <amount> <quorum> <timelock-blocks> <gas-limit>");
+            process::exit(2);
+        }
+        let result = (|| -> Result<(), String> {
+            let snapshot = Path::new(&args[2]);
+            recover_dao_token_transaction_for_state(snapshot)?;
+            let chain_id = args[4].parse::<u64>().map_err(|_| "chain ID must be an unsigned integer".to_string())?;
+            let height = args[5].parse::<u64>().map_err(|_| "snapshot height must be an unsigned integer".to_string())?;
+            let (store, _runtime) = crate::block_store::BlockStore::load_from_file(Path::new(&args[3]), chain_id)?;
+            let anchor = store.verified_anchor_at(height)?
+                .ok_or_else(|| "requested treasury snapshot height is not present in the replay-verified block store".to_string())?;
+            let mut state = if snapshot.exists() {
+                contract_state::ContractState::load_snapshot(snapshot)?
+            } else { contract_state::ContractState::new() };
+            let amount = args[11].parse::<u64>().map_err(|_| "treasury amount must be an unsigned integer".to_string())?;
+            let quorum = args[12].parse::<u64>().map_err(|_| "quorum must be an unsigned integer".to_string())?;
+            let timelock = args[13].parse::<u64>().map_err(|_| "timelock blocks must be an unsigned integer".to_string())?;
+            let gas = args[14].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
+            let receipt = qur_dao::create_treasury_proposal_at_anchor(&mut state, anchor,
+                &args[6], &args[7], &args[8], &args[9], &args[10], amount, quorum, timelock, gas)?;
+            state.save_snapshot(snapshot)?;
+            println!("operation={}", receipt.operation);
+            println!("dao_id={}", receipt.dao_id);
+            println!("proposal_id={}", receipt.proposal_id);
+            println!("gas_used={}", receipt.gas_used);
+            println!("state_root={}", hex_encode_bytes(&receipt.state_root));
+            println!("event_hash={}", hex_encode_bytes(&receipt.event_hash));
+            println!("snapshot_chain_id={}", anchor.chain_id());
+            println!("snapshot_block_height={}", anchor.height());
+            println!("snapshot_block_hash={}", hex_encode_bytes(anchor.block_hash()));
+            println!("snapshot_chain_state_root={}", hex_encode_bytes(anchor.state_root()));
+            Ok(())
+        })();
+        if let Err(error) = result { eprintln!("QORVYNT anchored treasury proposal error: {error}"); process::exit(1); }
+        return;
+    }
     if args.get(1).is_some_and(|mode| mode == "--qur-dao-propose-weighted-anchored") {
         if args.len() != 13 {
             eprintln!("Usage: qorvynt --qur-dao-propose-weighted-anchored <ledger.json> <state.bin> <block-store> <chain-id> <dao-id> <proposal-id> <proposer> <title> <token> <quorum> <gas-limit>");
@@ -3750,7 +3788,6 @@ fn main() {
             "--qur-dao-propose-treasury" => 12,
             "--qur-dao-treasury-fund" => 6,
             "--qur-dao-treasury-balance" => 4,
-            "--qur-dao-vote" => 8,
             "--qur-dao-vote-signed" => 8,
             "--qur-dao-finalize" => 6,
             "--qur-dao-show" => 5,
@@ -3808,7 +3845,18 @@ fn main() {
                     let choice = match args[6].as_str() { "yes" => qur_dao::VoteChoice::Yes, "no" => qur_dao::VoteChoice::No, _ => return Err("vote choice must be yes or no".into()) };
                     let gas = args[7].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
                     let signing_key = read_chain_key(&args[5])?;
-                    let message = qur_dao::vote_signing_message(&args[3], &args[4], choice)?;
+                    let proposal = qur_dao::get_proposal(&state, &args[3], &args[4])?;
+                    let message = if proposal.treasury_recipient.is_some() {
+                        match (proposal.snapshot_chain_id, proposal.snapshot_block_height,
+                            proposal.snapshot_block_hash.as_deref(), proposal.snapshot_chain_state_root.as_deref()) {
+                            (Some(chain_id), Some(height), Some(block_hash), Some(state_root)) =>
+                                qur_dao::vote_signing_message_for_anchor(chain_id, height, block_hash, state_root,
+                                    &args[3], &args[4], choice)?,
+                            _ => return Err("treasury proposal requires a complete replay-verified chain anchor before signed voting".into()),
+                        }
+                    } else {
+                        qur_dao::vote_signing_message(&args[3], &args[4], choice)?
+                    };
                     let signature = signing_key.sign(&message);
                     qur_dao::cast_vote_signed(&mut state, &args[3], &args[4], &signing_key.verifying_key(), &signature, choice, gas)?
                 }
