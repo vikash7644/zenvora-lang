@@ -87,7 +87,7 @@ pub fn assess_proposal(proposal: &DaoProposal) -> GovernanceAssessment {
                 30,
             );
         }
-        if proposal.snapshot_ledger_root.as_deref().is_none_or(|root| !is_digest(root)) {
+        if proposal.snapshot_ledger_root.as_deref().map_or(true, |root| !is_digest(root)) {
             add(
                 "INVALID_LEDGER_COMMITMENT",
                 FindingSeverity::High,
@@ -95,7 +95,7 @@ pub fn assess_proposal(proposal: &DaoProposal) -> GovernanceAssessment {
                 25,
             );
         }
-        if proposal.voting_snapshot_root.as_deref().is_none_or(|root| !is_digest(root)) {
+        if proposal.voting_snapshot_root.as_deref().map_or(true, |root| !is_digest(root)) {
             add(
                 "INVALID_VOTING_SNAPSHOT_COMMITMENT",
                 FindingSeverity::High,
@@ -120,8 +120,8 @@ pub fn assess_proposal(proposal: &DaoProposal) -> GovernanceAssessment {
             );
         } else if anchor_count != anchor_parts.len()
             || proposal.snapshot_chain_id == Some(0)
-            || proposal.snapshot_block_hash.as_deref().is_none_or(|hash| !is_digest(hash))
-            || proposal.snapshot_chain_state_root.as_deref().is_none_or(|root| !is_digest(root))
+            || proposal.snapshot_block_hash.as_deref().map_or(true, |hash| !is_digest(hash))
+            || proposal.snapshot_chain_state_root.as_deref().map_or(true, |root| !is_digest(root))
         {
             add(
                 "INCOMPLETE_SNAPSHOT_ANCHOR",
