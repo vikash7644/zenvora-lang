@@ -119,3 +119,19 @@ qorvynt --qur-dao-treasury-balance dao-state.bin community
 ```
 
 This is not yet a transfer of native tokens or chain assets: treasury funding is local accounting state, the recipient is an identifier, and the supplied block height is not authenticated against a canonical chain header. Production use requires chain transaction admission, authenticated block context, token custody/escrow, consensus replay, and an on-chain execution adapter.
+
+
+### DAO treasury payouts using the QUR token ledger
+
+The DAO runtime now has a token-backed treasury execution path. Fund the DAO's token account by transferring tokens to the deterministic account `dao_<dao-id>`, then create and approve a treasury proposal with a signed wallet vote. At the authenticated integration boundary currently exposed by the local CLI, pass the block height explicitly; the transfer will be rejected before the timelock expires. On success, the QUR token ledger moves the proposal amount from `dao_<dao-id>` to the proposal recipient, preserves total token supply, stores the DAO execution marker and token balances in the contract-state overlay, and marks the proposal executed.
+
+```sh
+qorvynt --qur-token-init examples/qur/manifest.qv token-ledger.json
+qorvynt --qur-token-transfer token-ledger.json GOLD genesis dao_community 100
+qorvynt --qur-dao-propose-treasury dao-state.bin community payout1 founder "Contributor payout" contributor 40 1 5 30000
+qorvynt --qur-dao-vote-signed dao-state.bin community payout1 alice.qvk yes 30000
+qorvynt --qur-dao-finalize-height dao-state.bin community payout1 100 30000
+qorvynt --qur-dao-treasury-token-execute token-ledger.json dao-state.bin community payout1 GOLD 105 50000
+```
+
+The execution API clones the token ledger, validates the transfer, stages DAO proposal and token-balance writes in one contract-state overlay, commits that overlay, and only then publishes the in-memory ledger candidate. The CLI stages both files before replacing them, but two separate filesystem renames are not a crash-atomic database transaction. This remains a local QUR runtime integration: the CLI-supplied height is not checked against a canonical block header, token balances are not yet part of consensus replay, and wallet signatures authenticate votes but not a network transaction envelope. Do not use it as production chain treasury custody yet.
