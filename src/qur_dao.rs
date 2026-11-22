@@ -326,8 +326,28 @@ fn create_weighted_proposal_with_anchor(state: &mut ContractState, ledger: &supe
     Ok(receipt("WeightedProposalCreated", dao_id, id, &event_payload, &gas, state))
 }
 
-/// Create a DAO proposal that can execute one treasury transfer after approval and a block-height timelock.
+/// Create a legacy local-only treasury proposal. It cannot receive a signed vote because
+/// treasury voting now requires a replay-verified chain anchor.
 pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &str,
+    proposer: &str, title: &str, recipient: &str, amount: u64, quorum: u64,
+    timelock_blocks: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    create_treasury_proposal_with_anchor(state, None, dao_id, id, proposer, title,
+        recipient, amount, quorum, timelock_blocks, gas_limit)
+}
+
+/// Create a treasury proposal bound to a historical block accepted by a replay-verified
+/// local BlockStore. This is not a distributed-finality proof.
+pub fn create_treasury_proposal_at_anchor(state: &mut ContractState,
+    anchor: super::block_store::VerifiedBlockAnchor, dao_id: &str, id: &str,
+    proposer: &str, title: &str, recipient: &str, amount: u64, quorum: u64,
+    timelock_blocks: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    if anchor.chain_id() == 0 { return Err("treasury proposal anchor has an invalid chain ID".into()); }
+    create_treasury_proposal_with_anchor(state, Some(anchor), dao_id, id, proposer, title,
+        recipient, amount, quorum, timelock_blocks, gas_limit)
+}
+
+fn create_treasury_proposal_with_anchor(state: &mut ContractState,
+    anchor: Option<super::block_store::VerifiedBlockAnchor>, dao_id: &str, id: &str,
     proposer: &str, title: &str, recipient: &str, amount: u64, quorum: u64,
     timelock_blocks: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) || !valid_id(proposer) || !valid_id(recipient) {
@@ -349,7 +369,10 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
         treasury_recipient: Some(recipient.into()), treasury_amount: amount,
         timelock_blocks, approved_at_height: None, executed: false,
         voting_token: None, snapshot_total_weight: 0, snapshot_ledger_root: None, voting_snapshot_root: None,
-        snapshot_chain_id: None, snapshot_block_height: None, snapshot_block_hash: None, snapshot_chain_state_root: None,
+        snapshot_chain_id: anchor.map(|value| value.chain_id()),
+        snapshot_block_height: anchor.map(|value| value.height()),
+        snapshot_block_hash: anchor.map(|value| hex_digest(value.block_hash())),
+        snapshot_chain_state_root: anchor.map(|value| hex_digest(value.state_root())),
     };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut payload = Vec::new();
@@ -359,6 +382,12 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
     payload.extend_from_slice(&amount.to_be_bytes());
     payload.extend_from_slice(&quorum.to_be_bytes());
     payload.extend_from_slice(&timelock_blocks.to_be_bytes());
+    if let Some(anchor) = anchor {
+        payload.extend_from_slice(&anchor.chain_id().to_be_bytes());
+        payload.extend_from_slice(&anchor.height().to_be_bytes());
+        append_field(&mut payload, anchor.block_hash());
+        append_field(&mut payload, anchor.state_root());
+    }
     gas.charge_event(payload.len())?;
     state.commit(overlay)?;
     Ok(receipt("TreasuryProposalCreated", dao_id, id, &payload, &gas, state))
@@ -412,7 +441,18 @@ pub fn vote_signing_message_for_anchor(chain_id: u64, block_height: u64,
 pub fn cast_vote_signed(state: &mut ContractState, dao_id: &str, id: &str,
     public_key: &VerifyingKey, signature: &Signature, choice: VoteChoice,
     gas_limit: u64) -> Result<DaoReceipt, String> {
-    let message = vote_signing_message(dao_id, id, choice)?;
+    let proposal = get_proposal(state, dao_id, id)?;
+    let message = if proposal.treasury_recipient.is_some() {
+        match (proposal.snapshot_chain_id, proposal.snapshot_block_height,
+            proposal.snapshot_block_hash.as_deref(), proposal.snapshot_chain_state_root.as_deref()) {
+            (Some(chain_id), Some(height), Some(block_hash), Some(state_root))
+                if chain_id != 0 && is_lower_hex_digest(block_hash) && is_lower_hex_digest(state_root) =>
+                    vote_signing_message_for_anchor(chain_id, height, block_hash, state_root, dao_id, id, choice)?,
+            _ => return Err("treasury proposal requires a complete replay-verified chain anchor before signed voting".into()),
+        }
+    } else {
+        vote_signing_message(dao_id, id, choice)?
+    };
     public_key.verify_strict(&message, signature)
         .map_err(|_| "invalid DAO vote signature".to_string())?;
     let voter = crate::chain_protocol::address_from_public_key(&public_key.to_bytes())?;
