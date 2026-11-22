@@ -931,6 +931,27 @@ token GOLD {
         assert_eq!(restored.snapshot_block_hash, proposal.snapshot_block_hash);
         assert_eq!(restored.snapshot_chain_state_root, proposal.snapshot_chain_state_root);
 
+        // The exact anchored signature is accepted and derives weight from the committed snapshot.
+        let block_hash = "ab".repeat(32);
+        let state_root = "cd".repeat(32);
+        let message = super::vote_signing_message_for_anchor(71, 42, &block_hash, &state_root,
+            "community", "anchored1", VoteChoice::Yes).unwrap();
+        let signature = wallet.sign(&message);
+        let mut valid_vote_state = state.clone();
+        cast_vote_weighted_signed(&mut valid_vote_state, "community", "anchored1", "GOLD",
+            &wallet.verifying_key(), &signature, VoteChoice::Yes, 100_000).unwrap();
+        assert_eq!(get_proposal(&valid_vote_state, "community", "anchored1").unwrap().yes_votes, 100);
+
+        // A signature from a competing fork must fail without changing proposal state.
+        let fork_message = super::vote_signing_message_for_anchor(71, 42, &"ef".repeat(32), &state_root,
+            "community", "anchored1", VoteChoice::Yes).unwrap();
+        let fork_signature = wallet.sign(&fork_message);
+        let mut fork_state = state.clone();
+        let fork_before = fork_state.state_root();
+        assert!(cast_vote_weighted_signed(&mut fork_state, "community", "anchored1", "GOLD",
+            &wallet.verifying_key(), &fork_signature, VoteChoice::Yes, 100_000).is_err());
+        assert_eq!(fork_state.state_root(), fork_before);
+
         // A partially persisted anchor must be rejected before any weighted vote mutates state.
         let mut malformed_state = state.clone();
         let mut malformed_json: serde_json::Value =
