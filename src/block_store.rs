@@ -88,6 +88,27 @@ impl BlockStore {
         }).transpose()
     }
 
+    /// Return a historical commitment only for a block already accepted by this store's
+    /// append/replay validation. This is a local replay-verified anchor, not distributed finality.
+    pub fn verified_anchor_at(&self, height: u64) -> Result<Option<VerifiedBlockAnchor>, String> {
+        let index = match usize::try_from(height) {
+            Ok(index) => index,
+            Err(_) => return Ok(None),
+        };
+        let Some(block) = self.blocks.get(index) else {
+            return Ok(None);
+        };
+        if block.header.chain_id != self.chain_id || block.header.height != height {
+            return Err("stored block index does not match its verified chain position".into());
+        }
+        Ok(Some(VerifiedBlockAnchor {
+            chain_id: block.header.chain_id,
+            height: block.header.height,
+            block_hash: block.header.header_hash()?,
+            state_root: block.header.state_root,
+        }))
+    }
+
     /// Persist a block only after the caller has executed it successfully.
     /// The store independently checks linkage, signatures, and all supplied commitments.
     pub fn append_executed_block(
@@ -475,11 +496,19 @@ mod tests {
 
         let (loaded, replayed) = BlockStore::load_from_file(&path, 71).unwrap();
         assert_eq!(loaded.blocks().len(), 2);
-        let anchor = loaded.verified_tip_anchor().unwrap().unwrap();
+        let genesis_anchor = loaded.verified_anchor_at(0).unwrap().unwrap();
+        assert_eq!(genesis_anchor.chain_id, 71);
+        assert_eq!(genesis_anchor.height, 0);
+        assert_eq!(genesis_anchor.block_hash, genesis_header.header_hash().unwrap());
+        assert_eq!(genesis_anchor.state_root, genesis_header.state_root);
+
+        let anchor = loaded.verified_anchor_at(header.height).unwrap().unwrap();
         assert_eq!(anchor.chain_id, 71);
         assert_eq!(anchor.height, header.height);
         assert_eq!(anchor.block_hash, header.header_hash().unwrap());
         assert_eq!(anchor.state_root, header.state_root);
+        assert!(loaded.verified_anchor_at(header.height + 1).unwrap().is_none());
+        assert_eq!(loaded.verified_tip_anchor().unwrap(), Some(anchor));
         assert_eq!(replayed.balance("bob"), 125);
         assert_eq!(replayed.account_nonce(&address_from_public_key(&key.verifying_key().to_bytes()).unwrap()), 1);
         assert_eq!(replayed.state_root(), runtime.state_root());
