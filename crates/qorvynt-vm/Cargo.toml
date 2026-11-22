@@ -2,7 +2,9 @@
 name = "qorvynt-vm"
 version = "0.1.0"
 edition = "2021"
-description = "Standalone QORVYNT bytecode virtual machine runtime"
+description = "Standalone QORVYNT Bytecode v2 verifier, decoder, and virtual machine runtime"
+repository = "https://github.com/vikash7644/zenvora-lang"
+readme = "README.md"
 license = "MIT"
 
 [lib]
