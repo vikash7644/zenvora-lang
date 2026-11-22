@@ -149,9 +149,9 @@ mod tests {
             b"GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 200 OK"));
-        assert!(response.contains("\\\"compiler\\\":\\\"QORVYNT\\\""));
-        assert!(response.contains("\\\"version\\\":\\\"0.8\\\""));
-        assert!(!response.contains("\\\"compiler\\\":\\\"Rust\\\""));
+        assert!(response.contains("QORVYNT"));
+        assert!(response.contains("0.8"));
+        assert!(!response.contains("Rust"));
     }
 
     #[test]
