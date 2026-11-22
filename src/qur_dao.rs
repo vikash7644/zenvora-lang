@@ -191,8 +191,17 @@ pub fn create_weighted_proposal(state: &mut ContractState, ledger: &super::qur_r
         return Err("proposal title must contain 1-256 bytes".into());
     }
     if quorum == 0 { return Err("proposal quorum must be greater than zero".into()); }
-    let holders = ledger.token_holders(token)?;
-    if holders.is_empty() { return Err("voting token has no holders".into()); }
+    // Only key-derived QORVYNT wallet addresses can cast signed votes. Exclude
+    // reserved/system ledger accounts such as "genesis" and "dao_*" from quorum weight.
+    let holders: Vec<(String, u64)> = ledger.token_holders(token)?
+        .into_iter()
+        .filter(|(account, _)| {
+            account.len() == 42
+                && account.starts_with("zv")
+                && account[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+        .collect();
+    if holders.is_empty() { return Err("voting token has no eligible wallet holders".into()); }
     if holders.len() > MAX_DAO_SNAPSHOT_VOTERS {
         return Err(format!("voting snapshot exceeds holder limit ({MAX_DAO_SNAPSHOT_VOTERS})"));
     }
