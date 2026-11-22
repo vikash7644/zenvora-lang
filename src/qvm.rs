@@ -1,8 +1,7 @@
 //! QORVYNT Virtual Machine artifact boundary.
 //!
-//! This module owns the QVM-specific compile/load/run entry points. The current
-//! instruction executor is still hosted by the Rust reference CLI; moving this
-//! boundary out first gives the runtime a stable seam for later extraction.
+//! This module owns QVM bytecode, runtime values, and instruction execution.
+//! Compiler frontend and language builtins remain in the Rust host for now.
 
 mod bytecode;
 mod value;
