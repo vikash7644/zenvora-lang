@@ -3541,7 +3541,7 @@ fn recover_dao_token_transaction_for_state(state_path: &Path) -> Result<(), Stri
     if metadata.len() > 4096 { return Err("DAO recovery index exceeds the 4 KiB safety limit".into()); }
     let ledger_name = fs::read_to_string(&index_path)
         .map_err(|e| format!("cannot read DAO recovery index: {e}"))?;
-    if ledger_name.is_empty() || ledger_name.contains('\\0') {
+    if ledger_name.is_empty() || ledger_name.contains('\0') {
         return Err("DAO recovery index contains an invalid ledger path".into());
     }
     let ledger_path = Path::new(&ledger_name);
