@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to Zenvora Lang are recorded here.
+Notable changes to QORVYNT Lang are recorded here.
 
 ## Unreleased
 
