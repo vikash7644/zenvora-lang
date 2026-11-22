@@ -30,10 +30,12 @@ Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; thi
 - [x] Document the current pipeline and engineering gates in [QVM.md](QVM.md).
 - [x] Move the opcode model, runtime value model, instruction loop, built-in dispatch, and shared value/collection/resource-accounting helpers into dedicated `src/qvm/` modules.
 - [ ] Build and test a standalone QVM library/runner that loads artifacts without invoking the source compiler.
+- [x] Define a host-neutral `GasMeter` interface in `src/qvm/gas.rs`; keep the contract gas meter as an adapter at the host boundary.
+- [x] Move QVM safety limits into `src/qvm/limits.rs` and retain temporary crate-level compatibility re-exports.
 - [ ] Freeze and independently review the bytecode contract before defining a stable binary artifact format.
 - [ ] Complete a clean-environment self-hosted compiler bootstrap before claiming Rust independence.
 
-**Boundary:** the QVM instruction loop, built-in dispatch, and core value-safety helpers now have dedicated modules, but gas-meter integration and safety-limit ownership still depend on the Rust host crate. This is not yet a standalone VM or Rust-independent compiler.
+**Boundary:** the QVM instruction loop, built-in dispatch, core value-safety helpers, gas-meter interface, gas schedule, and safety limits now have dedicated QVM modules. The runtime still compiles inside the root binary crate, and the built-ins/runtime support still reference crate-scoped types; there is no standalone QVM library/runner yet. This is not a Rust-independent compiler.
 
 ## Current gate: Bytecode v2
 
