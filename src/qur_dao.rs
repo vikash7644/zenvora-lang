@@ -1,6 +1,7 @@
 //! Deterministic local DAO proposal and voting runtime.
 //! This module is a single-process governance prototype, not consensus-backed execution.
 use sha2::{Digest, Sha256};
+use ed25519_dalek::{Signature, VerifyingKey};
 use super::contract_gas::{GasMeter, BASE_EXECUTION_GAS, STORAGE_READ_GAS, STORAGE_WRITE_GAS};
 use super::contract_state::{AccessMode, ContractState};
 
@@ -148,6 +149,27 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     Ok(receipt("ProposalCreated", dao_id, id, &event_payload, &gas, state))
 }
 
+/// Canonical message signed by the wallet for a DAO vote.
+pub fn vote_signing_message(dao_id: &str, proposal_id: &str, choice: VoteChoice) -> Result<Vec<u8>, String> {
+    if !valid_id(dao_id) || !valid_id(proposal_id) { return Err("invalid DAO or proposal identifier".into()); }
+    let mut message = b"QORVYNT_DAO_VOTE_V1\0".to_vec();
+    append_field(&mut message, dao_id.as_bytes());
+    append_field(&mut message, proposal_id.as_bytes());
+    message.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
+    Ok(message)
+}
+
+/// Apply a vote only after verifying the Ed25519 signature against the wallet public key.
+pub fn cast_vote_signed(state: &mut ContractState, dao_id: &str, id: &str,
+    public_key: &VerifyingKey, signature: &Signature, choice: VoteChoice,
+    gas_limit: u64) -> Result<DaoReceipt, String> {
+    let message = vote_signing_message(dao_id, id, choice)?;
+    public_key.verify_strict(&message, signature)
+        .map_err(|_| "invalid DAO vote signature".to_string())?;
+    let voter = crate::chain_protocol::address_from_public_key(&public_key.to_bytes())?;
+    cast_vote(state, dao_id, id, &voter, choice, gas_limit)
+}
+
 pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) || !valid_id(voter) { return Err("invalid DAO, proposal, or voter identifier".into()); }
@@ -165,7 +187,7 @@ pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
         VoteChoice::No => proposal.no_votes = proposal.no_votes.checked_add(1).ok_or("no vote counter overflow")?,
     }
     overlay.set(&key, match choice { VoteChoice::Yes => b"yes".to_vec(), VoteChoice::No => b"no".to_vec() })?;
-    overlay.set(&proposal_key(id), serde_json::to_vec(&proposal).map_err(|e| e.to_string())?)?;
+    overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut event_payload = Vec::new();
     append_field(&mut event_payload, voter.as_bytes());
     event_payload.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
@@ -202,8 +224,42 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, create_proposal, finalize_proposal, get_proposal, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, create_proposal, finalize_proposal, get_proposal, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
+    use ed25519_dalek::{Signer, SigningKey, Signature};
+
+    #[test]
+    fn wallet_signed_vote_authenticates_identity_and_prevents_replay() {
+        let mut state = ContractState::new();
+        create_proposal(&mut state, "community", "signed1", "founder", "Wallet vote", 1, 30_000).unwrap();
+        let key = SigningKey::from_bytes(&[7u8; 32]);
+        let message = vote_signing_message("community", "signed1", VoteChoice::Yes).unwrap();
+        let signature = key.sign(&message);
+        let receipt = cast_vote_signed(&mut state, "community", "signed1",
+            &key.verifying_key(), &signature, VoteChoice::Yes, 30_000).unwrap();
+        assert_eq!(receipt.operation, "VoteCast");
+        let proposal = get_proposal(&state, "community", "signed1").unwrap();
+        assert_eq!(proposal.yes_votes, 1);
+        assert!(cast_vote_signed(&mut state, "community", "signed1",
+            &key.verifying_key(), &signature, VoteChoice::Yes, 30_000).is_err());
+    }
+
+    #[test]
+    fn invalid_or_wrong_choice_signature_cannot_cast_vote() {
+        let mut state = ContractState::new();
+        create_proposal(&mut state, "community", "signed2", "founder", "Signature check", 1, 30_000).unwrap();
+        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let message = vote_signing_message("community", "signed2", VoteChoice::Yes).unwrap();
+        let signature = key.sign(&message);
+        let root = state.state_root();
+        assert!(cast_vote_signed(&mut state, "community", "signed2",
+            &key.verifying_key(), &signature, VoteChoice::No, 30_000).is_err());
+        let other = SigningKey::from_bytes(&[10u8; 32]);
+        let forged = Signature::from_bytes(&signature.to_bytes());
+        assert!(cast_vote_signed(&mut state, "community", "signed2",
+            &other.verifying_key(), &forged, VoteChoice::Yes, 30_000).is_err());
+        assert_eq!(state.state_root(), root);
+    }
 
     #[test]
     fn proposal_votes_and_quorum_finalize_deterministically() {
