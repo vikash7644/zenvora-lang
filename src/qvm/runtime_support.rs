@@ -4,6 +4,7 @@
 //! runtime without duplicating value-safety rules.
 
 use crate::qvm::Value;
+use crate::{builtin_unchecked, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUE_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_COLLECTION_ITEMS};
 use std::collections::HashMap;
 
 pub(crate) fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
