@@ -2,7 +2,7 @@
 //!
 //! These costs are engineering defaults only. They are not activated chain parameters until
 //! transaction envelopes, fee semantics, opcode charging, receipts, and replay are integrated.
-pub use crate::qvm::gas::{
+pub(crate) use crate::qvm::gas::{
     BASE_EXECUTION_GAS, CONDITIONAL_BRANCH_GAS, EVENT_BASE_GAS, EVENT_BYTE_GAS,
     FUNCTION_CALL_GAS, GAS_SCHEDULE_VERSION, INTEGER_OPERATION_GAS, LOCAL_READ_GAS,
     LOCAL_WRITE_GAS, STORAGE_READ_GAS, STORAGE_WRITE_GAS,
