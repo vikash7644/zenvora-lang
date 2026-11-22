@@ -175,7 +175,7 @@ The generated program demonstrates variables, strings, arithmetic, arrays, and `
 4. Run it: `qorvynt my-project/main.qv`.
 5. Keep a small runnable example for each new feature and add a regression test when changing the compiler or VM.
 
-During development from this repository, prefix each command with `cargo run --`. For example, `cargo run -- --new my-project`. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The current CLI is not yet a full package manager, IDE, debugger, or cross-platform installer.
+During development from this repository, prefix each command with `cargo run --`. For example, `cargo run -- --new my-project`. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The CLI is not yet a full package manager. QORVYNT Studio is an early Windows IDE preview; project workspaces, debugger support, and a signed public installer are still pending.
 
 ## Automated regression tests
 
