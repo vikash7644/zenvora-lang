@@ -48,6 +48,12 @@ jobs:
 
       - name: Validate QUR Web3 manifest
         run: cargo run --locked -- --qur-check examples/qur/manifest.qv
+      - name: Validate machine-readable QUR manifest output
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -- --qur-json examples/qur/manifest.qv > /tmp/qorvynt-qur.json
+          python3 -c 'import json; d=json.load(open("/tmp/qorvynt-qur.json")); assert d["schema"] == "qorvynt.qur.manifest.v1" and d["valid"] is True; assert len(d["chains"]) == 1 and d["chains"][0]["name"] == "MyChain"; assert d["tokens"][0]["supply"] == 100000000; assert d["wallets"][0]["network"] == "MyChain"'
 
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
