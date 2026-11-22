@@ -1,7 +1,7 @@
 # QORVYNT Lang — Mission Status and Completion Gate
 
-Last audited: 2026-11-21  
-Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; this ledger is a working checklist, not a claim that the project is complete.
+Last audited: 2026-11-22  
+Scope: QORVYNT compiler and Studio work in `vikash7644/zenvora-lang` (Studio work tracked in PR #83); this ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
 
@@ -21,6 +21,16 @@ Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; thi
 - [ ] Rename the GitHub repository itself and migrate Pages/release URLs after the code and CI rename is verified.
 
 **Boundary:** package/CLI/bytecode identity is being migrated; QORVYNT is not yet Rust-independent and the old chain modules are not yet fully separated.
+
+## QORVYNT Studio Windows IDE milestone (2026-11-22)
+
+- [x] Add a Tauri 2 desktop shell and CodeMirror 6 editor for `.qv` source.
+- [x] Add native Open/Save actions and unsaved-change protection.
+- [x] Connect Compile and Run buttons to the shared QORVYNT compiler/VM library API.
+- [x] Add a Windows CI workflow that builds MSI and NSIS installers and uploads the outputs as CI artifacts.
+- [ ] Verify the current Windows installer workflow completes and inspect the generated MSI/NSIS artifacts.
+- [ ] Add project/workspace management, diagnostics, debugger, breakpoints, and instruction stepping.
+- [ ] Sign and publish a Windows installer only after release checks and provenance are in place.
 
 ## QORVYNT Virtual Machine (QVM) milestone (2026-11-21)
 
