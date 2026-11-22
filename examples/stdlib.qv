@@ -1,6 +1,6 @@
-# Zenvora Lang v0.7 standard-library preview
+# QORVYNT Lang v0.7 standard-library preview
 show type_of(42)
-show type_of("Zenvora")
+show type_of("QORVYNT")
 show to_string(true)
 show abs(-15)
 show min(7, 3)

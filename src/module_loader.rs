@@ -148,7 +148,7 @@ mod tests {
                 .expect("system clock must be after UNIX epoch")
                 .as_nanos();
             let path = std::env::temp_dir().join(format!(
-                "zenvora-module-loader-{}-{nonce}",
+                "qorvynt-module-loader-{}-{nonce}",
                 std::process::id()
             ));
             fs::create_dir_all(&path).expect("create temporary test directory");
