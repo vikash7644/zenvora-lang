@@ -28,12 +28,12 @@ Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; thi
 - [x] Add explicit `--qvm-run <file.qvmb>` command that accepts v2 only and routes the verified instruction stream through the existing VM engine.
 - [x] Add a round-trip regression test for source → QVM artifact → verified load → execution, plus a v1 rejection check.
 - [x] Document the current pipeline and engineering gates in [QVM.md](QVM.md).
-- [ ] Extract the runtime value model, opcodes, and execution loop from `src/main.rs` into a dedicated QVM module.
+- [x] Move the opcode model, runtime value model, instruction loop, and shared value/collection/resource-accounting helpers into dedicated `src/qvm/` modules.
 - [ ] Build and test a standalone QVM library/runner that loads artifacts without invoking the source compiler.
 - [ ] Freeze and independently review the bytecode contract before defining a stable binary artifact format.
 - [ ] Complete a clean-environment self-hosted compiler bootstrap before claiming Rust independence.
 
-**Boundary:** QVM currently reuses the Rust-hosted VM implementation. The new CLI is an explicit verified v2 path, not a standalone VM or Rust-independent compiler.
+**Boundary:** the QVM instruction loop and core value-safety helpers now have dedicated modules, but built-in dispatch, gas-meter integration, and safety-limit ownership still depend on the Rust host crate. This is not yet a standalone VM or Rust-independent compiler.
 
 ## Current gate: Bytecode v2
 
