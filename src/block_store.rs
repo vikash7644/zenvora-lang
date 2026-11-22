@@ -22,6 +22,15 @@ pub struct StoredBlock {
     pub transactions: Vec<SignedTransactionEnvelope>,
 }
 
+/// Header commitments exposed only from a block store whose prefix was accepted and replayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VerifiedBlockAnchor {
+    pub chain_id: u64,
+    pub height: u64,
+    pub block_hash: [u8; 32],
+    pub state_root: [u8; 32],
+}
+
 #[derive(Debug, Clone)]
 pub struct BlockStore {
     chain_id: u64,
@@ -52,6 +61,19 @@ impl BlockStore {
 
     pub fn blocks(&self) -> &[StoredBlock] {
         &self.blocks
+    }
+
+    /// Return the canonical tip commitment after this store's append/replay checks.
+    /// This is a local verified-store anchor, not a distributed finality certificate.
+    pub fn verified_tip_anchor(&self) -> Result<Option<VerifiedBlockAnchor>, String> {
+        self.blocks.last().map(|block| {
+            Ok(VerifiedBlockAnchor {
+                chain_id: block.header.chain_id,
+                height: block.header.height,
+                block_hash: block.header.header_hash()?,
+                state_root: block.header.state_root,
+            })
+        }).transpose()
     }
 
     /// Persist a block only after the caller has executed it successfully.
@@ -441,6 +463,11 @@ mod tests {
 
         let (loaded, replayed) = BlockStore::load_from_file(&path, 71).unwrap();
         assert_eq!(loaded.blocks().len(), 2);
+        let anchor = loaded.verified_tip_anchor().unwrap().unwrap();
+        assert_eq!(anchor.chain_id, 71);
+        assert_eq!(anchor.height, header.height);
+        assert_eq!(anchor.block_hash, header.header_hash().unwrap());
+        assert_eq!(anchor.state_root, header.state_root);
         assert_eq!(replayed.balance("bob"), 125);
         assert_eq!(replayed.account_nonce(&address_from_public_key(&key.verifying_key().to_bytes()).unwrap()), 1);
         assert_eq!(replayed.state_root(), runtime.state_root());
