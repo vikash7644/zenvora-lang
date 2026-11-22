@@ -3725,6 +3725,8 @@ fn main() {
             println!("dao_state_root={}", hex_encode_bytes(&receipt.state_root));
             println!("event_hash={}", hex_encode_bytes(&receipt.event_hash));
             println!("token_state_root={}", hex_encode_bytes(&ledger.state_root()));
+            let execution_root = receipt.execution_state_root.ok_or("DAO token execution receipt is missing unified execution root")?;
+            println!("execution_state_root={}", hex_encode_bytes(&execution_root));
             println!("treasury_account=dao_{}", args[4]);
             println!("recipient={}", args[6]);
             Ok(())
