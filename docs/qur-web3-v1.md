@@ -42,6 +42,16 @@ Genesis allocates each declared token's full configured supply to the reserved `
 
 This is a local single-process ledger prototype. It is not yet backed by QVM contract bytecode, chain transaction admission, consensus, validator signatures, or peer-to-peer replication. The next integration milestone is to expose these state transitions as deterministic, gas-metered QVM contract calls rather than treating this file ledger as a production token network.
 
+### QVM-metered contract-storage transfer
+
+The experimental CLI can also apply a transfer through the deterministic contract-storage layer:
+
+```sh
+qorvynt --qur-token-transfer-qvm token-ledger.json contract-state.bin qur_tokens GOLD genesis alice 25 30000
+```
+
+The command charges the versioned contract gas schedule, stages supply and account-balance keys in a write overlay, and commits the in-memory token ledger only after the contract-state overlay succeeds. It reports gas used and the contract storage root. This is a local integration prototype: it uses the repository's deterministic gas meter and contract storage module, but token transfer is not yet emitted as QVM bytecode/opcodes or admitted as a signed chain transaction. The two local snapshot files are not a cross-file atomic database transaction; production integration must move both records into one chain-state transaction.
+
 ## Execution boundary
 
 This milestone **validates configuration only**. It does not create a blockchain node, start Proof of Stake, mint tokens, deploy contracts, create wallets/private keys, run a DAO, or launch an exchange. A consensus label is not a consensus implementation.
