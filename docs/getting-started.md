@@ -8,6 +8,8 @@ QORVYNT Lang is a small, independent programming language for the QORVYNT ecosys
 
 **For normal use:** download the prebuilt `qorvynt` executable for your operating system from the [QORVYNT pre-release](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1), extract it, and put it on your `PATH`. Verify with `qorvynt --version`. No Rust, Cargo, Termux, or local compilation is required on the end-user machine.
 
+**CLI transition note:** the published v0.8.0 Prototype 1 binaries predate the new `run`, `check`, `new`, and `compile` verbs. Until the next release is published, use the compatible forms `qorvynt file.qv`, `qorvynt --check file.qv`, and `qorvynt --new project-name`. The new verbs are implemented and tested on [PR #83](https://github.com/vikash7644/zenvora-lang/pull/83); they will be available in the next release after its checks and merge.
+
 **For contributors only:** clone the repository and use Rust/Cargo to build and test compiler changes:
 
 ```sh
