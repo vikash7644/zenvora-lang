@@ -10,6 +10,17 @@ The static site is in `website/` and is deployed by the GitHub Pages workflow wh
 
 QORVYNT is an actively developed programming language. The canonical and only supported source-file extension is `.qv`. This repository contains a working Rust compiler/interpreter, a stack-based bytecode virtual machine, a command-line tool, executable language examples, regression tests, and CI workflows. The underlying Rust-hosted implementation is still in its v0.8.0-era state; the QORVYNT rename and Rust-independent bootstrap are not yet complete. It is real runnable software—not only a blueprint—but it is not yet a stable v1.0 language or a production smart-contract toolchain. Experimental areas and remaining release gates are listed in [the project status checklist](docs/PROJECT_STATUS.md).
 
+## Omni-domain vision: one language, two runtime profiles
+
+QORVYNT's long-term direction is an **omni-domain programming platform**: one `.qv` language and IDE for games/2D–3D graphics/VFX, AI agents, web APIs, deterministic Web3/DAO logic, and permissioned hardware/USB access. The planned architecture separates execution into:
+
+- **Chain / Sandbox:** deterministic, metered execution for contracts and governance logic. No direct filesystem, USB, GPU, unrestricted network, wall-clock, OS entropy, or arbitrary native FFI.
+- **Native / Agent:** permission-controlled access for games, graphics, AI inference/agents, web services, and hardware integrations.
+
+Planned optional modules include `std.gfx`, `std.vfx`, `std.ai`, `std.web`, `std.web3`, `std.dao`, and `std.usb`. Native integrations may use reviewed adapters such as WebGPU/Vulkan, ONNX Runtime, and platform USB APIs; these are not currently built-in compiler features.
+
+**Implementation status:** this is the architecture and roadmap, not a claim that both runtimes or these domain libraries are already implemented. The current compiler/VM remains Rust-hosted, the source frontend is not yet a proven Rust-independent bootstrap, and the contract DSL is experimental. See the [Omni-Domain Dual-Runtime Architecture](docs/architecture/omni-domain-dual-runtime.md) for security boundaries, proposed syntax, example sketches, and implementation exit gates.
+
 ## Legacy blockchain material — migration pending
 
 A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the QORVYNT Lang release scope** and must be moved to a separate, independently maintained blockchain repository only after that destination and its tests are verified.
