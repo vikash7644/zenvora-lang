@@ -29,7 +29,7 @@ fn reports_division_by_zero() {
 fn bytecode_cli_round_trip_preserves_output() {
     let id = NEXT_BYTECODE_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let base = std::env::temp_dir().join(format!("qorvynt_bytecode_{}_{}", std::process::id(), id));
-    let source_path = base.with_extension("zv");
+    let source_path = base.with_extension("qv");
     let bytecode_path = base.with_extension("zvb");
     fs::write(
         &source_path,
