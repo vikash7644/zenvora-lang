@@ -10,11 +10,22 @@ The static site is in `website/` and is deployed by the GitHub Pages workflow wh
 
 QORVYNT is an actively developed programming language. The canonical and only supported source-file extension is `.qv`. This repository contains a working Rust compiler/interpreter, a stack-based bytecode virtual machine, a command-line tool, executable language examples, regression tests, and CI workflows. The underlying Rust-hosted implementation is still in its v0.8.0-era state; the QORVYNT rename and Rust-independent bootstrap are not yet complete. It is real runnable software—not only a blueprint—but it is not yet a stable v1.0 language or a production smart-contract toolchain. Experimental areas and remaining release gates are listed in [the project status checklist](docs/PROJECT_STATUS.md).
 
+## Omni-domain vision: one language, two runtime profiles
+
+QORVYNT's long-term direction is an **omni-domain programming platform**: one `.qv` language and IDE for games/2D–3D graphics/VFX, AI agents, web APIs, deterministic Web3/DAO logic, and permissioned hardware/USB access. The planned architecture separates execution into:
+
+- **Chain / Sandbox:** deterministic, metered execution for contracts and governance logic. No direct filesystem, USB, GPU, unrestricted network, wall-clock, OS entropy, or arbitrary native FFI.
+- **Native / Agent:** permission-controlled access for games, graphics, AI inference/agents, web services, and hardware integrations.
+
+Planned optional modules include `std.gfx`, `std.vfx`, `std.ai`, `std.web`, `std.web3`, `std.dao`, and `std.usb`. Native integrations may use reviewed adapters such as WebGPU/Vulkan, ONNX Runtime, and platform USB APIs; these are not currently built-in compiler features.
+
+**Implementation status:** this is the architecture and roadmap, not a claim that both runtimes or these domain libraries are already implemented. The current compiler/VM remains Rust-hosted, the source frontend is not yet a proven Rust-independent bootstrap, and the contract DSL is experimental. See the [Omni-Domain Dual-Runtime Architecture](docs/architecture/omni-domain-dual-runtime.md) for security boundaries, proposed syntax, example sketches, and implementation exit gates.
+
 ## Legacy blockchain material — migration pending
 
 A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the QORVYNT Lang release scope** and must be moved to a separate, independently maintained blockchain repository only after that destination and its tests are verified.
 
-- [Legacy chain technical specification draft](docs/zenvora-technical-spec-v1.md)
+- [Archived legacy chain technical specification draft](docs/legacy-chain-technical-spec-v1.md)
 - [Legacy chain protocol specification draft](docs/chain-protocol-specification-draft.md)
 - [Legacy chain implementation roadmap](docs/chain-implementation-roadmap.md)
 
@@ -29,10 +40,11 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `Cargo.toml` and `Cargo.lock` — Rust package manifest and locked dependency versions for the `qorvynt` command.
 - `CHANGELOG.md` — v0.8.0 release notes and current feature status.
 - `docs/language-grammar.md` — current parser grammar draft and unresolved v1.0 semantics.
-- `src/main.rs` — language lexer/parser, compiler, stack VM, CLI, and regression tests; legacy chain CLI entrypoints are still present pending migration.
+- `src/lib.rs` — language lexer/parser, compiler, stack VM, CLI, and regression tests; `src/main.rs` is the thin binary entrypoint. Legacy chain CLI entrypoints are still present pending migration.
 - `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the QORVYNT Lang release scope.
 - `examples/hello.qv` — arithmetic and variable example.
-- `examples/zenvora-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
+- `examples/qorvynt-icon.qv` — QORVYNT source that emits a scalable SVG icon using the language's string and output features.
+- `examples/qorvynt-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.qv` — loop condition, `break`, and `continue` example.
 - `examples/functions.qv` — function parameters, local variables, return values, and loops.
 - `examples/booleans.qv` — native booleans and logical operators.
@@ -53,7 +65,7 @@ The live implementation checklist, known limitations, and CI completion gates ar
 
 ## See QORVYNT code in action
 
-The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/zenvora-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
+The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/qorvynt-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
 
 ```qorvynt
 define name := "QORVYNT"
@@ -76,6 +88,10 @@ A starter VS Code language extension is available in [`editors/vscode/`](editors
 
 This is syntax highlighting only—not a language server, compiler, debugger, or VS Code Marketplace release. See the [editor support guide](editors/vscode/README.md) for setup. GitHub's language bar still requires upstream Linguist recognition; adding an editor grammar does not change that.
 
+## QORVYNT Studio for Windows
+
+An early-access Tauri desktop IDE is being developed in [`studio/`](studio/). It includes a `.qv` editor, native Open/Save, and Compile/Run actions connected to the shared QORVYNT compiler and VM. The Windows workflow now builds MSI and NSIS installers and uploads them as CI artifacts; this is not yet a signed public release. See the [Studio guide](studio/README.md) and [latest Windows build](https://github.com/vikash7644/zenvora-lang/actions/workflows/studio-windows.yml).
+
 ## Latest prototype release
 
 The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
@@ -87,6 +103,8 @@ The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT 
 
 Each archive includes the `qorvynt` CLI, README, and MIT license. These binaries were built by GitHub Actions for the listed platforms; they do not require compiling the project on your phone.
 
+**CLI transition note:** the published v0.8.0 Prototype 1 binaries predate the new `run`, `check`, `new`, and `compile` verbs. Until the next release is published, use the compatible forms `qorvynt file.qv`, `qorvynt --check file.qv`, and `qorvynt --new project-name`. The new verbs are implemented and tested on [PR #83](https://github.com/vikash7644/zenvora-lang/pull/83); they will be available in the next release after its checks and merge.
+
 **Prototype warning:** this is not a production smart-contract toolchain. Do not use real funds or deploy production contracts with it.
 
 ## Local Rust compiler HTTP API (development preview)
@@ -94,7 +112,7 @@ Each archive includes the `qorvynt` CLI, README, and MIT license. These binaries
 The CLI can start a loopback-only HTTP service that uses the actual Rust compiler and VM (not the browser demo interpreter):
 
 ```sh
-cargo run -- --compiler-api
+qorvynt --compiler-api
 # listens on http://127.0.0.1:8787
 ```
 
@@ -113,31 +131,30 @@ curl -sS http://127.0.0.1:8787/compile-run \
 
 ## Build and run
 
-Requires Rust and Cargo (including on Android through Termux if the Rust toolchain is installed).
+End users do **not** need Rust, Cargo, or Termux. Download the prebuilt CLI for your operating system from the [QORVYNT pre-release](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1), extract it, and place the `qorvynt` executable on your `PATH`. Open a terminal and verify it with `qorvynt --version`. The commands below assume that the executable is on your `PATH`.
 
 ```sh
-cargo check
-cargo test
-cargo run -- --new my-first-project
-cargo run -- my-first-project/main.qv
-cargo run -- --check my-first-project/main.qv
-cargo run -- examples/hello.qv
-cargo run -- examples/loops.qv
-cargo run -- examples/functions.qv
-cargo run -- examples/booleans.qv
-cargo run -- examples/strings.qv
-cargo run -- examples/collections.qv
-cargo run -- examples/indexing.qv
-cargo run -- examples/stdlib.qv
-cargo run -- examples/science.qv
-cargo run -- examples/stdlib-strings.qv
-cargo run -- examples/contracts.qv
-cargo run -- examples/modules.qv
-cargo run -- --check examples/functions.qv
-cargo run -- --emit-bytecode examples/functions.qv functions.qvb
-cargo run -- --run-bytecode functions.qvb
-cargo run -- --version
-cargo run -- --help
+qorvynt new my-first-project
+qorvynt run my-first-project/main.qv
+qorvynt check my-first-project/main.qv
+qorvynt --render examples/qorvynt-icon.qv qorvynt-icon.svg
+qorvynt run examples/hello.qv
+qorvynt run examples/loops.qv
+qorvynt run examples/functions.qv
+qorvynt run examples/booleans.qv
+qorvynt run examples/strings.qv
+qorvynt run examples/collections.qv
+qorvynt run examples/indexing.qv
+qorvynt run examples/stdlib.qv
+qorvynt run examples/science.qv
+qorvynt run examples/stdlib-strings.qv
+qorvynt run examples/contracts.qv
+qorvynt run examples/modules.qv
+qorvynt check examples/functions.qv
+qorvynt compile examples/functions.qv functions.qv2b
+qorvynt --run-bytecode functions.qv2b
+qorvynt --version
+qorvynt --help
 ```
 
 Expected example output:
@@ -154,22 +171,22 @@ Expected example output:
 The starter command creates a new folder with `main.qv` and a project `README.md`. It refuses to overwrite an existing path and validates the project name.
 
 ```sh
-cargo run -- --new my-first-project
-cargo run -- my-first-project/main.qv
-cargo run -- --check my-first-project/main.qv
+qorvynt new my-first-project
+qorvynt run my-first-project/main.qv
+qorvynt check my-first-project/main.qv
 ```
 
-The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. When using a built release binary, the same commands are `qorvynt --new my-first-project`, `qorvynt my-first-project/main.qv`, and `qorvynt --check my-first-project/main.qv`.
+The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. The first-class commands are `qorvynt new`, `qorvynt run`, `qorvynt check`, and `qorvynt compile`.
 
 ## Beginner workflow: from idea to runnable project
 
-1. Create a project: `qorvynt --new my-project`.
+1. Create a project: `qorvynt new my-project`.
 2. Open `my-project/main.qv` in any text editor and change the example.
-3. Compile-check it: `qorvynt --check my-project/main.qv`.
-4. Run it: `qorvynt my-project/main.qv`.
+3. Compile-check it: `qorvynt check my-project/main.qv`.
+4. Run it: `qorvynt run my-project/main.qv`.
 5. Keep a small runnable example for each new feature and add a regression test when changing the compiler or VM.
 
-During development from this repository, prefix each command with `cargo run --`. For example, `cargo run -- --new my-project`. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The current CLI is not yet a full package manager, IDE, debugger, or cross-platform installer.
+When developing from source, build once with `cargo build --release --bin qorvynt`, then use `./target/release/qorvynt` (or `target\\release\\qorvynt.exe` on Windows). Run `cargo check` and `cargo test` only when contributing to the Rust-hosted compiler. Cargo is only the current compiler-development/build tool; it is not part of the QORVYNT user command. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The CLI is not yet a full package manager. QORVYNT Studio is an early Windows IDE preview; project workspaces, debugger support, and a signed public installer are still pending.
 
 ## Automated regression tests
 
@@ -177,10 +194,10 @@ During development from this repository, prefix each command with `cargo run --`
 
 ## Compile-only validation
 
-Use `qorvynt --check <file.qv>` to load relative imports and compile the program without executing it. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
+Use `qorvynt --check <file.qv>` to load relative imports and compile the program without executing it. Use `qorvynt --render <file.qv> <output.txt>` to execute a source program and save its printed lines as a text asset (for example, SVG). This is a host CLI operation; it is not available inside the deterministic contract VM. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
 
 ```sh
-cargo run -- --check examples/functions.qv
+qorvynt check examples/functions.qv
 ```
 
 ## Local signed-chain development prototype
@@ -221,12 +238,12 @@ The runtime now includes checked integer helpers: `gcd`, `lcm`, `factorial` (0�
 The compiler can write and run versioned stack-machine bytecode files:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.qvb
-cargo run -- --run-bytecode functions.qvb
+qorvynt --emit-bytecode examples/functions.qv functions.qvb
+qorvynt --run-bytecode functions.qvb
 
 # Experimental opt-in v2 output:
-cargo run -- --emit-bytecode-v2 examples/functions.qv functions.qv2b
-cargo run -- --run-bytecode functions.qv2b
+qorvynt --emit-bytecode-v2 examples/functions.qv functions.qv2b
+qorvynt --run-bytecode functions.qv2b
 ```
 
 Version 1 remains the default and its serializer/loader behavior is unchanged. The experimental v2 format starts with `QORVYNT_BYTECODE 2` and includes explicit main/function regions, parameter names, and return-kind metadata. The v2 compiler emission path verifies the generated file before writing it; the loader verifies a v2 file again before passing its instructions to the VM. The verifier checks region boundaries, opcodes/operands, jumps, calls/argument counts, return kinds, stack underflow/joins, and main exit stack cleanliness. Both versions are bounded by bytecode-size, instruction-count, string-size, argument-count, call-depth, and operand-stack limits.

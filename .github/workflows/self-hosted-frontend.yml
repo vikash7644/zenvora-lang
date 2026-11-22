@@ -1,4 +1,4 @@
-name: QORVYNT self-hosted compiler and Bytecode v2 validation
+name: QORVYNT source-frontend and Bytecode v2 parity (Rust reference host)
 
 on:
   pull_request:
@@ -33,23 +33,29 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Install stable Rust reference host
+      - name: Install temporary Rust reference host (not a self-hosting proof)
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run reference runtime regression suite
         run: cargo test --locked
+      - name: Build standalone QORVYNT compiler host
+        run: cargo build --locked --release --bin qorvynt
       - name: Execute QORVYNT-written compiler frontend
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.qv > parser-output.txt
+          ./target/release/qorvynt compiler/parser.qv > parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_DRIVER_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
           grep -F 'QORVYNT_MULTI_CONTROL_FLOW_PLAN_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' parser-output.txt
           grep -F 'QORVYNT_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' parser-output.txt
+          grep -F 'QORVYNT_LEXER_MULTILINE_COMMENT_PASS' parser-output.txt
+          grep -F 'QORVYNT_LEXER_STRING_DELIMITERS_PASS' parser-output.txt
+          grep -F 'QORVYNT_LEXER_UNTERMINATED_STRING_PASS' parser-output.txt
+          grep -F 'QORVYNT_NESTED_LOOP_CONTROL_FLOW_PASS' parser-output.txt
           grep -F 'QORVYNT_NATIVE_BYTECODE_V2_EMIT_PASS' parser-output.txt
           ! grep -F 'QORVYNT_NATIVE_BYTECODE_V2_EMIT_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_FAIL' parser-output.txt
@@ -58,6 +64,7 @@ jobs:
           ! grep -F 'QORVYNT_GENERIC_COMPILER_COLLECTION_LOOP_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_MULTI_CONTROL_FLOW_PLAN_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_GENERIC_COMPILER_FUNCTION_SEMANTICS_FAIL' parser-output.txt
+          ! grep -F 'QORVYNT_NESTED_LOOP_CONTROL_FLOW_FAIL' parser-output.txt
           ! grep -F 'compile_error' parser-output.txt
       - name: Translate QORVYNT plan JSON directly to canonical Bytecode v2
         shell: bash
@@ -76,11 +83,11 @@ jobs:
           with open("self-hosted-native-v2.zv2b", "w", encoding="utf-8", newline="") as output:
               output.write(bytecode)
           PY
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
+          ./target/release/qorvynt --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
           cmp self-hosted-native-v2.zv2b self-hosted-compiler.zv2b
           grep -F 'QORVYNT_BYTECODE 2' self-hosted-compiler.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
-          cargo run --locked --quiet -- --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
+          ./target/release/qorvynt --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
+          ./target/release/qorvynt --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-native-v2-output.txt
           python3 - <<'PY'
           expected = [
@@ -98,7 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.qv > parser-output-repeat.txt
+          ./target/release/qorvynt compiler/parser.qv > parser-output-repeat.txt
           awk '/^QORVYNT_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           awk '/^QORVYNT_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-native-v2-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json
@@ -110,7 +117,26 @@ jobs:
               output.write(bytecode)
           PY
           cmp self-hosted-native-v2.zv2b self-hosted-native-v2-repeat.zv2b
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
+          ./target/release/qorvynt --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
           cmp self-hosted-compiler.zv2b self-hosted-compiler-repeat.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
+          ./target/release/qorvynt --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
+
+      - name: Create reproducibility evidence manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum self-hosted-plan.json self-hosted-compiler.zv2b self-hosted-bytecode-output.txt > self-hosted-evidence.sha256
+          cat self-hosted-evidence.sha256
+      - name: Upload source-frontend parity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qorvynt-source-frontend-bytecode-v2-evidence
+          path: |
+            parser-output.txt
+            self-hosted-plan.json
+            self-hosted-compiler.zv2b
+            self-hosted-bytecode-output.txt
+            self-hosted-evidence.sha256
+          if-no-files-found: error
+          retention-days: 14

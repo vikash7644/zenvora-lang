@@ -1,6 +1,6 @@
-# Zenvora Chain — Technical Architecture v1.0 (Draft)
+# Archived Zenvora Chain — Technical Architecture v1.0 (Draft)
 
-Status: draft — add/adjust numbers, tokenomics, exact fields after review.
+Status: archived historical chain draft — add/adjust numbers, tokenomics, exact fields after review.
 
 ## 1. Goals & Scope
 Zenvora is a wholly independent Layer‑1 blockchain stack providing:

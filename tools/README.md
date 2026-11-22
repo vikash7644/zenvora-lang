@@ -1,10 +1,10 @@
-# Zenvora Chain verification and RPC tools
+# Legacy Zenvora Chain verification and RPC tools
 
 These tools exercise the **current local-development prototype**. They do not establish production readiness or a public RPC endpoint.
 
 ## 1. Replay-verify a block store
 
-The verifier invokes the real Zenvora CLI's `--chain-store-info` command. That command loads and replays the entire store, checking block linkage, signatures, transaction roots, receipt roots, and resulting state roots. The script also checks the expected chain ID, contiguous zero-based height/count, and 32-byte state/tip hashes.
+The verifier invokes the former in-repository chain CLI's `--chain-store-info` command. That command loads and replays the entire store, checking block linkage, signatures, transaction roots, receipt roots, and resulting state roots. The script also checks the expected chain ID, contiguous zero-based height/count, and 32-byte state/tip hashes.
 
 ```sh
 cargo build --bin zv

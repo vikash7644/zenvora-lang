@@ -1,4 +1,4 @@
-# Zenvora Lang — Current Grammar Draft
+# QORVYNT Lang — Current Grammar Draft
 
 Status: **draft, not frozen for v1.0**. This document describes the current line-oriented parser and is intended to make implemented behavior explicit. It is not a promise that the syntax is stable; unresolved semantics are listed at the end.
 
@@ -133,4 +133,4 @@ Only one contract block per source file is currently supported. This is a **loca
 - Module imports are expanded by `src/module_loader.rs` before compilation; the module path parser accepts a quoted path without escapes or backslashes and requires a relative path. The contract/state/action/view DSL has a separate lowering path. The contract execution proposal is not production behavior; see `contract-execution-v1.md`.
 - Bytecode v2 remains experimental until its format is frozen and independently security-reviewed.
 
-Do not use this draft alone to claim Zenvora Lang v1.0 is complete.
+Do not use this draft alone to claim QORVYNT Lang v1.0 is complete.

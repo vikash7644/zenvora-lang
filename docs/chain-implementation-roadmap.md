@@ -6,13 +6,13 @@
 
 ## Product direction
 
-Build an independent Zenvora network with ZVR as its proposed native asset and Zenvora Lang as a first-class developer path. Independence means owning the protocol rules, genesis configuration, transaction/state model, P2P network, consensus implementation, and release process. It does not require inventing new cryptographic primitives. Use established, reviewed cryptographic algorithms and canonical encodings.
+Build an independent Zenvora network with ZVR as its proposed native asset and QORVYNT Lang as a first-class developer path. Independence means owning the protocol rules, genesis configuration, transaction/state model, P2P network, consensus implementation, and release process. It does not require inventing new cryptographic primitives. Use established, reviewed cryptographic algorithms and canonical encodings.
 
 EVM compatibility is **undecided**. It may be evaluated for tooling reach, but must not be confused with consensus or network independence. The first implementation should not combine a custom VM, EVM compatibility, bridges, DeFi, and production consensus in one release.
 
 ## Current maturity
 
-- **Zenvora Lang / VM:** early Rust-based compiler and runtime prototype; CI is available.
+- **QORVYNT Lang / VM:** early Rust-based compiler and runtime prototype; CI is available.
 - **Zenvora Chain integration:** VM-backed local ledger/transfer harness with tests; this is not a full blockchain node.
 - **Protocol:** specification drafts exist; consensus, finality, cryptographic formats, network parameters, and tokenomics are not locked.
 - **Public testnet / mainnet:** not launched by this plan; neither should be claimed until implemented and independently verified.
@@ -24,7 +24,7 @@ The current contract execution design proposal is documented in [`contract-execu
 ## Phase plan
 
 ### Phase 0 — Stabilize the language-to-chain boundary (current prerequisite)
-- [ ] Keep the Zenvora Lang compiler/VM regression suite green.
+- [ ] Keep the QORVYNT Lang compiler/VM regression suite green.
 - [ ] Make bytecode verification, resource limits, and deterministic execution release gates.
 - [ ] Define a narrow, typed host interface for contract state reads/writes and transaction context.
 - [ ] Ensure failed execution cannot partially mutate committed state.
@@ -78,7 +78,7 @@ The current contract execution design proposal is documented in [`contract-execu
 **Exit gate:** testnet-only wallet/explorer pass security and integration tests; never store recovery phrases in server logs or telemetry.
 
 ### Phase 6 — Smart contracts, tokens, and staking
-- [ ] Decide first execution target: native Zenvora VM, EVM-compatible VM, or a staged design.
+- [ ] Decide first execution target: native QORVYNT VM, EVM-compatible VM, or a staged design.
 - [ ] Define a contract ABI, deployment format, deterministic gas/resource schedule, storage model, events, and verification process.
 - [ ] Build local deployment, testing, debugging, and source-to-artifact verification tooling.
 - [ ] Define token standards only after transaction and contract semantics are stable.

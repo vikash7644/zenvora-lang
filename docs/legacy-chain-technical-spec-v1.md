@@ -1,22 +1,22 @@
-# Zenvora Technical Specification v1 — Working Draft
+# Legacy Zenvora Technical Specification v1 — Working Draft
 
 **Version:** 1.0-draft  
 **Status:** Working specification; not frozen, audited, or a production protocol.  
 **Repository:** `vikash7644/zenvora-lang`  
 **Related protocol design:** [Chain protocol specification draft](./chain-protocol-specification-draft.md)
 
-This document unifies the proposed Zenvora Chain protocol, developer infrastructure, applications, ecosystem, and measurable engineering goals. It is a decision framework, not a claim that these features already exist.
+This document unifies the proposed Legacy Zenvora Chain protocol, developer infrastructure, applications, ecosystem, and measurable engineering goals. It is a decision framework, not a claim that these features already exist.
 
-## 1. Product thesis: what should make Zenvora different?
+## 1. Product thesis: what should make Legacy Zenvora different?
 
-Zenvora should not compete by merely reproducing a list of Ethereum/BNB features. The initial thesis to validate is:
+The legacy chain should not compete by merely reproducing a list of Ethereum/BNB features. The initial thesis to validate is:
 
-> **A developer-first chain where Zenvora Lang is a first-class path from learning and prototyping to deterministic on-chain programs, supported by transparent security rules and reproducible tooling.**
+> **A developer-first chain where QORVYNT Lang is a first-class path from learning and prototyping to deterministic on-chain programs, supported by transparent security rules and reproducible tooling.**
 
 This is a hypothesis, not a proven advantage. Validate it with student/developer usability studies, reproducible build tests, VM safety tests, and comparisons against clearly named baseline systems. Do not claim to be faster, cheaper, more secure, or more decentralized without published measurements.
 
 Potential differentiators to test:
-1. **One learning-to-deployment path:** beginner examples, local simulator, Zenvora Lang compiler, contract tests, deployment tooling, and readable errors.
+1. **One learning-to-deployment path:** beginner examples, local simulator, QORVYNT Lang compiler, contract tests, deployment tooling, and readable errors.
 2. **Deterministic execution by design:** canonical encoding, explicit resource metering, deterministic replay, and cross-node state-root agreement.
 3. **Security as a release gate:** protocol threat model, fuzz/property tests, limits, documented upgrade rules, and independent reviews before value-bearing deployment.
 4. **Transparent network economics:** publish assumptions, token allocation, validator economics, and sensitivity analysis instead of marketing returns.
@@ -33,7 +33,7 @@ Every feature in project plans and dashboards should carry one status:
 - **Reviewed:** design/code has received a documented independent review.
 - **Production-ready:** only after explicit release gates and operational/security evidence.
 
-A checklist item or document is not proof of implementation. Current Zenvora Chain remains at prototype/local-development maturity; this draft does not upgrade that status.
+A checklist item or document is not proof of implementation. Current Legacy Zenvora Chain remains at prototype/local-development maturity; this draft does not upgrade that status.
 
 ## 3. Core protocol and execution
 
@@ -49,7 +49,7 @@ The protocol specification must define before consensus-critical implementation:
 ### Execution environment and contracts
 
 **EVM compatibility is undecided.** Before choosing, compare:
-- first-class Zenvora VM + Zenvora Lang;
+- first-class Legacy Zenvora VM + QORVYNT Lang;
 - EVM-compatible execution with Solidity ecosystem tooling;
 - a staged approach, provided the added complexity and security burden are justified.
 
@@ -69,7 +69,7 @@ Public RPC endpoints are an availability and abuse surface; separate public read
 ## 5. Developer and smart-contract ecosystem
 
 Build progressively:
-1. Zenvora CLI for project creation, checks, test execution, local node, accounts, transactions, and logs.
+1. Legacy Zenvora CLI for project creation, checks, test execution, local node, accounts, transactions, and logs.
 2. Local blockchain simulator with deterministic reset, configurable accounts, time/block controls where safe, and repeatable tests.
 3. Contract compiler/deployer/caller workflow, versioned ABI/interface files, error decoding, event decoding, and reproducible verification.
 4. SDKs and examples with pinned versions, generated API docs, and compatibility tests.

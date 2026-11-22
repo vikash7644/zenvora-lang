@@ -29,4 +29,4 @@ The workflow artifact is temporary (7-day retention). The extension is **not yet
 
 ## GitHub language recognition
 
-VS Code registration does **not** by itself change GitHub's repository language statistics. GitHub's Linguist language catalogue needs to recognize Zenvora Lang before the repository can display it as a separate language in the language bar. Until then, Rust remains the primary repository language because the compiler/VM implementation is written in Rust.
+VS Code registration does **not** by itself change GitHub's repository language statistics. GitHub's Linguist language catalogue needs to recognize the `.qv` language extension as QORVYNT before the repository can display it as a separate language in the language bar. Until then, Rust remains the primary repository language because the compiler/VM implementation is written in Rust.

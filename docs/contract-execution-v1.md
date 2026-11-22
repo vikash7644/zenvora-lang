@@ -1,7 +1,7 @@
 # Contract Execution V1 — Design and Implementation Gates
 
 **Status:** Partial implementation: isolated contract-state overlays, canonical file snapshots, and a deterministic gas-meter primitive exist in `src/contract_state.rs` and `src/contract_gas.rs`. They are not yet wired into contract DSL execution, signed transaction admission, fee settlement, block replay, or the deployed playground.  
-**Scope:** The first deterministic contract execution milestone for Zenvora Lang and the local chain harness.  
+**Scope:** The first deterministic contract execution milestone for QORVYNT Lang and the local chain harness.  
 **Safety rule:** This document must not be interpreted as evidence that persistent contract storage, gas charging, or production authorization already exists.
 
 ## Goals

@@ -1,4 +1,4 @@
-//! Deterministic transaction runtime prototype powered by the Zenvora Lang VM.
+//! Deterministic transaction runtime prototype powered by the QORVYNT Lang VM.
 //! This is a local execution harness, not a consensus protocol or production chain.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -376,7 +376,7 @@ impl ChainRuntime {
         Ok(runtime)
     }
 
-    /// Runs the transfer rule through the actual Zenvora Lang compiler and VM.
+    /// Runs the transfer rule through the actual QORVYNT Lang compiler and VM.
     /// Ledger balances are committed only after a successful VM result.
     pub fn transfer(&mut self, from: &str, to: &str, amount: i64) -> Result<TransferReceipt, String> {
         if !valid_address(from) || !valid_address(to) {
@@ -396,27 +396,27 @@ impl ChainRuntime {
             .replace("state recipient_balance := 0", &format!("state recipient_balance := {recipient_before}"))
             .replace("state transfer_amount := 0", &format!("state transfer_amount := {amount}"));
 
-        let bytecode = compile(&source).map_err(|e| format!("Zenvora compile error: {e}"))?;
+        let bytecode = compile(&source).map_err(|e| format!("QORVYNT compile error: {e}"))?;
         let mut output = Vec::new();
         run_with_output(&bytecode, &mut |line| output.push(line))
-            .map_err(|e| format!("Zenvora VM error: {e}"))?;
+            .map_err(|e| format!("QORVYNT VM error: {e}"))?;
 
         if output.len() != 3 {
-            return Err("Zenvora VM returned an invalid transfer result".into());
+            return Err("QORVYNT VM returned an invalid transfer result".into());
         }
         let accepted = match output[0].as_str() {
             "ACCEPTED" => true,
             "REJECTED" => false,
-            _ => return Err("Zenvora VM returned an unknown transfer status".into()),
+            _ => return Err("QORVYNT VM returned an unknown transfer status".into()),
         };
-        let sender_after: i64 = output[1].parse().map_err(|_| "Zenvora VM returned an invalid sender balance")?;
-        let recipient_after: i64 = output[2].parse().map_err(|_| "Zenvora VM returned an invalid recipient balance")?;
+        let sender_after: i64 = output[1].parse().map_err(|_| "QORVYNT VM returned an invalid sender balance")?;
+        let recipient_after: i64 = output[2].parse().map_err(|_| "QORVYNT VM returned an invalid recipient balance")?;
 
         if accepted {
             if amount <= 0 || sender_before < amount
                 || sender_before.checked_sub(amount) != Some(sender_after)
                 || recipient_before.checked_add(amount) != Some(recipient_after) {
-                return Err("Zenvora VM returned inconsistent accepted-transfer balances".into());
+                return Err("QORVYNT VM returned inconsistent accepted-transfer balances".into());
             }
             self.balances.insert(from.to_string(), sender_after);
             self.balances.insert(to.to_string(), recipient_after);
@@ -439,7 +439,7 @@ impl ChainRuntime {
         Ok(receipt)
     }
 
-    /// Authenticate, admit, and execute a signed transfer through the Zenvora Lang VM.
+    /// Authenticate, admit, and execute a signed transfer through the QORVYNT Lang VM.
     /// The account nonce and transaction ID are committed only after transfer execution succeeds.
     /// Fees are reserved during admission but are not charged until fee accounting is implemented.
     pub fn apply_signed_transaction(
@@ -540,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_transfer_executes_in_zenvora_vm_and_commits_state() {
+    fn valid_transfer_executes_in_qorvynt_vm_and_commits_state() {
         let mut runtime = funded_runtime();
         let receipt = runtime.transfer("alice", "bob", 125).unwrap();
         assert!(receipt.accepted);
@@ -596,7 +596,7 @@ mod tests {
 
     #[test]
     fn ledger_round_trips_balances_and_receipts_across_restart() {
-        let path = std::env::temp_dir().join(format!("zenvora-ledger-{}-17.zvr", std::process::id()));
+        let path = std::env::temp_dir().join(format!("qorvynt-ledger-{}-17.zvr", std::process::id()));
         let mut runtime = funded_runtime();
         runtime.transfer("alice", "bob", 125).unwrap();
         runtime.transfer("bob", "alice", 25).unwrap();
@@ -610,7 +610,7 @@ mod tests {
 
     #[test]
     fn ledger_loader_rejects_tampered_receipt_and_duplicate_genesis() {
-        let path = std::env::temp_dir().join(format!("zenvora-ledger-bad-{}.zvr", std::process::id()));
+        let path = std::env::temp_dir().join(format!("qorvynt-ledger-bad-{}.zvr", std::process::id()));
         std::fs::write(&path, concat!(
             "ZENVORA_LEDGER_V2\n",
             "G\talice\t10\n",
@@ -680,7 +680,7 @@ mod tests {
         assert_eq!(runtime.balance(&sender), 875);
         assert_eq!(runtime.balance("bob"), 125);
 
-        let path = std::env::temp_dir().join(format!("zenvora-signed-ledger-{}.zvr", std::process::id()));
+        let path = std::env::temp_dir().join(format!("qorvynt-signed-ledger-{}.zvr", std::process::id()));
         runtime.save_to_file(&path).unwrap();
         let mut restored = ChainRuntime::load_from_file(&path).unwrap();
         assert_eq!(restored.account_nonce(&sender), 1);
@@ -776,7 +776,7 @@ mod tests {
 
     #[test]
     fn loader_rejects_legacy_or_unknown_versions_explicitly() {
-        let path = std::env::temp_dir().join(format!("zenvora-ledger-version-{}.zvr", std::process::id()));
+        let path = std::env::temp_dir().join(format!("qorvynt-ledger-version-{}.zvr", std::process::id()));
         std::fs::write(&path, "ZENVORA_LEDGER_V1\n").unwrap();
         assert!(ChainRuntime::load_from_file(&path).unwrap_err().contains("unsupported"));
         std::fs::remove_file(path).unwrap();

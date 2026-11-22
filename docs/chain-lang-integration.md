@@ -1,8 +1,10 @@
-# Zenvora Lang ↔ Zenvora Chain integration
+# QORVYNT Lang ↔ legacy Zenvora Chain integration
+
+> Historical integration notes for the former in-repository chain prototype. QORVYNT Lang and the current chain project are separate; this document does not describe a supported production integration.
 
 ## Current milestone: VM-backed transaction runtime prototype
 
-`src/chain_runtime.rs` adds a Rust transaction harness that calls the existing Zenvora Lang compiler and VM for every transfer. The transfer policy is written as Zenvora source; the Rust host passes in the current balances and amount, executes the program, checks the VM result, and only then commits updated balances. A versioned `ZENVORA_LEDGER_V3` ledger stores genesis allocations, transfer receipts, and signed-transaction nonce/ID metadata; the loader replays receipts from genesis and rejects inconsistent balance transitions, malformed records, duplicate allocations, non-contiguous signed nonces, duplicate transaction IDs, unsupported versions, and oversized files. V2 local ledgers remain readable and are rewritten as V3 when saved; V1 snapshots remain unsupported.
+`src/chain_runtime.rs` adds a Rust transaction harness that calls the existing QORVYNT Lang compiler and VM for every transfer. The transfer policy is written as QORVYNT source; the Rust host passes in the current balances and amount, executes the program, checks the VM result, and only then commits updated balances. A versioned `ZENVORA_LEDGER_V3` ledger stores genesis allocations, transfer receipts, and signed-transaction nonce/ID metadata; the loader replays receipts from genesis and rejects inconsistent balance transitions, malformed records, duplicate allocations, non-contiguous signed nonces, duplicate transaction IDs, unsupported versions, and oversized files. V2 local ledgers remain readable and are rewritten as V3 when saved; V1 snapshots remain unsupported.
 
 ### Local CLI for the prototype
 
@@ -26,7 +28,7 @@ zv --chain-rpc-pool dev.qvstore 71 pending.zvp 8545
 zv --chain-store-produce dev.qvstore 71 pending.zvp owner.zvk
 ```
 
-`--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The single-account initializer remains available, and `--chain-store-init-multi` accepts a multi-account genesis config. Genesis headers use a deterministic timestamp so stores initialized from the same chain ID and allocations share the same genesis hash.
+`--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the QORVYNT Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The single-account initializer remains available, and `--chain-store-init-multi` accepts a multi-account genesis config. Genesis headers use a deterministic timestamp so stores initialized from the same chain ID and allocations share the same genesis hash.
 
 ### Multi-validator genesis configuration
 
@@ -60,7 +62,7 @@ Automated tests cover:
 - VM arithmetic overflow without partial state mutation;
 - transaction receipts and balance updates.
 
-The CI workflow must pass before this prototype is considered verified. This is a real VM-backed transaction execution path inside the Zenvora Lang repository, but it is **not yet a full blockchain node**.
+The CI workflow must pass before this prototype is considered verified. This is a real VM-backed transaction execution path inside the QORVYNT Lang repository, but it is **not yet a full blockchain node**.
 
 ## Loopback read-only JSON-RPC
 
@@ -137,10 +139,10 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 
 ## Intended architecture
 
-1. **Zenvora Lang source** — contract logic and developer-facing syntax.
-2. **Zenvora compiler** — parse and validate source, then emit versioned Zenvora bytecode.
-3. **Zenvora VM/runtime** — deterministic execution with instruction limits and a narrowly defined host API.
-4. **Zenvora Chain node** — validates signed transactions, executes contract calls against a transactional state overlay, commits state only on success, and records receipts/events.
+1. **QORVYNT Lang source** — contract logic and developer-facing syntax.
+2. **QORVYNT compiler** — parse and validate source, then emit versioned QORVYNT bytecode.
+3. **QORVYNT VM/runtime** — deterministic execution with instruction limits and a narrowly defined host API.
+4. **Legacy Zenvora Chain node** — validates signed transactions, executes contract calls against a transactional state overlay, commits state only on success, and records receipts/events.
 5. **RPC, wallet, faucet and explorer** — client interfaces around the node.
 
 ## Next implementation gates
@@ -150,9 +152,9 @@ This is **not yet a complete transaction protocol or chain**. The V3 VM-backed l
 - Add transaction fee charging, gas metering, per-operation cost schedule, and deterministic execution limits.
 - Add automatic peer discovery/periodic transaction gossip, authenticated RPC for non-loopback deployments, peer authentication, rate limits, and abuse controls.
 - Add indexed block/receipt storage, snapshots, recovery tests, and state/receipt proof APIs.
-- Replace the illustrative transfer rule with compiled Zenvora contract artifacts and a typed contract ABI/state host interface.
+- Replace the illustrative transfer rule with compiled legacy-chain contract artifacts and a typed contract ABI/state host interface.
 - Add fuzzing, property tests, multi-node adversarial tests, reproducible builds, and an external security review before any public testnet with value.
 
 ## Safety/status
 
-The repository now has a local signed-transfer workflow, deterministic block commitments, atomic block execution, replay-verified local block storage, read-only loopback JSON-RPC, a TCP block-sync prototype, and genesis-authorized validator quorum-signature checks. It still does not have a secure decentralized consensus protocol, public-testnet readiness, production wallet/key management, or a deployable audited contract ABI. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing Zenvora Lang contracts.
+The repository now has a local signed-transfer workflow, deterministic block commitments, atomic block execution, replay-verified local block storage, read-only loopback JSON-RPC, a TCP block-sync prototype, and genesis-authorized validator quorum-signature checks. It still does not have a secure decentralized consensus protocol, public-testnet readiness, production wallet/key management, or a deployable audited contract ABI. Do not use it for real funds. The JavaScript devnet branch remains a separate API/protocol prototype and must not be described as executing QORVYNT Lang contracts.

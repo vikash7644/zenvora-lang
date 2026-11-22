@@ -1,6 +1,6 @@
-# Zenvora Ecosystem Website
+# QORVYNT Ecosystem Website
 
-A responsive, dependency-free landing page for the Zenvora project.
+A responsive, dependency-free landing page for the QORVYNT project.
 
 ## Contents
 - `index.html` — layout, styling and small navigation/reveal interactions in one static file.

@@ -1,12 +1,12 @@
-# Zenvora Master Roadmap
+# QORVYNT Master Roadmap
 
 **Status date:** 2026-10-19  
-**Current milestone:** Zenvora Lang v0.8.0 prototype (experimental; not production-ready)  
+**Current milestone:** QORVYNT Lang v0.8.0 prototype (experimental; not production-ready)  
 **Principle:** Build, test, and document each layer before depending on it. This roadmap is a plan, not a claim that future milestones are already complete.
 
 ## The long-term vision
 
-Zenvora aims to grow into an independent technology stack: a programming language, a bytecode runtime, developer tools, a native-code path, and eventually an experimental Zenvora instruction set and hardware prototype. Blockchain, wallets, smart contracts, and the wider ecosystem are related long-term projects, but they should not be treated as finished or mixed into the language before its execution foundation is reliable.
+QORVYNT aims to grow into an independent technology stack: a programming language, a bytecode runtime, developer tools, a native-code path, and eventually an experimental QORVYNT instruction set and hardware prototype. Blockchain, wallets, smart contracts, and the wider ecosystem are related long-term projects, but they should not be treated as finished or mixed into the language before its execution foundation is reliable.
 
 ## Where we are now
 
@@ -31,7 +31,7 @@ This section records checks observed on the current main branch. It does not cer
 1. Finish the stable language reference and semantics for values, errors, functions, and control flow.
 2. Obtain independent security review before freezing bytecode v2.
 3. Keep contract persistence, authorization, gas, and replay claims gated on implementation and tests.
-4. Complete the Zenvora Lang / BHYVORIX Chain repository boundary migration with both repositories green.
+4. Complete the QORVYNT Lang / BHYVORIX Chain repository boundary migration with both repositories green.
 
 ## Roadmap phases
 
@@ -82,13 +82,13 @@ This section records checks observed on the current main branch. It does not cer
 
 - [ ] Choose a realistic backend strategy: first use a mature backend/toolchain (for example LLVM or an existing target assembler) rather than trying to invent every CPU encoding at once.
 - [ ] Define a target and ABI; an initial target may be AArch64/ARM64, with x86-64 later if feasible.
-- [ ] Lower a small, well-defined subset of Zenvora to native code.
+- [ ] Lower a small, well-defined subset of QORVYNT to native code.
 - [ ] Compare native results against VM results with the same test suite.
 - [ ] Add debugging, linking, and platform-specific build documentation.
 
-**Exit criteria:** Selected Zenvora programs produce executable native machine code for a declared target and pass differential tests. This does not require manufacturing a semiconductor.
+**Exit criteria:** Selected QORVYNT programs produce executable native machine code for a declared target and pass differential tests. This does not require manufacturing a semiconductor.
 
-### Phase 6 — Experimental Zenvora ISA and emulator
+### Phase 6 — Experimental QORVYNT ISA and emulator
 
 - [ ] Write an architecture proposal: registers, instruction formats, memory model, privilege assumptions, exceptions, and calling convention.
 - [ ] Build an instruction-set simulator/emulator in software.
@@ -111,7 +111,7 @@ This section records checks observed on the current main branch. It does not cer
 
 Only after the language/runtime has a stable, reviewed execution model:
 
-- [ ] Define whether and how Zenvora contracts should be sandboxed and metered.
+- [ ] Define whether and how QORVYNT contracts should be sandboxed and metered.
 - [ ] Design deterministic execution, resource/gas accounting, cryptographic boundaries, and a threat model before connecting to a chain.
 - [ ] Keep wallet keys, node networking, consensus, and contract execution as separately reviewed components.
 - [ ] Prototype locally before considering public networks or real assets.

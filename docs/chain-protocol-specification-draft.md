@@ -2,7 +2,7 @@
 
 **Status:** DESIGN DRAFT — NOT CONSENSUS-LOCKED  
 **Purpose:** Establish protocol decisions before implementing consensus-critical chain code.  
-**Scope:** Zenvora Chain / ZVR and its integration with Zenvora Lang.
+**Scope:** Zenvora Chain / ZVR and its integration with QORVYNT Lang.
 
 > Nothing in this draft should be treated as a deployed network rule. Values marked **DECISION REQUIRED** must be approved and frozen in a versioned specification before mainnet or consensus implementation. Test-only prototypes must use a clearly separate chain ID and must not imply real economic value.
 
@@ -25,7 +25,7 @@ These are proposals to evaluate, not final locked decisions.
 | Consensus | Compare a BFT proof-of-stake design with a simpler permissioned testnet first; define fault assumptions and validator set changes | DECISION REQUIRED |
 | Finality | Explicit finalized checkpoint; document when a block is irreversible and how conflicting certificates are handled | DECISION REQUIRED |
 | Native asset | ZVR as native fee/staking asset, subject to tokenomics approval | PROPOSED |
-| Execution | Zenvora VM first; EVM compatibility is a separate, explicit decision | DECISION REQUIRED |
+| Execution | QORVYNT VM first; EVM compatibility is a separate, explicit decision | DECISION REQUIRED |
 | Account model | Nonce-based accounts are a reasonable initial design; specify address derivation and signature algorithm | DECISION REQUIRED |
 | Fees | Deterministic resource/gas metering, bounded minimum fee and explicit fee distribution | DECISION REQUIRED |
 | Supply | Do not assume a supply cap, inflation, burn, or reward rate until tokenomics are modeled | NOT DECIDED |

@@ -111,3 +111,79 @@ fn reads_legacy_zenvora_v1_bytecode_during_identity_migration() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
 }
+
+
+#[test]
+fn first_class_run_command_executes_qorvynt_source() {
+    let path = std::env::temp_dir().join(format!("qorvynt_run_alias_{}.qv", std::process::id()));
+    fs::write(&path, "show 6 * 7").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
+        .arg("run")
+        .arg(&path)
+        .output()
+        .unwrap();
+    let _ = fs::remove_file(path);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "42");
+}
+
+#[test]
+fn first_class_check_command_validates_qorvynt_source() {
+    let path = std::env::temp_dir().join(format!("qorvynt_check_alias_{}.qv", std::process::id()));
+    fs::write(&path, "show 6 * 7").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .unwrap();
+    let _ = fs::remove_file(path);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("QORVYNT check passed"));
+}
+
+#[test]
+fn first_class_compile_command_emits_verified_bytecode_v2() {
+    let base = std::env::temp_dir().join(format!("qorvynt_compile_alias_{}", std::process::id()));
+    let source = base.with_extension("qv");
+    let output_path = base.with_extension("qv2b");
+    fs::write(&source, "show 6 * 7").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
+        .arg("compile")
+        .arg(&source)
+        .arg(&output_path)
+        .output()
+        .unwrap();
+    let _ = fs::remove_file(source);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(fs::read_to_string(&output_path).unwrap().starts_with("QORVYNT_BYTECODE 2\n"));
+    let _ = fs::remove_file(output_path);
+}
+
+
+#[test]
+fn first_class_new_command_creates_a_qorvynt_project() {
+    let name = format!("qorvynt_cli_new_{}", std::process::id());
+    let path = std::path::Path::new(&name);
+    let _ = fs::remove_dir_all(path);
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
+        .arg("new")
+        .arg(&name)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(path.join("main.qv").is_file());
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn help_lists_the_first_class_qorvynt_verbs() {
+    let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    for verb in ["qorvynt run", "qorvynt check", "qorvynt new", "qorvynt compile"] {
+        assert!(help.contains(verb), "help is missing {verb}");
+    }
+}

@@ -1,4 +1,4 @@
-# Zenvora Lang v0.1 — runnable integer bytecode VM demo
+# QORVYNT Lang v0.1 — runnable integer bytecode VM demo
 define a := 10
 define b := 20
 define total := a + b
