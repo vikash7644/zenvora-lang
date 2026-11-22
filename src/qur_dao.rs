@@ -773,11 +773,11 @@ token GOLD {
         let yes_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
         let yes_signature = yes_key.sign(&yes_message);
         cast_vote_weighted_signed(&mut state, "community", "weighted1", "GOLD",
-            &yes_key.verifying_key(), &yes_signature, VoteChoice::Yes, 30_000).unwrap();
+            &yes_key.verifying_key(), &yes_signature, VoteChoice::Yes, 100_000).unwrap();
         let no_message = vote_signing_message("community", "weighted1", VoteChoice::No).unwrap();
         let no_signature = no_key.sign(&no_message);
         cast_vote_weighted_signed(&mut state, "community", "weighted1", "GOLD",
-            &no_key.verifying_key(), &no_signature, VoteChoice::No, 30_000).unwrap();
+            &no_key.verifying_key(), &no_signature, VoteChoice::No, 100_000).unwrap();
         let proposal = get_proposal(&state, "community", "weighted1").unwrap();
         assert_eq!(proposal.yes_votes, 70);
         assert_eq!(proposal.no_votes, 30);
