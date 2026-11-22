@@ -3469,6 +3469,14 @@ fn dao_tx_atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Result<(), String> {
     let journal_path = dao_tx_journal_path(ledger_path);
     if !journal_path.exists() { return Ok(()); }
+    let metadata = fs::metadata(&journal_path).map_err(|e| format!("cannot stat DAO transaction journal: {e}"))?;
+    const MAX_DAO_TX_JOURNAL_BYTES: u64 = 64 * 1024 * 1024;
+    if metadata.len() > MAX_DAO_TX_JOURNAL_BYTES {
+        return Err("DAO transaction journal exceeds the 64 MiB safety limit".into());
+    }
+    if &journal_path == state_path {
+        return Err("DAO transaction journal path conflicts with state snapshot".into());
+    }
     let bytes = fs::read(&journal_path).map_err(|e| format!("cannot read DAO transaction journal: {e}"))?;
     let mut pos = 0usize;
     if dao_tx_take(&bytes, &mut pos, 18)? != b"QORVYNT_DAO_TX_V1\0" {
@@ -3482,10 +3490,12 @@ fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Resul
         return Err("DAO transaction journal paths do not match this command".into());
     }
     let ledger_len_raw = dao_tx_take(&bytes, &mut pos, 8)?;
-    let ledger_len = u64::from_be_bytes(ledger_len_raw.try_into().map_err(|_| "invalid DAO journal ledger length")?) as usize;
+    let ledger_len = usize::try_from(u64::from_be_bytes(ledger_len_raw.try_into().map_err(|_| "invalid DAO journal ledger length")?))
+        .map_err(|_| "DAO journal ledger length exceeds platform limit")?;
     let ledger_bytes = dao_tx_take(&bytes, &mut pos, ledger_len)?;
     let state_len_raw = dao_tx_take(&bytes, &mut pos, 8)?;
-    let state_len = u64::from_be_bytes(state_len_raw.try_into().map_err(|_| "invalid DAO journal state length")?) as usize;
+    let state_len = usize::try_from(u64::from_be_bytes(state_len_raw.try_into().map_err(|_| "invalid DAO journal state length")?))
+        .map_err(|_| "DAO journal state length exceeds platform limit")?;
     let state_bytes = dao_tx_take(&bytes, &mut pos, state_len)?;
     if pos != bytes.len() { return Err("trailing bytes in DAO transaction journal".into()); }
     dao_tx_atomic_write(ledger_path, ledger_bytes)?;
