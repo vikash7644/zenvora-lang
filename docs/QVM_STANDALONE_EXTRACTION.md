@@ -35,3 +35,7 @@ Status: engineering plan based on the current `qorvynt/phase1-chain-separation` 
 - Do not move chain consensus, RPC, P2P, transaction-pool, or contract deployment code into QVM.
 - Do not silently freeze Bytecode v2; its format remains experimental until separately reviewed.
 - Do not claim Rust independence: this milestone separates the VM as a Rust library, not a self-hosted compiler.
+
+## Verifier-gated program boundary
+
+The current extraction adds `qvm::VerifiedProgram`, whose instruction vector is private. It can only be created by `load_verified`, which checks the QORVYNT/legacy migration header and then calls the existing Bytecode v2 decoder/verifier. Existing CLI callers retain a compatibility `load` function, while the QVM execution path consumes the verified wrapper directly. This is an API boundary inside the current root crate, not yet a separately compiled VM package.
