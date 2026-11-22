@@ -3602,7 +3602,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("QORVYNT v0.8.0\nUsage: qorvynt <file.qv>\n       qorvynt --qur-check <file.qv>\n       qorvynt --qur-token-init <manifest.qv> <ledger.json>\n       qorvynt --qur-token-transfer <ledger.json> <token> <from> <to> <amount>\n       qorvynt --qur-token-transfer-qvm <ledger.json> <state.bin> <contract-id> <token> <from> <to> <amount> <gas-limit>\n       qorvynt --qur-token-balance <ledger.json> <token> <account>\n       qorvynt --qur-dao-propose <state.bin> <dao-id> <proposal-id> <proposer> <title> <quorum> <gas-limit>\n       qorvynt --qur-dao-vote-signed <state.bin> <dao-id> <proposal-id> <wallet-keyfile> <yes|no> <gas-limit>\n       qorvynt --qur-dao-propose-weighted <ledger.json> <state.bin> <dao-id> <proposal-id> <proposer> <title> <token> <quorum> <gas-limit>\n       qorvynt --qur-dao-vote-weighted <state.bin> <dao-id> <proposal-id> <wallet-keyfile> <token> <yes|no> <gas-limit>\n       qorvynt --qur-dao-finalize <state.bin> <dao-id> <proposal-id> <gas-limit>\n       qorvynt --qur-dao-propose-treasury <state.bin> <dao-id> <proposal-id> <proposer> <title> <recipient> <amount> <quorum> <timelock-blocks> <gas-limit>\n       qorvynt --qur-dao-treasury-fund <state.bin> <dao-id> <amount> <gas-limit>\n       qorvynt --qur-dao-finalize-verified <state.bin> <store.qvb> <chain-id> <dao-id> <proposal-id> <gas-limit>\n       qorvynt --qur-dao-treasury-execute-verified <state.bin> <store.qvb> <chain-id> <dao-id> <proposal-id> <gas-limit>\n       qorvynt --qur-dao-treasury-balance <state.bin> <dao-id>\n       qorvynt --qur-dao-show <state.bin> <dao-id> <proposal-id>\n       qorvynt --qur-daio-assess <state.bin> <dao-id> <proposal-id> (advisory risk report)\n       qorvynt --compiler-api [port]  (loopback development API, default 8787)\n       qorvynt --new <project-name>\n       qorvynt --check <file.qv>\n       qorvynt --emit-bytecode <file.qv> <output.qvb>\n       qorvynt --emit-bytecode-v2 <file.qv> <output.qv2b>\n       qorvynt --emit-plan-bytecode-v2 <plan.json> <output.qv2b>\n       qorvynt --run-bytecode <file.qvb>\n       qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       qorvynt --qur-check <file.qv> (validate QUR Web3 manifest v1)\n       qorvynt --chain-init <ledger.qvr> <address> <balance>\n       qorvynt --chain-transfer <ledger.qvr> <from> <to> <amount>\n       qorvynt --chain-balance <ledger.qvr> <address>\n       qorvynt --chain-receipts <ledger.qvr>\n       qorvynt --chain-keygen <keyfile>\n       qorvynt --chain-store-init <store.qvb> <chain-id> <keyfile> <balance>\n       qorvynt --chain-store-init-multi <store.qvb> <chain-id> <genesis.txt>\n       qorvynt --chain-store-transfer <store.qvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       qorvynt --chain-store-transfer-multi <store.qvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       qorvynt --chain-store-balance <store.qvb> <chain-id> <address>\n       qorvynt --chain-store-info <store.qvb> <chain-id>\n       qorvynt --chain-store-produce <store.qvb> <chain-id> <pool-file> <validator-key>...\n       qorvynt --chain-store-produce-peer-quorum <store.qvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       qorvynt --chain-rpc <store.qvb> <chain-id> [port]\n       qorvynt --chain-rpc-pool <store.qvb> <chain-id> <pool-file> [port]\n       qorvynt --chain-p2p-serve <store.qvb> <chain-id> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-pool <store.qvb> <chain-id> <pool-file> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-validator <store.qvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       qorvynt --chain-p2p-gossip <store.qvb> <chain-id> <pool-file> <peer-ip:port>\n       qorvynt --chain-p2p-sync <store.qvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("QORVYNT v0.8.0\nUsage: qorvynt <file.qv>\n       qorvynt --qur-check <file.qv>\n       qorvynt --qur-token-init <manifest.qv> <ledger.json>\n       qorvynt --qur-token-transfer <ledger.json> <token> <from> <to> <amount>\n       qorvynt --qur-token-transfer-qvm <ledger.json> <state.bin> <contract-id> <token> <from> <to> <amount> <gas-limit>\n       qorvynt --qur-token-balance <ledger.json> <token> <account>\n       qorvynt --qur-dao-propose <state.bin> <dao-id> <proposal-id> <proposer> <title> <quorum> <gas-limit>\n       qorvynt --qur-dao-vote-signed <state.bin> <dao-id> <proposal-id> <wallet-keyfile> <yes|no> <gas-limit>\n       qorvynt --qur-dao-propose-weighted <ledger.json> <state.bin> <dao-id> <proposal-id> <proposer> <title> <token> <quorum> <gas-limit>\n       qorvynt --qur-dao-vote-weighted <state.bin> <dao-id> <proposal-id> <wallet-keyfile> <token> <yes|no> <gas-limit>\n       qorvynt --qur-dao-finalize <state.bin> <dao-id> <proposal-id> <gas-limit>\n       qorvynt --qur-dao-propose-treasury <state.bin> <dao-id> <proposal-id> <proposer> <title> <recipient> <amount> <quorum> <timelock-blocks> <gas-limit>\n       qorvynt --qur-dao-treasury-fund <state.bin> <dao-id> <amount> <gas-limit>\n       qorvynt --qur-dao-treasury-balance <state.bin> <dao-id>\n       qorvynt --qur-dao-show <state.bin> <dao-id> <proposal-id>\n       qorvynt --qur-daio-assess <state.bin> <dao-id> <proposal-id> (advisory risk report)\n       qorvynt --compiler-api [port]  (loopback development API, default 8787)\n       qorvynt --new <project-name>\n       qorvynt --check <file.qv>\n       qorvynt --emit-bytecode <file.qv> <output.qvb>\n       qorvynt --emit-bytecode-v2 <file.qv> <output.qv2b>\n       qorvynt --emit-plan-bytecode-v2 <plan.json> <output.qv2b>\n       qorvynt --run-bytecode <file.qvb>\n       qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       qorvynt --qur-check <file.qv> (validate QUR Web3 manifest v1)\n       qorvynt --chain-init <ledger.qvr> <address> <balance>\n       qorvynt --chain-transfer <ledger.qvr> <from> <to> <amount>\n       qorvynt --chain-balance <ledger.qvr> <address>\n       qorvynt --chain-receipts <ledger.qvr>\n       qorvynt --chain-keygen <keyfile>\n       qorvynt --chain-store-init <store.qvb> <chain-id> <keyfile> <balance>\n       qorvynt --chain-store-init-multi <store.qvb> <chain-id> <genesis.txt>\n       qorvynt --chain-store-transfer <store.qvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       qorvynt --chain-store-transfer-multi <store.qvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       qorvynt --chain-store-balance <store.qvb> <chain-id> <address>\n       qorvynt --chain-store-info <store.qvb> <chain-id>\n       qorvynt --chain-store-produce <store.qvb> <chain-id> <pool-file> <validator-key>...\n       qorvynt --chain-store-produce-peer-quorum <store.qvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       qorvynt --chain-rpc <store.qvb> <chain-id> [port]\n       qorvynt --chain-rpc-pool <store.qvb> <chain-id> <pool-file> [port]\n       qorvynt --chain-p2p-serve <store.qvb> <chain-id> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-pool <store.qvb> <chain-id> <pool-file> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-validator <store.qvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       qorvynt --chain-p2p-gossip <store.qvb> <chain-id> <pool-file> <peer-ip:port>\n       qorvynt --chain-p2p-sync <store.qvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
@@ -3741,44 +3741,6 @@ fn main() {
             Ok(())
         })();
         if let Err(error) = result { eprintln!("QORVYNT weighted DAO vote error: {error}"); process::exit(1); }
-        return;
-    }
-    if args.get(1).is_some_and(|mode| mode == "--qur-dao-finalize-verified" || mode == "--qur-dao-treasury-execute-verified") {
-        if args.len() != 8 {
-            eprintln!("Usage: qorvynt --qur-dao-finalize-verified <state.bin> <store.qvb> <chain-id> <dao-id> <proposal-id> <gas-limit>");
-            eprintln!("   or: qorvynt --qur-dao-treasury-execute-verified <state.bin> <store.qvb> <chain-id> <dao-id> <proposal-id> <gas-limit>");
-            process::exit(2);
-        }
-        let mode = args[1].as_str();
-        let result = (|| -> Result<(), String> {
-            let chain_id = args[4].parse::<u64>().map_err(|_| "chain ID must be a positive integer".to_string())?;
-            if chain_id == 0 { return Err("chain ID must be nonzero".into()); }
-            let (store, _) = crate::block_store::BlockStore::load_from_file(&args[3], chain_id)?;
-            let anchor = store.verified_tip_anchor()?.ok_or("verified block store has no blocks")?;
-            let gas = args[7].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
-            let snapshot = Path::new(&args[2]);
-            recover_dao_token_transaction_for_state(snapshot)?;
-            let mut state = if snapshot.exists() {
-                contract_state::ContractState::load_snapshot(snapshot)?
-            } else { contract_state::ContractState::new() };
-            let receipt = if mode == "--qur-dao-finalize-verified" {
-                qur_dao::finalize_proposal_at_verified_anchor(&mut state, &args[5], &args[6], anchor, gas)?
-            } else {
-                qur_dao::execute_treasury_proposal_at_verified_anchor(&mut state, &args[5], &args[6], anchor, gas)?
-            };
-            state.save_snapshot(snapshot)?;
-            println!("operation={}", receipt.operation);
-            println!("dao_id={}", receipt.dao_id);
-            println!("proposal_id={}", receipt.proposal_id);
-            println!("gas_used={}", receipt.gas_used);
-            println!("state_root={}", hex_encode_bytes(&receipt.state_root));
-            println!("event_hash={}", hex_encode_bytes(&receipt.event_hash));
-            println!("chain_id={chain_id}");
-            println!("verified_tip_height={}", anchor.height());
-            println!("anchor_scope=local_replay_verified_not_distributed_finality");
-            Ok(())
-        })();
-        if let Err(error) = result { eprintln!("QORVYNT verified DAO error: {error}"); process::exit(1); }
         return;
     }
     if args.get(1).is_some_and(|mode| mode.starts_with("--qur-dao-")) {
