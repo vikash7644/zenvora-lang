@@ -50,6 +50,18 @@ impl ContractState {
         Ok(self.values.get(&(contract_id.to_owned(), key.to_owned())).map(Vec::as_slice))
     }
 
+    /// Return deterministic storage entries under a key prefix for bounded runtime audits.
+    pub fn entries_with_prefix(&self, contract_id: &str, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String> {
+        validate_contract_id(contract_id)?;
+        if prefix.is_empty() || prefix.len() > MAX_STORAGE_KEY_BYTES || !prefix.is_ascii() {
+            return Err("invalid contract storage prefix".into());
+        }
+        Ok(self.values.iter()
+            .filter(|((stored_contract, key), _)| stored_contract == contract_id && key.starts_with(prefix))
+            .map(|((_, key), value)| (key.clone(), value.clone()))
+            .collect())
+    }
+
     /// Commit an action's overlay atomically. A view overlay is never allowed to commit.
     pub fn commit(&mut self, overlay: StateOverlay) -> Result<(), String> {
         if overlay.mode == AccessMode::View {
