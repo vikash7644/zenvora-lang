@@ -759,7 +759,7 @@ token GOLD {
         assert_eq!(state.state_root(), before_untrusted_weight);
         // A modified persisted weight must fail the snapshot commitment check without voting.
         let mut tampered_state = state.clone();
-        let mut tamper = tampered_state.begin("community", AccessMode::Action).unwrap();
+        let mut tamper = tampered_state.begin("community", super::super::contract_state::AccessMode::Action).unwrap();
         tamper.set(&format!("voting_power/weighted1/{yes_address}"), 71u64.to_be_bytes().to_vec()).unwrap();
         tampered_state.commit(tamper).unwrap();
         let tampered_root = tampered_state.state_root();
