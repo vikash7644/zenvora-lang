@@ -2,6 +2,8 @@
 
 **Status:** early, versioned prototype. The format is readable text, not a frozen long-term compatibility promise. Do not treat bytecode from an untrusted source as safe for production.
 
+**File extension:** `.qvb` means QORVYNT Bytecode v1. It is a compiled artifact, not a source file; source programs use `.qv`. The extension does not change the bytecode header or version checks.
+
 ## File framing
 
 The source compiler checks reachable function return-kind consistency; the loader runs the full v1 control-flow and stack verifier after decoding a file. A file begins with this exact first line:
@@ -16,7 +18,7 @@ Create and execute a bytecode file:
 
 ```sh
 cargo run -- --emit-bytecode examples/functions.qv functions.qvb
-cargo run -- --run-bytecode functions.zvb
+cargo run -- --run-bytecode functions.qvb
 ```
 
 ## Instruction set
