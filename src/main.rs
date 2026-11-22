@@ -3718,7 +3718,11 @@ fn main() {
             };
             let gas = args[8].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
             let signing_key = read_chain_key(&args[5])?;
-            let message = qur_dao::vote_signing_message(&args[3], &args[4], choice)?;
+            let proposal = qur_dao::get_proposal(&state, &args[3], &args[4])?;
+            let message = match proposal.snapshot_chain_id {
+                Some(chain_id) => qur_dao::vote_signing_message_for_chain(chain_id, &args[3], &args[4], choice)?,
+                None => qur_dao::vote_signing_message(&args[3], &args[4], choice)?,
+            };
             let signature = signing_key.sign(&message);
             let receipt = qur_dao::cast_vote_weighted_signed(&mut state, &args[3], &args[4],
                 &args[6], &signing_key.verifying_key(), &signature, choice, gas)?;
