@@ -4230,6 +4230,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn render_command_writes_qorvynt_program_output_as_a_text_asset() {
+        let base = std::env::temp_dir();
+        let suffix = std::process::id();
+        let source_path = base.join(format!("qorvynt-render-{suffix}.qv"));
+        let output_path = base.join(format!("qorvynt-render-{suffix}.svg"));
+        let _ = std::fs::remove_file(&source_path);
+        let _ = std::fs::remove_file(&output_path);
+        std::fs::write(&source_path, "define title := \"QORVYNT\"\\nshow \"<svg>\"\\nshow title\\nshow \"</svg>\"\\n").unwrap();
+        let source_text = source_path.to_string_lossy().to_string();
+        let output_text = output_path.to_string_lossy().to_string();
+
+        super::render_source_to_file(&source_text, &output_text).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&output_path).unwrap(),
+            "<svg>\\nQORVYNT\\n</svg>\\n"
+        );
+        assert!(super::render_source_to_file(&source_text, &source_text).is_err());
+
+        let _ = std::fs::remove_file(source_path);
+        let _ = std::fs::remove_file(output_path);
+    }
+
     fn execute_source_for_test(source: &str) -> Result<Vec<String>, String> {
         let code = compile(source)?;
         let mut output = Vec::new();
