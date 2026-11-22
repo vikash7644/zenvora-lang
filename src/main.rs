@@ -3632,6 +3632,7 @@ fn main() {
             process::exit(2);
         }
         let result = (|| -> Result<(), String> {
+            recover_dao_token_transaction(Path::new(&args[2]), Path::new(&args[3]))?;
             let raw = fs::read_to_string(&args[2]).map_err(|e| format!("cannot read QUR token ledger: {e}"))?;
             let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("invalid QUR token ledger JSON: {e}"))?;
             let mut ledger = qur_runtime::QurLedger::from_json(&value)?;
