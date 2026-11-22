@@ -386,12 +386,43 @@ pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &s
     if proposal.voting_token.as_deref() != Some(token) {
         return Err("proposal voting token does not match the selected token".into());
     }
-    let overlay = state.begin(dao_id, AccessMode::View)?;
-    let key = format!("voting_power/{id}/{voter}");
-    let bytes = overlay.get(state, &key)?.ok_or("wallet had no voting power at proposal snapshot")?;
-    let weight = u64::from_be_bytes(bytes.try_into().map_err(|_| "corrupt DAO voting snapshot")?);
-    if weight == 0 { return Err("wallet has zero voting power in the proposal snapshot".into()); }
-    cast_vote_with_weight(state, dao_id, id, &voter, choice, weight, gas_limit)
+    let prefix = format!("voting_power/{id}/");
+    let snapshot_entries = state.entries_with_prefix(dao_id, &prefix)?;
+    if snapshot_entries.is_empty() || snapshot_entries.len() > MAX_DAO_SNAPSHOT_VOTERS {
+        return Err("weighted DAO snapshot entry count is invalid".into());
+    }
+    let mut holders = Vec::with_capacity(snapshot_entries.len());
+    let mut total_weight = 0u64;
+    for (key, bytes) in snapshot_entries {
+        let account = key.strip_prefix(&prefix).ok_or("corrupt DAO voting snapshot key")?;
+        if account.len() != 42 || !account.starts_with("zv")
+            || !account[2..].bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err("corrupt DAO voting snapshot wallet address".into());
+        }
+        let balance = u64::from_be_bytes(bytes.as_slice().try_into()
+            .map_err(|_| "corrupt DAO voting snapshot balance")?);
+        if balance == 0 { return Err("corrupt DAO voting snapshot contains zero weight".into()); }
+        total_weight = total_weight.checked_add(balance)
+            .ok_or("DAO voting snapshot total weight overflow")?;
+        holders.push((account.to_owned(), balance));
+    }
+    if total_weight != proposal.snapshot_total_weight {
+        return Err("DAO voting snapshot total does not match its proposal commitment".into());
+    }
+    let expected_root = proposal.voting_snapshot_root.as_deref()
+        .ok_or("weighted DAO proposal is missing its snapshot commitment")?;
+    if expected_root != hex_digest(&weighted_snapshot_digest(token, &holders)) {
+        return Err("DAO voting snapshot commitment mismatch".into());
+    }
+    let weight = holders.iter().find(|(account, _)| account == &voter)
+        .map(|(_, balance)| *balance)
+        .ok_or("wallet had no voting power at proposal snapshot")?;
+    let read_count = u64::try_from(holders.len()).map_err(|_| "too many DAO snapshot entries")?
+        .checked_add(2).ok_or("gas calculation overflow")?;
+    let mut gas = GasMeter::new(gas_limit);
+    gas.charge(BASE_EXECUTION_GAS)?;
+    gas.charge(STORAGE_READ_GAS.checked_mul(read_count).ok_or("gas calculation overflow")?)?;
+    cast_vote_with_weight(state, dao_id, id, &voter, choice, weight, gas_limit.saturating_sub(gas.used()))
 }
 
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
@@ -717,6 +748,17 @@ token GOLD {
         assert!(cast_vote_with_weight(&mut state, "community", "weighted1", &yes_address,
             VoteChoice::Yes, 1000, 30_000).is_err());
         assert_eq!(state.state_root(), before_untrusted_weight);
+        // A modified persisted weight must fail the snapshot commitment check without voting.
+        let mut tampered_state = state.clone();
+        let mut tamper = tampered_state.begin("community", AccessMode::Action).unwrap();
+        tamper.set(&format!("voting_power/weighted1/{yes_address}"), 71u64.to_be_bytes().to_vec()).unwrap();
+        tampered_state.commit(tamper).unwrap();
+        let tampered_root = tampered_state.state_root();
+        let tampered_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
+        let tampered_signature = yes_key.sign(&tampered_message);
+        assert!(cast_vote_weighted_signed(&mut tampered_state, "community", "weighted1", "GOLD",
+            &yes_key.verifying_key(), &tampered_signature, VoteChoice::Yes, 50_000).is_err());
+        assert_eq!(tampered_state.state_root(), tampered_root);
         // Moving tokens after proposal creation cannot change the stored voting power.
         ledger.transfer("GOLD", &yes_address, &no_address, 70).unwrap();
         let yes_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
