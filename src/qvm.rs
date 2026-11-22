@@ -6,7 +6,7 @@
 
 pub(crate) use qorvynt_vm::qvm::{Op, Value};
 pub(crate) use qorvynt_vm::VerifiedProgram;
-pub(crate) use qorvynt_vm::qvm::{builtins, gas, limits, runtime_support};
+pub(crate) use qorvynt_vm::qvm::{builtins, gas, limits, runtime, runtime_support};
 
 use super::{read_bytecode_source, write_bytecode_v2};
 
@@ -30,7 +30,7 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
 }
 
 /// Execute a verified artifact through the standalone runtime API.
-pub(crate) fn execute_with_output<F>(path: &str, mut output: F) -> Result<(), String>
+pub(crate) fn execute_with_output<F>(path: &str, output: F) -> Result<(), String>
 where F: FnMut(String),
 {
     let program = load_verified(path)?;
