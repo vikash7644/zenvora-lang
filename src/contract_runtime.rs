@@ -161,9 +161,11 @@ fn prepare_source(
                 in_contract = true;
                 let (opens, closes) = super::count_block_braces(raw);
                 contract_depth += opens - closes;
+                rewritten.push_str(raw);
+                rewritten.push('\n');
             }
-            rewritten.push_str(raw);
-            rewritten.push('\n');
+            // Source outside the contract declaration is not part of the contract
+            // program and must never be compiled or executed during an invocation.
             continue;
         }
 
@@ -229,6 +231,22 @@ mod tests {
     use super::super::contract_state::{AccessMode, ContractState};
 
     const COUNTER: &str = "contract Counter {\nstate count := 0\naction increment(amount) {\ncount := count + amount\n}\nview current() {\nreturn count\n}\n}\n";
+
+    #[test]
+    fn source_outside_contract_is_not_executed_during_invocation() {
+        let source = format!("show 999\\n{}\\nshow 888\\n", COUNTER);
+        let mut state = ContractState::new();
+        let receipt = execute(
+            &source,
+            "counter",
+            "call increment(3)",
+            AccessMode::Action,
+            &mut state,
+            100_000,
+        ).unwrap();
+        assert_eq!(receipt.output, vec!["3"]);
+        assert_eq!(state.get("counter", "count").unwrap(), Some(&b"3"[..]));
+    }
 
     #[test]
     fn action_state_persists_across_vm_invocations_and_view_reads_it() {
