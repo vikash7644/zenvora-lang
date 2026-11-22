@@ -6,10 +6,12 @@
 
 mod bytecode;
 mod value;
+mod runtime;
+pub(super) use runtime::{run, run_with_gas, run_with_output, run_with_output_metered};
 pub(crate) use bytecode::Op;
 pub(crate) use value::Value;
 
-use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2};
+use super::{deserialize_bytecode_v2, read_bytecode_source, write_bytecode_v2};
 
 /// Compile QORVYNT source into a verified Bytecode v2 QVM artifact.
 pub(super) fn compile(source_path: &str, output_path: &str) -> Result<(), String> {
@@ -31,5 +33,5 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
 /// Execute a previously verified QVM artifact using the current host executor.
 pub(super) fn execute(path: &str) -> Result<(), String> {
     let code = load(path)?;
-    run(&code)
+    runtime::run(&code)
 }
