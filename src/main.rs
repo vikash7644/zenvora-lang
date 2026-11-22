@@ -3426,6 +3426,14 @@ fn dao_tx_journal_path(ledger_path: &Path) -> std::path::PathBuf {
     std::path::PathBuf::from(name)
 }
 
+/// State-side pointer lets commands that only receive the DAO snapshot discover pending
+/// two-file ledger/state recovery without requiring the token-ledger path as an argument.
+fn dao_tx_recovery_index_path(state_path: &Path) -> std::path::PathBuf {
+    let mut name = state_path.as_os_str().to_os_string();
+    name.push(".qorvynt-dao-recovery");
+    std::path::PathBuf::from(name)
+}
+
 fn dao_tx_put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
     let len = u32::try_from(bytes.len()).map_err(|_| "DAO journal field exceeds limit")?;
     out.extend_from_slice(&len.to_be_bytes());
@@ -3511,6 +3519,36 @@ fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Resul
     dao_tx_atomic_write(ledger_path, ledger_bytes)?;
     dao_tx_atomic_write(state_path, state_bytes)?;
     fs::remove_file(&journal_path).map_err(|e| format!("cannot remove recovered DAO transaction journal: {e}"))?;
+    let index_path = dao_tx_recovery_index_path(state_path);
+    if index_path.exists() {
+        let indexed_ledger = fs::read_to_string(&index_path)
+            .map_err(|e| format!("cannot read DAO recovery index: {e}"))?;
+        if Path::new(&indexed_ledger) != ledger_path {
+            return Err("DAO recovery index ledger path does not match the transaction journal".into());
+        }
+        fs::remove_file(&index_path).map_err(|e| format!("cannot remove recovered DAO recovery index: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Recover a pending transaction using only the DAO state path supplied by state-only CLI commands.
+fn recover_dao_token_transaction_for_state(state_path: &Path) -> Result<(), String> {
+    let index_path = dao_tx_recovery_index_path(state_path);
+    if !index_path.exists() { return Ok(()); }
+    let metadata = fs::metadata(&index_path).map_err(|e| format!("cannot stat DAO recovery index: {e}"))?;
+    if metadata.len() > 4096 { return Err("DAO recovery index exceeds the 4 KiB safety limit".into()); }
+    let ledger_name = fs::read_to_string(&index_path)
+        .map_err(|e| format!("cannot read DAO recovery index: {e}"))?;
+    if ledger_name.is_empty() || ledger_name.contains('\\0') {
+        return Err("DAO recovery index contains an invalid ledger path".into());
+    }
+    let ledger_path = Path::new(&ledger_name);
+    recover_dao_token_transaction(ledger_path, state_path)?;
+    // An index without a journal means a crash happened after index publication but before
+    // journal publication; no transaction payload was committed, so remove the stale pointer.
+    if index_path.exists() {
+        fs::remove_file(&index_path).map_err(|e| format!("cannot remove stale DAO recovery index: {e}"))?;
+    }
     Ok(())
 }
 
@@ -3532,11 +3570,18 @@ fn persist_dao_token_transaction(ledger_path: &Path, state_path: &Path,
         return Err("DAO transaction journal exceeds the 64 MiB safety limit".into());
     }
     let journal_path = dao_tx_journal_path(ledger_path);
-    if &journal_path == state_path || &journal_path == ledger_path {
-        return Err("DAO transaction journal path conflicts with an output path".into());
+    let index_path = dao_tx_recovery_index_path(state_path);
+    if &journal_path == state_path || &journal_path == ledger_path
+        || &index_path == ledger_path || &index_path == state_path
+        || index_path == journal_path {
+        return Err("DAO transaction journal or recovery index path conflicts with an output path".into());
     }
     // Finish any earlier committed transaction before installing a new journal.
+    recover_dao_token_transaction_for_state(state_path)?;
     recover_dao_token_transaction(ledger_path, state_path)?;
+    // Publish the state-side recovery pointer first. If the process stops before the journal
+    // is written, the next state-only command safely removes this stale pointer.
+    dao_tx_atomic_write(&index_path, ledger_name.as_bytes())?;
     dao_tx_atomic_write(&journal_path, &journal)?;
     recover_dao_token_transaction(ledger_path, state_path)
 }
@@ -3617,6 +3662,7 @@ fn main() {
         }
         let result = (|| -> Result<(), String> {
             let snapshot = Path::new(&args[2]);
+            recover_dao_token_transaction_for_state(snapshot)?;
             let mut state = contract_state::ContractState::load_snapshot(snapshot)?;
             let choice = match args[7].as_str() {
                 "yes" => qur_dao::VoteChoice::Yes,
@@ -3703,6 +3749,7 @@ fn main() {
         }
         let result = (|| -> Result<(), String> {
             let snapshot = Path::new(&args[2]);
+            recover_dao_token_transaction_for_state(snapshot)?;
             let mut state = if snapshot.exists() {
                 contract_state::ContractState::load_snapshot(snapshot)?
             } else { contract_state::ContractState::new() };
