@@ -1313,8 +1313,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
 }
 
 fn deserialize_bytecode_v2(source: &str) -> Result<Vec<Op>, String> {
-    let file = bytecode_v2::parse_v2_file(source)?;
-    bytecode_v2::verify_v2_file(&file)?;
+    let file = bytecode_v2::parse_and_verify_v2_file(source)?;
     let mut code = Vec::with_capacity(file.instructions.len());
 
     for (pc, line) in file.instructions.iter().enumerate() {
