@@ -27,7 +27,7 @@ pub struct DaoProposal {
     pub treasury_recipient: Option<String>,
     /// Asset explicitly approved for a token-ledger treasury payout.
     pub treasury_token: Option<String>,
-    pub treasury_amount: u64;
+    pub treasury_amount: u64,
     pub timelock_blocks: u64,
     pub approved_at_height: Option<u64>,
     pub executed: bool,
@@ -299,7 +299,7 @@ fn create_weighted_proposal_with_anchor(state: &mut ContractState, ledger: &supe
     let proposal = DaoProposal {
         id: id.into(), proposer: proposer.into(), title: title.into(), quorum,
         yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
-        treasury_recipient: None, treasury_amount: 0, timelock_blocks: 0,
+        treasury_recipient: None, treasury_token: None, treasury_amount: 0, timelock_blocks: 0,
         approved_at_height: None, executed: false,
         voting_token: Some(token.into()), snapshot_total_weight: total_weight,
         snapshot_ledger_root: Some(hex_digest(&ledger.state_root())),
