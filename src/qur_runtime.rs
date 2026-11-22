@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 use super::qur::QurManifest;
 use super::contract_gas::{GasMeter, BASE_EXECUTION_GAS, STORAGE_READ_GAS, STORAGE_WRITE_GAS};
 use super::contract_state::{AccessMode, ContractState};
+use super::qur_state::execution_state_root;
 
 const DOMAIN: &[u8] = b"QORVYNT_QUR_TOKEN_LEDGER_V1\\0";
 const MAX_ACCOUNT_BYTES: usize = 128;
@@ -36,6 +37,7 @@ pub struct QurTransferReceipt {
     pub amount: u64,
     pub gas_used: u64,
     pub contract_state_root: [u8; 32],
+    pub execution_state_root: [u8; 32],
     pub event: QurTransferEvent,
 }
 
@@ -127,9 +129,12 @@ impl QurLedger {
         }
         state.commit(overlay)?;
         *self = candidate;
+        let contract_state_root = state.state_root();
+        let combined_state_root = execution_state_root(self, state);
         Ok(QurTransferReceipt {
             token: token.into(), from: from.into(), to: to.into(), amount,
-            gas_used: meter.used(), contract_state_root: state.state_root(),
+            gas_used: meter.used(), contract_state_root,
+            execution_state_root: combined_state_root,
             event: QurTransferEvent { name: "TokenTransfer", token: token.into(), from: from.into(),
                 to: to.into(), amount, event_hash }
         })
@@ -292,6 +297,7 @@ supply = 100000000
         assert_eq!(state.get("qur_tokens", "token/GOLD/balance/alice").unwrap(), Some(&b"25"[..]));
         assert_eq!(state.get("qur_tokens", "token/GOLD/balance/genesis").unwrap(), Some(&b"99999975"[..]));
         assert_eq!(receipt.contract_state_root, state.state_root());
+        assert_eq!(receipt.execution_state_root, super::super::qur_state::execution_state_root(&ledger, &state));
     }
 
     #[test]
