@@ -339,18 +339,43 @@ fn parse_program(tokens) {
               define next_pos := close_pos + 1
               if kw == "if" and next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
                 define else_open := next_pos + 1
-                define else_end := find_block_end(tokens, else_open)
-                if get(else_end, "error") != "" {
-                  err := get(else_end, "error")
-                } otherwise {
-                  define else_close := get(else_end, "pos")
-                  define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
-                  define else_result := parse_program(else_tokens)
-                  if get(else_result, "error") != "" {
-                    err := get(else_result, "error")
+                if else_open < len(tokens) and get(at(tokens, else_open), "value") == "if" {
+                  # Lower "otherwise if" to a nested if node in the otherwise branch.
+                  define else_condition := parse_expr(tokens, else_open + 1)
+                  if get(else_condition, "error") != "" {
+                    err := get(else_condition, "error")
                   } otherwise {
-                    else_ast := get(else_result, "ast")
-                    next_pos := else_close + 1
+                    define else_block_open := get(else_condition, "pos")
+                    define else_end := find_block_end(tokens, else_block_open)
+                    if get(else_end, "error") != "" {
+                      err := get(else_end, "error")
+                    } otherwise {
+                      define else_close := get(else_end, "pos")
+                      define else_tokens := collect_tokens(tokens, else_block_open + 1, else_close)
+                      define else_result := parse_program(else_tokens)
+                      if get(else_result, "error") != "" {
+                        err := get(else_result, "error")
+                      } otherwise {
+                        define nested_if := node("if", "", get(else_condition, "ast"), map("then", get(else_result, "ast"), "otherwise", array()), get(at(tokens, else_open), "line"))
+                        else_ast := push(else_ast, nested_if)
+                        next_pos := else_close + 1
+                      }
+                    }
+                  }
+                } otherwise {
+                  define else_end := find_block_end(tokens, else_open)
+                  if get(else_end, "error") != "" {
+                    err := get(else_end, "error")
+                  } otherwise {
+                    define else_close := get(else_end, "pos")
+                    define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
+                    define else_result := parse_program(else_tokens)
+                    if get(else_result, "error") != "" {
+                      err := get(else_result, "error")
+                    } otherwise {
+                      else_ast := get(else_result, "ast")
+                      next_pos := else_close + 1
+                    }
                   }
                 }
               }
@@ -2625,4 +2650,17 @@ if not get(malformed_instruction_result, "ok") and get(malformed_instruction_res
   show malformed_instruction_result
   show string_jump_result
   show function_bad_jump_result
+}
+
+
+# Self-hosted parser regression: "otherwise if" must lower to a nested conditional
+# and compile through the QORVYNT source-to-bytecode pipeline.
+define otherwise_if_program := compile_source("define branch_value := 2\\nif branch_value == 1 {\\nshow \\"one\\"\\n} otherwise if branch_value == 2 {\\nshow \\"two\\"\\n}\\n")
+define otherwise_if_run := execute_bytecode_plan(get(otherwise_if_program, "plan"))
+if get(otherwise_if_program, "ok") and get(otherwise_if_run, "ok") and get(get(otherwise_if_run, "output"), 0) == "two" {
+  show "QORVYNT_OTHERWISE_IF_FRONTEND_PASS"
+} otherwise {
+  show "QORVYNT_OTHERWISE_IF_FRONTEND_FAIL"
+  show otherwise_if_program
+  show otherwise_if_run
 }
