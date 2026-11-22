@@ -397,7 +397,7 @@ pub fn vote_signing_message_for_anchor(chain_id: u64, block_height: u64,
         || !is_lower_hex_digest(block_hash) || !is_lower_hex_digest(state_root) {
         return Err("invalid chain snapshot anchor, DAO, or proposal identifier".into());
     }
-    let mut message = b"QORVYNT_DAO_VOTE_V3\\0".to_vec();
+    let mut message = b"QORVYNT_DAO_VOTE_V3\0".to_vec();
     message.extend_from_slice(&chain_id.to_be_bytes());
     message.extend_from_slice(&block_height.to_be_bytes());
     append_field(&mut message, block_hash.as_bytes());
