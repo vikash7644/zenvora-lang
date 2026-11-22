@@ -5,6 +5,7 @@
 //! modules; compiler integration and host built-ins remain in the reference crate.
 
 mod bytecode;
+pub(crate) mod limits;
 pub(crate) mod runtime_support;
 pub(crate) mod builtins;
 pub(super) mod runtime;
