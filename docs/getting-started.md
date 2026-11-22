@@ -6,16 +6,19 @@ QORVYNT Lang is a small, independent programming language for the QORVYNT ecosys
 
 ## 1. Get the project
 
-Install a current stable Rust toolchain and Cargo from the official Rust installation instructions, then:
+**For normal use:** download the prebuilt `qorvynt` executable for your operating system from the [QORVYNT pre-release](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1), extract it, and put it on your `PATH`. Verify with `qorvynt --version`. No Rust, Cargo, Termux, or local compilation is required on the end-user machine.
+
+**For contributors only:** clone the repository and use Rust/Cargo to build and test compiler changes:
 
 ```sh
 git clone https://github.com/vikash7644/zenvora-lang.git
 cd zenvora-lang
 cargo check --all-targets
 cargo test --all-targets
+cargo build --release --bin qorvynt
 ```
 
-To run the compiler directly from the repository, prefix commands with `cargo run --`. You do not need to build on an Android phone: the repository's pre-release page provides CI-built binaries for Linux x86-64, macOS x86-64/ARM64, and Windows x86-64.
+After building from source, run the executable at `target/release/qorvynt` (Windows: `target\\release\\qorvynt.exe`). Cargo remains a compiler-development dependency for now; ordinary QORVYNT users invoke only `qorvynt`.
 
 ## 2. Run your first program
 
@@ -36,8 +39,8 @@ fn multiply(left, right) {
 Run and compile-check it:
 
 ```sh
-cargo run -- hello.qv
-cargo run -- --check hello.qv
+qorvynt run hello.qv
+qorvynt check hello.qv
 ```
 
 Expected output from the first command:
@@ -65,7 +68,7 @@ Start with these files in the repository:
 - [Relative imports](../examples/modules.qv).
 - [Experimental contract syntax](../examples/contracts.qv) — syntax demonstration only, not persistent chain execution.
 
-Run an example with `cargo run -- examples/functions.qv`. GitHub Actions runs the language tour and a wider set of examples as regression checks.
+Run an example with `qorvynt run examples/functions.qv`. GitHub Actions runs the language tour and a wider set of examples as regression checks.
 
 ## 4. Core syntax at a glance
 
@@ -126,14 +129,14 @@ See [the module example](../examples/modules.qv) and its imported files.
 The default bytecode format is version 1:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.qvb
-cargo run -- --run-bytecode functions.qvb
+qorvynt --emit-bytecode examples/functions.qv functions.qvb
+qorvynt --run-bytecode functions.qvb
 ```
 
 Experimental version 2 emission is opt-in:
 
 ```sh
-cargo run -- --emit-bytecode-v2 examples/functions.qv functions.qv2b
+qorvynt --emit-bytecode-v2 examples/functions.qv functions.qv2b
 cargo run -- --run-bytecode functions.qv2b
 ```
 
