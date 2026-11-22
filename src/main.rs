@@ -3516,9 +3516,6 @@ fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Resul
         .map_err(|_| "DAO journal state length exceeds platform limit")?;
     let state_bytes = dao_tx_take(&bytes, &mut pos, state_len)?;
     if pos != bytes.len() { return Err("trailing bytes in DAO transaction journal".into()); }
-    dao_tx_atomic_write(ledger_path, ledger_bytes)?;
-    dao_tx_atomic_write(state_path, state_bytes)?;
-    fs::remove_file(&journal_path).map_err(|e| format!("cannot remove recovered DAO transaction journal: {e}"))?;
     let index_path = dao_tx_recovery_index_path(state_path);
     if index_path.exists() {
         let indexed_ledger = fs::read_to_string(&index_path)
@@ -3526,6 +3523,11 @@ fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Resul
         if Path::new(&indexed_ledger) != ledger_path {
             return Err("DAO recovery index ledger path does not match the transaction journal".into());
         }
+    }
+    dao_tx_atomic_write(ledger_path, ledger_bytes)?;
+    dao_tx_atomic_write(state_path, state_bytes)?;
+    fs::remove_file(&journal_path).map_err(|e| format!("cannot remove recovered DAO transaction journal: {e}"))?;
+    if index_path.exists() {
         fs::remove_file(&index_path).map_err(|e| format!("cannot remove recovered DAO recovery index: {e}"))?;
     }
     Ok(())
