@@ -232,9 +232,25 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
 }
 
 /// Create a proposal with a fixed token-holder snapshot captured at proposal creation.
+/// Create a weighted proposal using the current local token ledger snapshot.
 pub fn create_weighted_proposal(state: &mut ContractState, ledger: &super::qur_runtime::QurLedger,
     dao_id: &str, id: &str, proposer: &str, title: &str, token: &str,
     quorum: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    create_weighted_proposal_with_anchor(state, ledger, dao_id, id, proposer, title, token, quorum, gas_limit, None)
+}
+
+/// Create a weighted proposal and record the replay-verified block-store tip used as its
+/// contextual anchor. The chain root does not prove the separate token ledger was replayed.
+pub fn create_weighted_proposal_at_anchor(state: &mut ContractState, ledger: &super::qur_runtime::QurLedger,
+    anchor: super::block_store::VerifiedBlockAnchor, dao_id: &str, id: &str,
+    proposer: &str, title: &str, token: &str, quorum: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    if anchor.chain_id == 0 { return Err("DAO snapshot anchor has an invalid chain ID".into()); }
+    create_weighted_proposal_with_anchor(state, ledger, dao_id, id, proposer, title, token, quorum, gas_limit, Some(anchor))
+}
+
+fn create_weighted_proposal_with_anchor(state: &mut ContractState, ledger: &super::qur_runtime::QurLedger,
+    dao_id: &str, id: &str, proposer: &str, title: &str, token: &str,
+    quorum: u64, gas_limit: u64, anchor: Option<super::block_store::VerifiedBlockAnchor>) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) || !valid_id(proposer) || !valid_id(token) {
         return Err("invalid DAO, proposal, proposer, or voting token identifier".into());
     }
@@ -279,7 +295,10 @@ pub fn create_weighted_proposal(state: &mut ContractState, ledger: &super::qur_r
         voting_token: Some(token.into()), snapshot_total_weight: total_weight,
         snapshot_ledger_root: Some(hex_digest(&ledger.state_root())),
         voting_snapshot_root: Some(hex_digest(&weighted_snapshot_digest(token, &holders))),
-        snapshot_chain_id: None, snapshot_block_height: None, snapshot_block_hash: None, snapshot_chain_state_root: None,
+        snapshot_chain_id: anchor.map(|value| value.chain_id),
+        snapshot_block_height: anchor.map(|value| value.height),
+        snapshot_block_hash: anchor.map(|value| hex_digest(&value.block_hash)),
+        snapshot_chain_state_root: anchor.map(|value| hex_digest(&value.state_root)),
     };
     for (account, balance) in &holders {
         overlay.set(&format!("voting_power/{id}/{account}"), balance.to_be_bytes().to_vec())?;
@@ -292,6 +311,12 @@ pub fn create_weighted_proposal(state: &mut ContractState, ledger: &super::qur_r
     event_payload.extend_from_slice(&quorum.to_be_bytes());
     event_payload.extend_from_slice(&total_weight.to_be_bytes());
     event_payload.extend_from_slice(&(holders.len() as u64).to_be_bytes());
+    if let Some(anchor) = anchor {
+        event_payload.extend_from_slice(&anchor.chain_id.to_be_bytes());
+        event_payload.extend_from_slice(&anchor.height.to_be_bytes());
+        append_field(&mut event_payload, &anchor.block_hash);
+        append_field(&mut event_payload, &anchor.state_root);
+    }
     gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
     Ok(receipt("WeightedProposalCreated", dao_id, id, &event_payload, &gas, state))
