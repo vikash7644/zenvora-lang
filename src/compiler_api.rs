@@ -145,8 +145,8 @@ mod tests {
 
     #[test]
     fn options_preflight_returns_empty_204_response() {
-        let response = response_for(b"OPTIONS /compile-run HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n");
-        let (headers, body) = response.split_once("\\r\\n\\r\\n").unwrap();
+        let response = response_for(b"OPTIONS /compile-run HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        let (headers, body) = response.split_once("\r\n\r\n").unwrap();
         assert!(headers.starts_with("HTTP/1.1 204 No Content"));
         assert!(headers.contains("Content-Length: 0"));
         assert!(body.is_empty());
