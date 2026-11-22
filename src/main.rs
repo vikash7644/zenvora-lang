@@ -3719,9 +3719,13 @@ fn main() {
             let gas = args[8].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
             let signing_key = read_chain_key(&args[5])?;
             let proposal = qur_dao::get_proposal(&state, &args[3], &args[4])?;
-            let message = match proposal.snapshot_chain_id {
-                Some(chain_id) => qur_dao::vote_signing_message_for_chain(chain_id, &args[3], &args[4], choice)?,
-                None => qur_dao::vote_signing_message(&args[3], &args[4], choice)?,
+            let message = match (proposal.snapshot_chain_id, proposal.snapshot_block_height,
+                proposal.snapshot_block_hash.as_deref(), proposal.snapshot_chain_state_root.as_deref()) {
+                (Some(chain_id), Some(height), Some(block_hash), Some(state_root)) =>
+                    qur_dao::vote_signing_message_for_anchor(chain_id, height, block_hash, state_root,
+                        &args[3], &args[4], choice)?,
+                (None, None, None, None) => qur_dao::vote_signing_message(&args[3], &args[4], choice)?,
+                _ => return Err("weighted DAO snapshot has an incomplete or malformed chain anchor".into()),
             };
             let signature = signing_key.sign(&message);
             let receipt = qur_dao::cast_vote_weighted_signed(&mut state, &args[3], &args[4],
