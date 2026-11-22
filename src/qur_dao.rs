@@ -545,7 +545,7 @@ pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     finalize_proposal_at_height(state, dao_id, id, 0, gas_limit)
 }
 
-pub fn finalize_proposal_at_height(state: &mut ContractState, dao_id: &str, id: &str,
+fn finalize_proposal_at_height(state: &mut ContractState, dao_id: &str, id: &str,
     current_height: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) { return Err("invalid DAO or proposal identifier".into()); }
     let mut gas = GasMeter::new(gas_limit);
@@ -600,7 +600,7 @@ pub fn treasury_balance(state: &ContractState, dao_id: &str) -> Result<u64, Stri
 }
 
 /// Execute an approved treasury proposal only after its deterministic block-height timelock.
-pub fn execute_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &str,
+fn execute_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     current_height: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) { return Err("invalid DAO or proposal identifier".into()); }
     let mut gas = GasMeter::new(gas_limit);
@@ -635,7 +635,7 @@ pub fn execute_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &s
 
 /// Execute an approved DAO treasury payout as an actual QUR token-ledger transfer.
 /// The DAO storage overlay and candidate token ledger are committed together in memory.
-pub fn execute_treasury_token_proposal(state: &mut ContractState, ledger: &mut super::qur_runtime::QurLedger,
+fn execute_treasury_token_proposal(state: &mut ContractState, ledger: &mut super::qur_runtime::QurLedger,
     dao_id: &str, id: &str, token: &str, current_height: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) || !valid_id(token) {
         return Err("invalid DAO, proposal, or token identifier".into());
