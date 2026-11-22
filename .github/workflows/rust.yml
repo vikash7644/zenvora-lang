@@ -159,7 +159,8 @@ jobs:
           early_status=$?
           set -e
           test "$early_status" -eq 1
-          cargo run --locked -- --qur-dao-treasury-token-execute /tmp/qorvynt-dao-native-ledger.json /tmp/qorvynt-dao-native-state.bin community nativepayout GOLD 105 50000
+          cargo run --locked -- --qur-dao-treasury-token-execute /tmp/qorvynt-dao-native-ledger.json /tmp/qorvynt-dao-native-state.bin community nativepayout GOLD 105 50000 | tee /tmp/qorvynt-dao-native-receipt.txt
+          grep -Eq "^execution_state_root=[0-9a-f]{64}$" /tmp/qorvynt-dao-native-receipt.txt
           cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD dao_community | grep -Fxq 60
           cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD contributor | grep -Fxq 40
           cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD genesis | grep -Fxq 99999900
