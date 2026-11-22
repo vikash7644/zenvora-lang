@@ -52,6 +52,10 @@ qorvynt --qur-token-transfer-qvm token-ledger.json contract-state.bin qur_tokens
 
 The command charges the versioned contract gas schedule, stages supply and account-balance keys in a write overlay, and commits the in-memory token ledger only after the contract-state overlay succeeds. It reports gas used and the contract storage root. This is a local integration prototype: it uses the repository's deterministic gas meter and contract storage module, but token transfer is not yet emitted as QVM bytecode/opcodes or admitted as a signed chain transaction. The two local snapshot files are not a cross-file atomic database transaction; production integration must move both records into one chain-state transaction.
 
+### Unified QORVYNT execution-state commitment
+
+The local runtime now exposes a deterministic composite commitment over the canonical QUR token-ledger root and contract-storage root. The versioned `QORVYNT_EXECUTION_STATE_V1` domain binds the two component roots in a fixed order, so a change to either component changes the combined commitment. This is a state-composition primitive for replay and receipt integration; it does not make the two existing snapshot files a single atomic database, and it is not yet a consensus-validated chain state root.
+
 ## Execution boundary
 
 This milestone **validates configuration only**. It does not create a blockchain node, start Proof of Stake, mint tokens, deploy contracts, create wallets/private keys, run a DAO, or launch an exchange. A consensus label is not a consensus implementation.
