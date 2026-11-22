@@ -3,6 +3,8 @@
 //! gas accounting interfaces, and the execution engine. Compiler parsing,
 //! source loading, and bytecode verification remain in the host compiler.
 
+pub mod bytecode_v2;
+
 pub mod qvm {
     pub mod bytecode;
     pub mod builtins;
