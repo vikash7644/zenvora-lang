@@ -126,19 +126,19 @@ cargo test
 qorvynt new my-first-project
 qorvynt run my-first-project/main.qv
 qorvynt check my-first-project/main.qv
-cargo run -- --render examples/qorvynt-icon.qv qorvynt-icon.svg
+qorvynt --render examples/qorvynt-icon.qv qorvynt-icon.svg
 qorvynt run examples/hello.qv
-cargo run -- examples/loops.qv
-cargo run -- examples/functions.qv
-cargo run -- examples/booleans.qv
-cargo run -- examples/strings.qv
-cargo run -- examples/collections.qv
-cargo run -- examples/indexing.qv
-cargo run -- examples/stdlib.qv
-cargo run -- examples/science.qv
-cargo run -- examples/stdlib-strings.qv
-cargo run -- examples/contracts.qv
-cargo run -- examples/modules.qv
+qorvynt run examples/loops.qv
+qorvynt run examples/functions.qv
+qorvynt run examples/booleans.qv
+qorvynt run examples/strings.qv
+qorvynt run examples/collections.qv
+qorvynt run examples/indexing.qv
+qorvynt run examples/stdlib.qv
+qorvynt run examples/science.qv
+qorvynt run examples/stdlib-strings.qv
+qorvynt run examples/contracts.qv
+qorvynt run examples/modules.qv
 qorvynt check examples/functions.qv
 qorvynt --emit-bytecode examples/functions.qv functions.qvb
 qorvynt --run-bytecode functions.qvb
@@ -160,9 +160,9 @@ Expected example output:
 The starter command creates a new folder with `main.qv` and a project `README.md`. It refuses to overwrite an existing path and validates the project name.
 
 ```sh
-cargo run -- --new my-first-project
-cargo run -- my-first-project/main.qv
-cargo run -- --check my-first-project/main.qv
+qorvynt new my-first-project
+qorvynt run my-first-project/main.qv
+qorvynt check my-first-project/main.qv
 ```
 
 The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. When using a built release binary, the same commands are `qorvynt --new my-first-project`, `qorvynt my-first-project/main.qv`, and `qorvynt --check my-first-project/main.qv`.
@@ -186,7 +186,7 @@ When developing from source, build once with `cargo build --release --bin qorvyn
 Use `qorvynt --check <file.qv>` to load relative imports and compile the program without executing it. Use `qorvynt --render <file.qv> <output.txt>` to execute a source program and save its printed lines as a text asset (for example, SVG). This is a host CLI operation; it is not available inside the deterministic contract VM. This catches syntax and compile-time errors without running application logic or its side effects. It is not a static type checker: many value-type errors are still detected at runtime.
 
 ```sh
-cargo run -- --check examples/functions.qv
+qorvynt check examples/functions.qv
 ```
 
 ## Local signed-chain development prototype
@@ -227,12 +227,12 @@ The runtime now includes checked integer helpers: `gcd`, `lcm`, `factorial` (0â€
 The compiler can write and run versioned stack-machine bytecode files:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.qvb
-cargo run -- --run-bytecode functions.qvb
+qorvynt --emit-bytecode examples/functions.qv functions.qvb
+qorvynt --run-bytecode functions.qvb
 
 # Experimental opt-in v2 output:
-cargo run -- --emit-bytecode-v2 examples/functions.qv functions.qv2b
-cargo run -- --run-bytecode functions.qv2b
+qorvynt --emit-bytecode-v2 examples/functions.qv functions.qv2b
+qorvynt --run-bytecode functions.qv2b
 ```
 
 Version 1 remains the default and its serializer/loader behavior is unchanged. The experimental v2 format starts with `QORVYNT_BYTECODE 2` and includes explicit main/function regions, parameter names, and return-kind metadata. The v2 compiler emission path verifies the generated file before writing it; the loader verifies a v2 file again before passing its instructions to the VM. The verifier checks region boundaries, opcodes/operands, jumps, calls/argument counts, return kinds, stack underflow/joins, and main exit stack cleanliness. Both versions are bounded by bytecode-size, instruction-count, string-size, argument-count, call-depth, and operand-stack limits.
