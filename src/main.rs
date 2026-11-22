@@ -3461,12 +3461,17 @@ fn dao_tx_atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut temp_name = file_name.to_os_string();
     temp_name.push(format!(".qorvynt-tmp-{}", std::process::id()));
     let temp_path = path.with_file_name(temp_name);
+    let mut owns_temp = false;
     let result = (|| {
-        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true)
-            .open(&temp_path).map_err(|e| format!("cannot create DAO transaction staging file: {e}"))?;
+        // Never truncate a staging file we did not create. This protects stale files and
+        // concurrent writers from having their contents silently overwritten.
+        let mut file = fs::OpenOptions::new().write(true).create_new(true)
+            .open(&temp_path).map_err(|e| format!("cannot create exclusive DAO transaction staging file: {e}"))?;
+        owns_temp = true;
         file.write_all(bytes).map_err(|e| format!("cannot write DAO transaction staging file: {e}"))?;
         file.sync_all().map_err(|e| format!("cannot sync DAO transaction staging file: {e}"))?;
         fs::rename(&temp_path, path).map_err(|e| format!("cannot atomically install DAO transaction file: {e}"))?;
+        owns_temp = false;
         #[cfg(unix)]
         {
             let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
@@ -3476,7 +3481,7 @@ fn dao_tx_atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         }
         Ok(())
     })();
-    if result.is_err() { let _ = fs::remove_file(&temp_path); }
+    if result.is_err() && owns_temp { let _ = fs::remove_file(&temp_path); }
     result
 }
 
@@ -5512,6 +5517,24 @@ fn factorial(n) {
         assert!(!index_path.exists());
 
         for path in [&ledger, &state, &journal_path, &index_path] { let _ = std::fs::remove_file(path); }
+    }
+
+    #[test]
+    fn dao_atomic_write_never_overwrites_an_unowned_staging_file() {
+        let base = std::env::temp_dir();
+        let output = base.join(format!("qorvynt-dao-exclusive-stage-{}.bin", std::process::id()));
+        let mut temp_name = output.file_name().unwrap().to_os_string();
+        temp_name.push(format!(".qorvynt-tmp-{}", std::process::id()));
+        let staging = output.with_file_name(temp_name);
+        let _ = std::fs::remove_file(&output);
+        let _ = std::fs::remove_file(&staging);
+        std::fs::write(&staging, b"do-not-overwrite").unwrap();
+
+        assert!(super::dao_tx_atomic_write(&output, b"new-output").is_err());
+        assert_eq!(std::fs::read(&staging).unwrap(), b"do-not-overwrite");
+        assert!(!output.exists());
+
+        let _ = std::fs::remove_file(&staging);
     }
 
     #[test]
