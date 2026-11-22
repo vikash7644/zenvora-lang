@@ -38,7 +38,7 @@ qorvynt --qur-token-transfer token-ledger.json GOLD genesis alice 25
 qorvynt --qur-token-balance token-ledger.json GOLD alice
 ```
 
-Genesis allocates each declared token's full configured supply to the reserved `genesis` account. Transfers use checked integer arithmetic, reject zero amounts, unknown tokens, invalid account identifiers, insufficient funds, and sender/recipient aliasing. Every mutation preserves the declared total supply and writes a canonical state root into the JSON snapshot; the loader verifies that root before accepting a snapshot. Failed transfers leave the ledger unchanged.
+Genesis allocates each declared token's full configured supply to the reserved `genesis` account. Transfers use checked integer arithmetic, reject zero amounts, unknown tokens, invalid account identifiers, insufficient funds, and sender/recipient aliasing. Every mutation preserves the declared total supply and writes a canonical state root into the JSON snapshot; the loader verifies that root before accepting a snapshot. Failed transfers leave the ledger unchanged. Ledger loading also validates token identifiers (ASCII identifier syntax, at most 128 bytes), caps the ledger at 4,096 tokens and 1,000,000 balance entries, and rejects malformed or oversized collections before accepting the state.
 
 This is a local single-process ledger prototype. It is not yet backed by QVM contract bytecode, chain transaction admission, consensus, validator signatures, or peer-to-peer replication. The next integration milestone is to expose these state transitions as deterministic, gas-metered QVM contract calls rather than treating this file ledger as a production token network.
 
