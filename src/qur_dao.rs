@@ -346,6 +346,51 @@ pub fn execute_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &s
     Ok(receipt("TreasuryTransferExecuted", dao_id, id, &transfer, &gas, state))
 }
 
+/// Execute an approved DAO treasury payout as an actual QUR token-ledger transfer.
+/// The DAO storage overlay and candidate token ledger are committed together in memory.
+pub fn execute_treasury_token_proposal(state: &mut ContractState, ledger: &mut super::qur_runtime::QurLedger,
+    dao_id: &str, id: &str, token: &str, current_height: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    if !valid_id(dao_id) || !valid_id(id) || !valid_id(token) {
+        return Err("invalid DAO, proposal, or token identifier".into());
+    }
+    let mut gas = GasMeter::new(gas_limit);
+    gas.charge(BASE_EXECUTION_GAS)?;
+    gas.charge(STORAGE_READ_GAS.checked_mul(3).ok_or("gas calculation overflow")?)?;
+    gas.charge(STORAGE_WRITE_GAS.checked_mul(4).ok_or("gas calculation overflow")?)?;
+    let mut overlay = state.begin(dao_id, AccessMode::Action)?;
+    let mut proposal = load_proposal(state, &overlay, id)?;
+    if proposal.status != ProposalStatus::Approved { return Err("treasury proposal is not approved".into()); }
+    if proposal.executed { return Err("treasury proposal has already executed".into()); }
+    let recipient = proposal.treasury_recipient.clone().ok_or("proposal has no treasury transfer action")?;
+    let approved_at = proposal.approved_at_height.ok_or("proposal approval height is missing")?;
+    let execute_after = approved_at.checked_add(proposal.timelock_blocks).ok_or("DAO timelock height overflow")?;
+    if current_height < execute_after { return Err(format!("DAO timelock active until block {execute_after}")); }
+    let treasury_account = format!("dao_{dao_id}");
+    let mut candidate = ledger.clone();
+    candidate.transfer(token, &treasury_account, &recipient, proposal.treasury_amount)?;
+    let supply = candidate.total_supply(token).ok_or_else(|| format!("unknown token '{token}'"))?;
+    overlay.set(&format!("token/{token}/supply"), supply.to_string().into_bytes())?;
+    for account in [treasury_account.as_str(), recipient.as_str()] {
+        let key = format!("token/{token}/balance/{account}");
+        let balance = candidate.balance(token, account);
+        if balance == 0 { overlay.delete(&key)?; }
+        else { overlay.set(&key, balance.to_string().into_bytes())?; }
+    }
+    let mut event = Vec::new();
+    append_field(&mut event, token.as_bytes());
+    append_field(&mut event, treasury_account.as_bytes());
+    append_field(&mut event, recipient.as_bytes());
+    event.extend_from_slice(&proposal.treasury_amount.to_be_bytes());
+    event.extend_from_slice(&current_height.to_be_bytes());
+    proposal.executed = true;
+    overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
+    overlay.set(&format!("treasury/token-transfer/{id}"), event.clone())?;
+    gas.charge_event(event.len())?;
+    state.commit(overlay)?;
+    *ledger = candidate;
+    Ok(receipt("TreasuryTokenTransferExecuted", dao_id, id, &event, &gas, state))
+}
+
 pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<DaoProposal, String> {
     if !valid_id(dao_id) || !valid_id(id) { return Err("invalid DAO or proposal identifier".into()); }
     let overlay = state.begin(dao_id, AccessMode::View)?;
