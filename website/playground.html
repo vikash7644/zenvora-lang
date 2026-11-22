@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#080b12">
-<meta name="description" content="Try a small, safe browser-based Zenvora Lang syntax playground.">
-<title>Zenvora Lang Playground</title>
+<meta name="description" content="Try a small, safe browser-based QORVYNT syntax playground.">
+<title>QORVYNT Playground</title>
 <style>
 :root{color-scheme:dark;--bg:#080b12;--panel:#101725;--line:#29364a;--text:#f3f6fc;--muted:#9aa9bc;--blue:#8da9ff;--orange:#ff9e57;--red:#ff5c65;--green:#8de3b0}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% 0%,#192748 0,transparent 40%),var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit;text-decoration:none}.wrap{width:min(1100px,calc(100% - 32px));margin:auto}.nav{height:72px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff12}.brand{display:flex;gap:10px;align-items:center;font-weight:850;letter-spacing:.06em}.mark{display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:linear-gradient(140deg,#ffd166,#ff8b62,#ff5c65);color:#111;font-weight:950}.back{color:#bdc9dc;font-size:14px}.hero{padding:54px 0 28px}.tag{color:var(--orange);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.hero h1{font-size:clamp(34px,6vw,56px);letter-spacing:-.05em;line-height:1.08;margin:10px 0}.hero p{color:var(--muted);max-width:720px}.lab{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin:20px 0 26px}.panel{background:linear-gradient(145deg,#111a29,#0d121d);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-width:0}.panelhead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;color:#cbd6e8;font-size:13px;font-weight:750}.dots{display:flex;gap:5px}.dots i{width:8px;height:8px;border-radius:50%;background:#ff6a68}.dots i:nth-child(2){background:#ffd166}.dots i:nth-child(3){background:#72d8a0}textarea{display:block;width:100%;min-height:340px;resize:vertical;border:0;outline:none;background:#090e17;color:#dce6fa;padding:20px;font:14px/1.8 ui-monospace,SFMono-Regular,Menlo,monospace;tab-size:4;white-space:pre;overflow:auto}textarea:focus{box-shadow:inset 0 0 0 1px #6884cf}.actions{display:flex;gap:9px;flex-wrap:wrap;padding:14px;background:#0b1019;border-top:1px solid var(--line)}button,.btn{border:1px solid #3a4961;border-radius:10px;padding:10px 14px;background:#ffffff06;color:var(--text);font:700 13px inherit;cursor:pointer}button:hover,.btn:hover{border-color:#839bc5}.primary{background:linear-gradient(110deg,var(--red),var(--orange));border-color:transparent;color:#15131a}.examples{display:flex;gap:7px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}.examples button{padding:7px 10px;font-size:12px}.output{min-height:280px;padding:18px;font:14px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--green)}.placeholder{color:#74839b}.error{color:#ff858b}.status{font-size:11px;color:#a9bad3;border:1px solid #3a4961;border-radius:7px;padding:4px 7px}.note{border:1px solid #3d3427;background:#17140f;border-radius:14px;padding:15px 17px;color:#c9bba6;font-size:13px;margin:16px 0 58px}.note strong{color:#ffd4a6}.footer{border-top:1px solid #ffffff12;color:#8290a6;font-size:12px;padding:22px 0 30px}.footerin{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -12,13 +12,13 @@
 </style>
 </head>
 <body>
-<header class="wrap nav"><a class="brand" href="index.html"><span class="mark">Z</span><span>ZENVORA</span></a><a class="back" href="index.html">← Ecosystem home</a></header>
+<header class="wrap nav"><a class="brand" href="index.html"><span class="mark">Z</span><span>QORVYNT</span></a><a class="back" href="index.html">← Ecosystem home</a></header>
 <main class="wrap">
-<section class="hero"><div class="tag">Developer tools · Expanded browser preview</div><h1>Zenvora Lang <span style="color:#9bb4ff">Playground.</span></h1><p>Try Zenvora syntax in your browser: variables, strings, arithmetic, booleans, conditions, loops, functions, arrays, maps, and safe standard-library helpers. Edit the program, press Run, and inspect the output — no installation or account required.</p></section>
+<section class="hero"><div class="tag">Developer tools · Expanded browser preview</div><h1>QORVYNT <span style="color:#9bb4ff">Playground.</span></h1><p>Try QORVYNT syntax in your browser: variables, strings, arithmetic, booleans, conditions, loops, functions, arrays, maps, and safe standard-library helpers. Edit the program, press Run, and inspect the output — no installation or account required.</p></section>
 <div class="lab">
 <section class="panel" aria-label="Code editor"><div class="panelhead"><span>hello.qv</span><span class="status">BROWSER DEMO</span></div>
 <div class="examples" aria-label="Load an example"><button data-example="variables">Variables + Strings</button><button data-example="math">Arithmetic</button><button data-example="booleans">Booleans</button><button data-example="condition">If / Otherwise</button><button data-example="loops">Repeat / Break / Continue</button><button data-example="functions">Functions</button><button data-example="collections">Arrays + Maps</button><button data-example="stdlib">Standard Library</button><button data-example="combined">Combined Demo</button></div>
-<textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Zenvora code editor"># Welcome to Zenvora Lang
+<textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="QORVYNT code editor"># Welcome to QORVYNT
 define a := 10
 define b := 20
 show a + b
@@ -26,21 +26,21 @@ show a * 2</textarea>
 <div class="actions"><button class="primary" id="run">▶ Run program</button><button id="reset">Reset example</button><button id="copy">Copy code</button></div></section>
 <section class="panel" aria-label="Program output"><div class="panelhead"><span>Output</span><span class="status" id="status">READY</span></div><div class="output" id="output"><span class="placeholder">Your program output will appear here.</span></div></section>
 </div>
-<div class="note"><strong>Important:</strong> this is a lightweight browser demo for basic declarations, assignments and expressions. It is not the Rust compiler, and it does not support every Zenvora Lang feature. For the real compiler and test suite, visit the <a href="https://github.com/vikash7644/zenvora-lang" style="text-decoration:underline">source repository ↗</a>. Never paste secrets or private keys into code examples.</div>
+<div class="note"><strong>Important:</strong> this is a lightweight browser demo for basic declarations, assignments and expressions. It is not the canonical QORVYNT compiler/QVM, and it does not support every QORVYNT feature. For the real compiler and test suite, visit the <a href="https://github.com/vikash7644/zenvora-lang" style="text-decoration:underline">source repository ↗</a>. Never paste secrets or private keys into code examples.</div>
 </main>
-<footer class="footer"><div class="wrap footerin"><span>ZENVORA · Open development</span><span>Experimental preview — verify all behavior against the compiler</span></div></footer>
+<footer class="footer"><div class="wrap footerin"><span>QORVYNT · Open development</span><span>Experimental preview — verify all behavior against the compiler</span></div></footer>
 <script>
 const code=document.getElementById('code'), output=document.getElementById('output'), status=document.getElementById('status');
 const examples={
- variables:'# Variables, strings, and output\ndefine name := "Zenvora"\ndefine count := 3\nshow "Hello, " + name\nshow count',
+ variables:'# Variables, strings, and output\ndefine name := "QORVYNT"\ndefine count := 3\nshow "Hello, " + name\nshow count',
  math:'# Arithmetic and operator precedence\ndefine a := 10\ndefine b := 20\nshow a + b\nshow a * 2\nshow (a + b) / 3',
  booleans:'# Boolean values and comparisons\ndefine ready := true\ndefine count := 4\nshow ready\nshow count >= 3\nshow not ready',
  condition:'# If / otherwise\ndefine score := 82\nif score >= 60 {\n  show "Passed"\n} otherwise {\n  show "Try again"\n}',
  loops:'# Repeat, break, and continue\ndefine count := 0\nrepeat count < 5 {\n  count := count + 1\n  if count == 2 {\n    continue\n  }\n  show count\n  if count == 4 {\n    break\n  }\n}',
  functions:'# Functions, parameters, and return values\nshow multiply(6, 7)\nfn multiply(left, right) {\n  return left * right\n}',
- collections:'# Arrays, maps, and collection helpers\ndefine numbers := array(10, 20, 30)\nshow numbers\nshow get(numbers, 1)\nshow len(numbers)\ndefine profile := map("name", "Zenvora", "level", 8)\nshow get(profile, "name")\nshow keys(profile)',
+ collections:'# Arrays, maps, and collection helpers\ndefine numbers := array(10, 20, 30)\nshow numbers\nshow get(numbers, 1)\nshow len(numbers)\ndefine profile := map("name", "QORVYNT", "level", 8)\nshow get(profile, "name")\nshow keys(profile)',
  stdlib:'# Standard-library preview\nshow type_of(42)\nshow to_string(true)\nshow abs(-15)\nshow min(7, 3)\nshow range(1, 6)',
- combined:'# Functions + conditions + loops + collections\ndefine features := array("functions", "loops", "collections")\nshow "Building with Zenvora"\nshow len(features)\ndefine count := 1\nrepeat count <= 3 {\n  if count == 2 {\n    show "Build step"\n  } otherwise {\n    show count\n  }\n  count := count + 1\n}\nshow multiply(6, 7)\nfn multiply(a, b) {\n  return a * b\n}'
+ combined:'# Functions + conditions + loops + collections\ndefine features := array("functions", "loops", "collections")\nshow "Building with QORVYNT"\nshow len(features)\ndefine count := 1\nrepeat count <= 3 {\n  if count == 2 {\n    show "Build step"\n  } otherwise {\n    show count\n  }\n  count := count + 1\n}\nshow multiply(6, 7)\nfn multiply(a, b) {\n  return a * b\n}'
 };
 let currentExample='variables';
 function tokenize(source){const out=[];let i=0;while(i<source.length){if(/\s/.test(source[i])){i++;continue}const rest=source.slice(i);const str=rest.match(/^"(?:\\.|[^"\\])*"/);if(str){out.push({type:'string',value:str[0].slice(1,-1).replace(/\\n/g,'\n').replace(/\\r/g,'\r').replace(/\\t/g,'\t').replace(/\\"/g,'"').replace(/\\\\/g,'\\')});i+=str[0].length;continue}const m=rest.match(/^(\d+|[A-Za-z_][A-Za-z0-9_]*|==|!=|<=|>=|&&|\|\||[()+\-*/%\[\],<>!])/);if(!m)throw Error('Unexpected character: '+source[i]);out.push({type:'token',value:m[0]});i+=m[0].length}return out}
