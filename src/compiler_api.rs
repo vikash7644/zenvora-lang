@@ -182,13 +182,13 @@ mod tests {
     #[test]
     fn health_endpoint_reports_qorvynt_identity_and_explicit_host() {
         let response = response_for(
-            b"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n",
+            b"GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n",
         );
         assert!(response.starts_with("HTTP/1.1 200 OK"));
-        assert!(response.contains("\\"service\\":\\"qorvynt-compiler-api\\""));
-        assert!(response.contains("\\"language\\":\\"QORVYNT\\""));
-        assert!(response.contains("\\"compiler\\":\\"QORVYNT\\""));
-        assert!(response.contains("\\"compiler_host\\":\\"Rust\\""));
+        assert!(response.contains(r#""service":"qorvynt-compiler-api""#));
+        assert!(response.contains(r#""language":"QORVYNT""#));
+        assert!(response.contains(r#""compiler":"QORVYNT""#));
+        assert!(response.contains(r#""compiler_host":"Rust""#));
         assert!(!response.contains("zenvora-rust"));
     }
 
