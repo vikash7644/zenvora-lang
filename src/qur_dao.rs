@@ -89,6 +89,10 @@ fn hex_digest(bytes: &[u8; 32]) -> String {
     out
 }
 
+fn is_lower_hex_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 fn weighted_snapshot_digest(token: &str, holders: &[(String, u64)]) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(b"QORVYNT_DAO_WEIGHTED_SNAPSHOT_V1\0");
@@ -437,6 +441,20 @@ pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &s
     let proposal = get_proposal(state, dao_id, id)?;
     if proposal.voting_token.as_deref() != Some(token) {
         return Err("proposal voting token does not match the selected token".into());
+    }
+    let anchor_fields = [
+        proposal.snapshot_chain_id.is_some(),
+        proposal.snapshot_block_height.is_some(),
+        proposal.snapshot_block_hash.is_some(),
+        proposal.snapshot_chain_state_root.is_some(),
+    ];
+    if anchor_fields.iter().any(|present| *present) {
+        if !anchor_fields.iter().all(|present| *present)
+            || proposal.snapshot_chain_id == Some(0)
+            || !proposal.snapshot_block_hash.as_deref().is_some_and(is_lower_hex_digest)
+            || !proposal.snapshot_chain_state_root.as_deref().is_some_and(is_lower_hex_digest) {
+            return Err("weighted DAO snapshot has an incomplete or malformed chain anchor".into());
+        }
     }
     let prefix = format!("voting_power/{id}/");
     let snapshot_entries = state.entries_with_prefix(dao_id, &prefix)?;
