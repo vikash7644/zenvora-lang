@@ -570,25 +570,6 @@ fn finalize_proposal_at_height(state: &mut ContractState, dao_id: &str, id: &str
     Ok(receipt("ProposalFinalized", dao_id, id, &event_payload, &gas, state))
 }
 
-/// Finalize a DAO proposal using a tip obtained from a replay-verified local block store.
-/// This anchor is local-store verified, not a distributed finality certificate.
-pub(crate) fn finalize_proposal_at_verified_anchor(
-    state: &mut ContractState, dao_id: &str, id: &str,
-    anchor: super::block_store::VerifiedBlockAnchor, gas_limit: u64,
-) -> Result<DaoReceipt, String> {
-    if anchor.chain_id() == 0 { return Err("verified DAO anchor has an invalid chain ID".into()); }
-    finalize_proposal_at_height(state, dao_id, id, anchor.height(), gas_limit)
-}
-
-/// Execute a treasury proposal using a replay-verified local block-store tip.
-pub(crate) fn execute_treasury_proposal_at_verified_anchor(
-    state: &mut ContractState, dao_id: &str, id: &str,
-    anchor: super::block_store::VerifiedBlockAnchor, gas_limit: u64,
-) -> Result<DaoReceipt, String> {
-    if anchor.chain_id() == 0 { return Err("verified DAO anchor has an invalid chain ID".into()); }
-    execute_treasury_proposal(state, dao_id, id, anchor.height(), gas_limit)
-}
-
 /// Fund the local DAO treasury ledger. This is accounting state, not a transfer of real chain assets.
 pub fn fund_treasury(state: &mut ContractState, dao_id: &str, amount: u64,
     gas_limit: u64) -> Result<DaoReceipt, String> {
