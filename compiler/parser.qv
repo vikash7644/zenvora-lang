@@ -258,51 +258,43 @@ fn find_block_end(tokens, open_pos) {
   return map("pos", pos, "error", "")
 }
 
-# Parse a complete conditional tail. Recursion supports arbitrary
-# "otherwise if" chains and a final "otherwise" block.
-fn parse_if_statement(tokens, condition_pos, line) {
-  define condition := parse_expr(tokens, condition_pos)
-  if get(condition, "error") != "" {
-    return result("", get(condition, "pos"), get(condition, "error"))
-  }
-  define open_pos := get(condition, "pos")
-  define block_end := find_block_end(tokens, open_pos)
-  if get(block_end, "error") != "" {
-    return result("", get(block_end, "pos"), get(block_end, "error"))
-  }
-  define close_pos := get(block_end, "pos")
-  define body_tokens := collect_tokens(tokens, open_pos + 1, close_pos)
-  define body_result := parse_program(body_tokens)
-  if get(body_result, "error") != "" {
-    return result("", close_pos + 1, get(body_result, "error"))
-  }
-  define else_ast := array()
-  define next_pos := close_pos + 1
-  if next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
-    define else_open := next_pos + 1
-    if else_open < len(tokens) and get(at(tokens, else_open), "value") == "if" {
-      define nested := parse_if_statement(tokens, else_open + 1, get(at(tokens, else_open), "line"))
-      if get(nested, "error") != "" {
-        return nested
-      }
-      else_ast := push(else_ast, get(nested, "ast"))
-      next_pos := get(nested, "pos")
+# Find the exclusive token end of an if statement, including chained
+# "otherwise if" clauses and an optional final "otherwise" block.
+fn find_if_statement_end(tokens, condition_pos) {
+  define current_condition_pos := condition_pos
+  define next_pos := condition_pos
+  define done := false
+  define err := ""
+  repeat not done and err == "" {
+    define condition := parse_expr(tokens, current_condition_pos)
+    if get(condition, "error") != "" {
+      err := get(condition, "error")
     } otherwise {
-      define else_end := find_block_end(tokens, else_open)
-      if get(else_end, "error") != "" {
-        return result("", get(else_end, "pos"), get(else_end, "error"))
+      define block_end := find_block_end(tokens, get(condition, "pos"))
+      if get(block_end, "error") != "" {
+        err := get(block_end, "error")
+      } otherwise {
+        next_pos := get(block_end, "pos") + 1
+        if next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
+          define else_open := next_pos + 1
+          if else_open < len(tokens) and get(at(tokens, else_open), "value") == "if" {
+            current_condition_pos := else_open + 1
+          } otherwise {
+            define else_end := find_block_end(tokens, else_open)
+            if get(else_end, "error") != "" {
+              err := get(else_end, "error")
+            } otherwise {
+              next_pos := get(else_end, "pos") + 1
+              done := true
+            }
+          }
+        } otherwise {
+          done := true
+        }
       }
-      define else_close := get(else_end, "pos")
-      define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
-      define else_result := parse_program(else_tokens)
-      if get(else_result, "error") != "" {
-        return result("", else_close + 1, get(else_result, "error"))
-      }
-      else_ast := get(else_result, "ast")
-      next_pos := else_close + 1
     }
   }
-  return result(node("if", "", get(condition, "ast"), map("then", get(body_result, "ast"), "otherwise", else_ast), line), next_pos, "")
+  return map("pos", next_pos, "error", err)
 }
 
 fn parse_program(tokens) {
@@ -366,38 +358,73 @@ fn parse_program(tokens) {
       }
     } otherwise {
       if kw == "if" or kw == "repeat" {
-        if kw == "if" {
-          define conditional := parse_if_statement(tokens, pos + 1, ln)
-          if get(conditional, "error") != "" {
-            err := get(conditional, "error")
-          } otherwise {
-            ast := push(ast, get(conditional, "ast"))
-            pos := get(conditional, "pos")
-          }
+        define condition := parse_expr(tokens, pos + 1)
+        if get(condition, "error") != "" {
+          err := get(condition, "error")
         } otherwise {
-          define condition := parse_expr(tokens, pos + 1)
-          if get(condition, "error") != "" {
-            err := get(condition, "error")
+          define open_pos := get(condition, "pos")
+          define block_end := find_block_end(tokens, open_pos)
+          if get(block_end, "error") != "" {
+            err := get(block_end, "error")
           } otherwise {
-            define open_pos := get(condition, "pos")
-            define block_end := find_block_end(tokens, open_pos)
-            if get(block_end, "error") != "" {
-              err := get(block_end, "error")
+            define close_pos := get(block_end, "pos")
+            define body_tokens := collect_tokens(tokens, open_pos + 1, close_pos)
+            define body_result := parse_program(body_tokens)
+            if get(body_result, "error") != "" {
+              err := get(body_result, "error")
             } otherwise {
-              define close_pos := get(block_end, "pos")
-              define body_tokens := collect_tokens(tokens, open_pos + 1, close_pos)
-              define body_result := parse_program(body_tokens)
-              if get(body_result, "error") != "" {
-                err := get(body_result, "error")
+              define next_pos := close_pos + 1
+              if kw == "if" and next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
+                define else_open := next_pos + 1
+                if else_open < len(tokens) and get(at(tokens, else_open), "value") == "if" {
+                  define nested_end := find_if_statement_end(tokens, else_open + 1)
+                  if get(nested_end, "error") != "" {
+                    err := get(nested_end, "error")
+                  } otherwise {
+                    define nested_tokens := collect_tokens(tokens, else_open, get(nested_end, "pos"))
+                    define nested_result := parse_program(nested_tokens)
+                    if get(nested_result, "error") != "" {
+                      err := get(nested_result, "error")
+                    } otherwise {
+                      ast := push(ast, node("if", "", get(condition, "ast"), map("then", get(body_result, "ast"), "otherwise", get(nested_result, "ast")), ln))
+                      next_pos := get(nested_end, "pos")
+                    }
+                  }
+                } otherwise {
+                  define else_end := find_block_end(tokens, else_open)
+                  if get(else_end, "error") != "" {
+                    err := get(else_end, "error")
+                  } otherwise {
+                    define else_close := get(else_end, "pos")
+                    define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
+                    define else_result := parse_program(else_tokens)
+                    if get(else_result, "error") != "" {
+                      err := get(else_result, "error")
+                    } otherwise {
+                      ast := push(ast, node("if", "", get(condition, "ast"), map("then", get(body_result, "ast"), "otherwise", get(else_result, "ast")), ln))
+                      next_pos := else_close + 1
+                    }
+                  }
+                }
               } otherwise {
-                ast := push(ast, node("repeat", "", get(condition, "ast"), get(body_result, "ast"), ln))
-                pos := close_pos + 1
+                if kw == "if" {
+                  ast := push(ast, node("if", "", get(condition, "ast"), map("then", get(body_result, "ast"), "otherwise", array()), ln))
+                } otherwise {
+                  ast := push(ast, node("repeat", "", get(condition, "ast"), get(body_result, "ast"), ln))
+                }
+                next_pos := close_pos + 1
+              }
+              if err == "" {
+                if kw == "repeat" {
+                  ast := push(ast, node("repeat", "", get(condition, "ast"), get(body_result, "ast"), ln))
+                }
+                pos := next_pos
               }
             }
           }
         }
       } otherwise {
-                  if kw == "return" {
+                if kw == "return" {
             define expr := parse_expr(tokens, pos + 1)
             if get(expr, "error") != "" {
             err := get(expr, "error")
