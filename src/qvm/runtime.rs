@@ -5,15 +5,14 @@
 //! boundary is to replace these host helper dependencies with a runtime API.
 
 use crate::{
-    builtin, contract_gas, MAX_BYTECODE_INSTRUCTIONS, MAX_BYTECODE_STRING_BYTES,
-    MAX_CALL_ARGUMENTS, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUES,
+    builtin, contract_gas,
 };
 use crate::qvm::runtime_support::{
     binding_map_size, binding_size, ensure_value_depth, pop_stack_value,
     push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update,
     set_indexed_value, value_to_string,
 };
-use crate::qvm::{Op, Value};
+use crate::qvm::{limits::{MAX_BYTECODE_INSTRUCTIONS, MAX_BYTECODE_STRING_BYTES, MAX_CALL_ARGUMENTS, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUES}, Op, Value};
 use std::collections::HashMap;
 
 pub(crate) fn run_with_output_metered<F>(
