@@ -55,6 +55,9 @@ ready.
 
 ## Validation
 
-The repository's Windows Studio workflow builds the frontend and checks the
-native Tauri host. The QORVYNT CI also runs compiler, VM and public API tests.
-Check the latest GitHub Actions result before treating a build as verified.
+The repository's Windows Studio workflow runs `tauri build` on Windows and
+uploads the generated MSI and NSIS installers as a 14-day CI artifact. The
+workflow also builds the frontend as part of the Tauri bundle. The QORVYNT CI
+runs compiler, VM and public API tests. A successful CI artifact is a build
+preview, not a signed or published installer release. Check the latest GitHub
+Actions result before treating a build as verified.
