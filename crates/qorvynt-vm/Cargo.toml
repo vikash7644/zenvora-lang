@@ -1,0 +1,10 @@
+[package]
+name = "qorvynt-vm"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone QORVYNT bytecode virtual machine runtime"
+license = "MIT"
+
+[lib]
+name = "qorvynt_vm"
+path = "src/lib.rs"
