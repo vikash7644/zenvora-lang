@@ -3419,6 +3419,99 @@ fn run_contract_command(
     Ok(receipt)
 }
 
+
+fn dao_tx_journal_path(ledger_path: &Path) -> std::path::PathBuf {
+    let mut name = ledger_path.as_os_str().to_os_string();
+    name.push(".qorvynt-dao-journal");
+    std::path::PathBuf::from(name)
+}
+
+fn dao_tx_put_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
+    let len = u32::try_from(bytes.len()).map_err(|_| "DAO journal field exceeds limit")?;
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(bytes);
+    Ok(())
+}
+
+fn dao_tx_take<'a>(bytes: &'a [u8], pos: &mut usize, len: usize) -> Result<&'a [u8], String> {
+    let end = pos.checked_add(len).ok_or("DAO journal length overflow")?;
+    if end > bytes.len() { return Err("truncated DAO transaction journal".into()); }
+    let value = &bytes[*pos..end];
+    *pos = end;
+    Ok(value)
+}
+
+fn dao_tx_read_bytes<'a>(bytes: &'a [u8], pos: &mut usize) -> Result<&'a [u8], String> {
+    let raw = dao_tx_take(bytes, pos, 4)?;
+    let len = u32::from_be_bytes(raw.try_into().map_err(|_| "invalid DAO journal length")?) as usize;
+    dao_tx_take(bytes, pos, len)
+}
+
+fn dao_tx_atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let file_name = path.file_name().ok_or("DAO transaction output path must name a file")?;
+    let mut temp_name = file_name.to_os_string();
+    temp_name.push(format!(".qorvynt-tmp-{}", std::process::id()));
+    let temp_path = path.with_file_name(temp_name);
+    let result = (|| {
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true)
+            .open(&temp_path).map_err(|e| format!("cannot create DAO transaction staging file: {e}"))?;
+        file.write_all(bytes).map_err(|e| format!("cannot write DAO transaction staging file: {e}"))?;
+        file.sync_all().map_err(|e| format!("cannot sync DAO transaction staging file: {e}"))?;
+        fs::rename(&temp_path, path).map_err(|e| format!("cannot atomically install DAO transaction file: {e}"))?;
+        Ok(())
+    })();
+    if result.is_err() { let _ = fs::remove_file(&temp_path); }
+    result
+}
+
+/// Recover a committed write-ahead journal before reading either side of a DAO/token transaction.
+fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Result<(), String> {
+    let journal_path = dao_tx_journal_path(ledger_path);
+    if !journal_path.exists() { return Ok(()); }
+    let bytes = fs::read(&journal_path).map_err(|e| format!("cannot read DAO transaction journal: {e}"))?;
+    let mut pos = 0usize;
+    if dao_tx_take(&bytes, &mut pos, 20)? != b"QORVYNT_DAO_TX_V1\0" {
+        return Err("unsupported DAO transaction journal version".into());
+    }
+    let stored_ledger = std::str::from_utf8(dao_tx_read_bytes(&bytes, &mut pos)?)
+        .map_err(|_| "DAO journal ledger path is not UTF-8")?;
+    let stored_state = std::str::from_utf8(dao_tx_read_bytes(&bytes, &mut pos)?)
+        .map_err(|_| "DAO journal state path is not UTF-8")?;
+    if Path::new(stored_ledger) != ledger_path || Path::new(stored_state) != state_path {
+        return Err("DAO transaction journal paths do not match this command".into());
+    }
+    let ledger_len_raw = dao_tx_take(&bytes, &mut pos, 8)?;
+    let ledger_len = u64::from_be_bytes(ledger_len_raw.try_into().map_err(|_| "invalid DAO journal ledger length")?) as usize;
+    let ledger_bytes = dao_tx_take(&bytes, &mut pos, ledger_len)?;
+    let state_len_raw = dao_tx_take(&bytes, &mut pos, 8)?;
+    let state_len = u64::from_be_bytes(state_len_raw.try_into().map_err(|_| "invalid DAO journal state length")?) as usize;
+    let state_bytes = dao_tx_take(&bytes, &mut pos, state_len)?;
+    if pos != bytes.len() { return Err("trailing bytes in DAO transaction journal".into()); }
+    dao_tx_atomic_write(ledger_path, ledger_bytes)?;
+    dao_tx_atomic_write(state_path, state_bytes)?;
+    fs::remove_file(&journal_path).map_err(|e| format!("cannot remove recovered DAO transaction journal: {e}"))?;
+    Ok(())
+}
+
+/// Persist both state files through a durable write-ahead journal; an interrupted publish is replayed on next use.
+fn persist_dao_token_transaction(ledger_path: &Path, state_path: &Path,
+    ledger_bytes: &[u8], state_bytes: &[u8]) -> Result<(), String> {
+    if ledger_path == state_path { return Err("DAO ledger and state snapshot paths must differ".into()); }
+    let ledger_name = ledger_path.to_str().ok_or("DAO ledger path must be UTF-8")?;
+    let state_name = state_path.to_str().ok_or("DAO state path must be UTF-8")?;
+    let mut journal = b"QORVYNT_DAO_TX_V1\0".to_vec();
+    dao_tx_put_bytes(&mut journal, ledger_name.as_bytes())?;
+    dao_tx_put_bytes(&mut journal, state_name.as_bytes())?;
+    journal.extend_from_slice(&u64::try_from(ledger_bytes.len()).map_err(|_| "DAO ledger payload too large")?.to_be_bytes());
+    journal.extend_from_slice(ledger_bytes);
+    journal.extend_from_slice(&u64::try_from(state_bytes.len()).map_err(|_| "DAO state payload too large")?.to_be_bytes());
+    journal.extend_from_slice(state_bytes);
+    let journal_path = dao_tx_journal_path(ledger_path);
+    dao_tx_atomic_write(&journal_path, &journal)?;
+    recover_dao_token_transaction(ledger_path, state_path)
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
@@ -3464,6 +3557,7 @@ fn main() {
             process::exit(2);
         }
         let result = (|| -> Result<(), String> {
+            recover_dao_token_transaction(Path::new(&args[2]), Path::new(&args[3]))?;
             let raw = fs::read_to_string(&args[2]).map_err(|e| format!("cannot read QUR token ledger: {e}"))?;
             let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("invalid QUR token ledger JSON: {e}"))?;
             let ledger = qur_runtime::QurLedger::from_json(&value)?;
@@ -3537,12 +3631,9 @@ fn main() {
             let receipt = qur_dao::execute_treasury_token_proposal(
                 &mut state, &mut ledger, &args[4], &args[5], &args[6], height, gas)?;
             let encoded_ledger = serde_json::to_string_pretty(&ledger.to_json()).map_err(|e| e.to_string())?;
-            let ledger_tmp = format!("{}.tmp", args[2]);
-            let state_tmp = format!("{}.tmp", args[3]);
-            fs::write(&ledger_tmp, encoded_ledger).map_err(|e| format!("cannot stage QUR token ledger: {e}"))?;
-            fs::write(&state_tmp, state.encode_snapshot()?).map_err(|e| format!("cannot stage DAO state: {e}"))?;
-            fs::rename(&ledger_tmp, &args[2]).map_err(|e| format!("cannot publish QUR token ledger: {e}"))?;
-            fs::rename(&state_tmp, snapshot).map_err(|e| format!("cannot publish DAO state snapshot: {e}"))?;
+            let encoded_state = state.encode_snapshot()?;
+            persist_dao_token_transaction(Path::new(&args[2]), snapshot,
+                encoded_ledger.as_bytes(), &encoded_state)?;
             println!("operation={}", receipt.operation);
             println!("dao_id={}", receipt.dao_id);
             println!("proposal_id={}", receipt.proposal_id);
