@@ -37,7 +37,7 @@ jobs:
         run: cargo build --locked --release --bin qorvynt
 
       - name: Smoke-test release CLI
-        run: ./target/release/qorvynt examples/hello.qorvynt | grep -Fxq 35
+        run: ./target/release/qorvynt examples/hello.qv | grep -Fxq 35
 
       - name: Export dependency inventory
         run: |
