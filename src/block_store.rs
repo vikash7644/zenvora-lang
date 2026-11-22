@@ -157,9 +157,11 @@ impl BlockStore {
             .to_os_string();
         temporary_name.push(format!(".zblocks-tmp-{}", std::process::id()));
         let temporary = path.with_file_name(temporary_name);
+        let mut created_temporary = false;
         let result = (|| -> Result<(), String> {
             let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary)
                 .map_err(|error| format!("cannot create exclusive block-store temporary file: {error}"))?;
+            created_temporary = true;
             writeln!(file, "{STORE_VERSION}").map_err(|error| format!("cannot write block store: {error}"))?;
             writeln!(file, "C\t{}", self.chain_id).map_err(|error| format!("cannot write chain ID: {error}"))?;
             for (address, balance) in &self.genesis_balances {
@@ -197,7 +199,7 @@ impl BlockStore {
             }
             Ok(())
         })();
-        if result.is_err() {
+        if result.is_err() && created_temporary {
             let _ = std::fs::remove_file(&temporary);
         }
         result
