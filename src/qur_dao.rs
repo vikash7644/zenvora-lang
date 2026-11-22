@@ -33,6 +33,10 @@ pub struct DaoProposal {
     pub snapshot_total_weight: u64,
     pub snapshot_ledger_root: Option<String>,
     pub voting_snapshot_root: Option<String>,
+    pub snapshot_chain_id: Option<u64>,
+    pub snapshot_block_height: Option<u64>,
+    pub snapshot_block_hash: Option<String>,
+    pub snapshot_chain_state_root: Option<String>,
 }
 
 impl DaoProposal {
@@ -54,7 +58,11 @@ impl DaoProposal {
             "voting_token": self.voting_token,
             "snapshot_total_weight": self.snapshot_total_weight,
             "snapshot_ledger_root": self.snapshot_ledger_root,
-            "voting_snapshot_root": self.voting_snapshot_root
+            "voting_snapshot_root": self.voting_snapshot_root,
+            "snapshot_chain_id": self.snapshot_chain_id,
+            "snapshot_block_height": self.snapshot_block_height,
+            "snapshot_block_hash": self.snapshot_block_hash,
+            "snapshot_chain_state_root": self.snapshot_chain_state_root
         })
     }
 }
@@ -128,7 +136,11 @@ fn proposal_bytes(proposal: &DaoProposal) -> Result<Vec<u8>, String> {
         "voting_token": proposal.voting_token,
         "snapshot_total_weight": proposal.snapshot_total_weight,
         "snapshot_ledger_root": proposal.snapshot_ledger_root,
-        "voting_snapshot_root": proposal.voting_snapshot_root
+        "voting_snapshot_root": proposal.voting_snapshot_root,
+        "snapshot_chain_id": proposal.snapshot_chain_id,
+        "snapshot_block_height": proposal.snapshot_block_height,
+        "snapshot_block_hash": proposal.snapshot_block_hash,
+        "snapshot_chain_state_root": proposal.snapshot_chain_state_root
     })).map_err(|e| e.to_string())
 }
 
@@ -159,6 +171,10 @@ fn parse_proposal(bytes: &[u8]) -> Result<DaoProposal, String> {
         snapshot_total_weight: value.get("snapshot_total_weight").and_then(|v| v.as_u64()).unwrap_or(0),
         snapshot_ledger_root: value.get("snapshot_ledger_root").and_then(|v| v.as_str()).map(str::to_owned),
         voting_snapshot_root: value.get("voting_snapshot_root").and_then(|v| v.as_str()).map(str::to_owned),
+        snapshot_chain_id: value.get("snapshot_chain_id").and_then(|v| v.as_u64()),
+        snapshot_block_height: value.get("snapshot_block_height").and_then(|v| v.as_u64()),
+        snapshot_block_hash: value.get("snapshot_block_hash").and_then(|v| v.as_str()).map(str::to_owned),
+        snapshot_chain_state_root: value.get("snapshot_chain_state_root").and_then(|v| v.as_str()).map(str::to_owned),
     })
 }
 fn vote_key(id: &str, voter: &str) -> String { format!("vote/{id}/{voter}") }
@@ -203,7 +219,8 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     let proposal = DaoProposal { id: id.into(), proposer: proposer.into(), title: title.into(),
         quorum, yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
         treasury_recipient: None, treasury_amount: 0, timelock_blocks: 0,
-        approved_at_height: None, executed: false, voting_token: None, snapshot_total_weight: 0, snapshot_ledger_root: None, voting_snapshot_root: None };
+        approved_at_height: None, executed: false, voting_token: None, snapshot_total_weight: 0, snapshot_ledger_root: None, voting_snapshot_root: None,
+        snapshot_chain_id: None, snapshot_block_height: None, snapshot_block_hash: None, snapshot_chain_state_root: None };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut event_payload = Vec::new();
     append_field(&mut event_payload, proposer.as_bytes());
@@ -262,6 +279,7 @@ pub fn create_weighted_proposal(state: &mut ContractState, ledger: &super::qur_r
         voting_token: Some(token.into()), snapshot_total_weight: total_weight,
         snapshot_ledger_root: Some(hex_digest(&ledger.state_root())),
         voting_snapshot_root: Some(hex_digest(&weighted_snapshot_digest(token, &holders))),
+        snapshot_chain_id: None, snapshot_block_height: None, snapshot_block_hash: None, snapshot_chain_state_root: None,
     };
     for (account, balance) in &holders {
         overlay.set(&format!("voting_power/{id}/{account}"), balance.to_be_bytes().to_vec())?;
@@ -302,6 +320,7 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
         treasury_recipient: Some(recipient.into()), treasury_amount: amount,
         timelock_blocks, approved_at_height: None, executed: false,
         voting_token: None, snapshot_total_weight: 0, snapshot_ledger_root: None, voting_snapshot_root: None,
+        snapshot_chain_id: None, snapshot_block_height: None, snapshot_block_hash: None, snapshot_chain_state_root: None,
     };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut payload = Vec::new();
