@@ -72,3 +72,20 @@ The repository separately contains experimental QVM-backed contract execution, d
 ### Deterministic transfer events
 
 Gas-metered token transfer receipts now include a `TokenTransfer` event with token, sender, recipient, amount, and a domain-separated SHA-256 event hash. The event payload is encoded with length-prefixed fields and charged through the versioned event gas schedule. The CLI prints the event and hash; CI checks the receipt fields. This is a local receipt/event prototype, not yet a canonical block receipt or a QVM bytecode event opcode.
+
+
+### DAO proposal and voting runtime (local prototype)
+
+The experimental DAO runtime persists proposal records and individual voter markers in the contract-state snapshot. It supports:
+
+```sh
+qorvynt --qur-dao-propose dao-state.bin community proposal1 alice "Fund public goods" 2 30000
+qorvynt --qur-dao-vote dao-state.bin community proposal1 alice yes 30000
+qorvynt --qur-dao-vote dao-state.bin community proposal1 bob yes 30000
+qorvynt --qur-dao-finalize dao-state.bin community proposal1 30000
+qorvynt --qur-dao-show dao-state.bin community proposal1
+```
+
+Each operation uses the deterministic local gas meter and an atomic contract-state overlay, and emits a state root plus a domain-separated event hash. A voter can vote only once per proposal. Finalization requires the configured vote-count quorum; if quorum is met, yes votes must strictly exceed no votes for approval. A tie is rejected. Proposal status is terminal after finalization.
+
+Important limitations: voter identifiers are currently caller-supplied labels, not authenticated wallet identities; quorum counts votes, not token-weighted voting power; there is no voting deadline, delegation, treasury execution, timelock, chain transaction admission, or consensus replay. An `Approved` status records the result only and does not execute arbitrary actions. Treat this as a local governance-engine prototype, not a production DAO.
