@@ -325,7 +325,7 @@ pub fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, 
     Ok(receipt("VoteCast", dao_id, id, &event_payload, &gas, state))
 }
 
-/// Verify a wallet signature and weight its vote by the wallet's current QUR token balance.
+/// Verify a wallet signature and weight its vote by the proposal's fixed token-holder snapshot.
 pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &str,
     token: &str, public_key: &VerifyingKey, signature: &Signature,
     choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
