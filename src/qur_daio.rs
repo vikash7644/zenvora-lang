@@ -141,6 +141,36 @@ pub fn assess_proposal(proposal: &DaoProposal) -> GovernanceAssessment {
     }
 
     if proposal.treasury_recipient.is_some() {
+        // Legacy unit-vote treasury proposals also need an explicit risk signal when
+        // they lack a replay anchor; weighted proposals are checked above.
+        if proposal.voting_token.is_none() {
+            let anchor_parts = [
+                proposal.snapshot_chain_id.is_some(),
+                proposal.snapshot_block_height.is_some(),
+                proposal.snapshot_block_hash.is_some(),
+                proposal.snapshot_chain_state_root.is_some(),
+            ];
+            let anchor_count = anchor_parts.iter().filter(|present| **present).count();
+            if anchor_count == 0 {
+                add(
+                    "UNANCHORED_TREASURY_ACTION",
+                    FindingSeverity::High,
+                    "Treasury proposal has no replay-verified chain snapshot anchor.",
+                    35,
+                );
+            } else if anchor_count != anchor_parts.len()
+                || proposal.snapshot_chain_id == Some(0)
+                || proposal.snapshot_block_hash.as_deref().map_or(true, |hash| !is_digest(hash))
+                || proposal.snapshot_chain_state_root.as_deref().map_or(true, |root| !is_digest(root))
+            {
+                add(
+                    "INCOMPLETE_TREASURY_ANCHOR",
+                    FindingSeverity::High,
+                    "Treasury proposal has incomplete or malformed chain-anchor metadata.",
+                    35,
+                );
+            }
+        }
         if proposal.treasury_amount == 0 {
             add(
                 "ZERO_VALUE_TREASURY_ACTION",
@@ -446,6 +476,39 @@ mod tests {
             finding.code == "MISSING_TREASURY_TIMELOCK"
         ));
         assert_eq!(assessment.risk_level, "review");
+    }
+
+    #[test]
+    fn unanchored_unit_vote_treasury_proposal_is_flagged_high_risk() {
+        let mut proposal = proposal();
+        proposal.treasury_recipient = Some("bob".into());
+        proposal.treasury_amount = 100;
+        proposal.timelock_blocks = 5;
+        proposal.approved_at_height = Some(10);
+
+        let assessment = assess_proposal(&proposal);
+        assert!(assessment.findings.iter().any(|finding|
+            finding.code == "UNANCHORED_TREASURY_ACTION"
+                && finding.severity == FindingSeverity::High
+        ));
+        assert_eq!(assessment.risk_level, "high");
+    }
+
+    #[test]
+    fn malformed_unit_vote_treasury_anchor_is_flagged_high_risk() {
+        let mut proposal = proposal();
+        proposal.treasury_recipient = Some("bob".into());
+        proposal.treasury_amount = 100;
+        proposal.timelock_blocks = 5;
+        proposal.snapshot_chain_id = Some(71);
+        proposal.snapshot_block_height = Some(12);
+        proposal.snapshot_block_hash = Some("not-a-digest".into());
+
+        let assessment = assess_proposal(&proposal);
+        assert!(assessment.findings.iter().any(|finding|
+            finding.code == "INCOMPLETE_TREASURY_ANCHOR"
+                && finding.severity == FindingSeverity::High
+        ));
     }
 
     #[test]
