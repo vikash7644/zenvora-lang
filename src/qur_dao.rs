@@ -253,6 +253,7 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
         yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
         treasury_recipient: Some(recipient.into()), treasury_amount: amount,
         timelock_blocks, approved_at_height: None, executed: false,
+        voting_token: None, snapshot_total_weight: 0,
     };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut payload = Vec::new();
