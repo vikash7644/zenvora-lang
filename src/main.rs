@@ -18,6 +18,7 @@ mod tx_pool;
 mod bytecode_v2;
 mod qvm;
 use qvm::{Op, Value};
+pub(crate) use qvm::limits::{MAX_VALUE_DEPTH, MAX_VALUE_BYTES, MAX_STACK_VALUE_BYTES, MAX_RUNTIME_STATE_BYTES, MAX_COLLECTION_ITEMS, MAX_BYTECODE_BYTES, MAX_BYTECODE_INSTRUCTIONS, MAX_BYTECODE_STRING_BYTES, MAX_CALL_ARGUMENTS, MAX_STACK_VALUES};
 pub(crate) use qvm::builtins::builtin_unchecked;
 pub(crate) use qvm::runtime_support::{
     binding_map_size, binding_size, builtin, check_map_capacity, ensure_value_depth,
@@ -1054,16 +1055,6 @@ const LEGACY_BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
-const MAX_VALUE_DEPTH: usize = 256;
-const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
-const MAX_STACK_VALUE_BYTES: usize = 16 * 1024 * 1024;
-const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
-const MAX_COLLECTION_ITEMS: usize = 100_000;
-const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
-const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
-const MAX_BYTECODE_STRING_BYTES: usize = 1024 * 1024;
-const MAX_CALL_ARGUMENTS: usize = 1024;
-const MAX_STACK_VALUES: usize = 65_536;
 
 fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
     let mut output = String::from(BYTECODE_HEADER);
