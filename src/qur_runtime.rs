@@ -323,7 +323,7 @@ supply = 100000000
         let mut oversized_balances = ledger;
         oversized_balances["balances"] = serde_json::json!(vec![serde_json::json!({
             "token": "GOLD", "account": "alice", "balance": 1
-        }); MAX_LEDGER_BALANCES + 1]);
+        }); super::MAX_LEDGER_BALANCES + 1]);
         assert!(QurLedger::from_json(&oversized_balances).unwrap_err().contains("1000000-entry safety limit"));
     }
 
