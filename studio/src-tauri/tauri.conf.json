@@ -31,6 +31,9 @@
       "msi"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "QORVYNT language IDE"
+    "shortDescription": "QORVYNT language IDE",
+    "icon": [
+      "icons/icon.ico"
+    ]
   }
 }
