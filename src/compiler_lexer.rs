@@ -1,3 +1,5 @@
+use crate::{MAX_BYTECODE_STRING_BYTES, MAX_SOURCE_TOKENS};
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Token {
     Number(i64), String(String), Bool(bool), Ident(String), And, Or, Not, Plus, Minus, Star, Slash,
@@ -104,3 +106,40 @@ pub(crate) fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), 
     Ok((out, columns))
 }
 
+
+
+#[cfg(test)]
+mod tests {
+    use super::{lex, lex_with_columns, Token};
+
+    #[test]
+    fn lexer_preserves_operator_precedence_tokens_and_columns() {
+        let (tokens, columns) = lex_with_columns("count >= 2 and count != 4").unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("count".into()), Token::GreaterEq, Token::Number(2),
+            Token::And, Token::Ident("count".into()), Token::NotEq,
+            Token::Number(4), Token::End,
+        ]);
+        assert_eq!(columns, vec![1, 7, 10, 12, 16, 22, 25, 26]);
+    }
+
+    #[test]
+    fn lexer_decodes_supported_string_escapes() {
+        assert_eq!(lex(r#""QORVYNT\n\"VM\\core\t""#).unwrap(), vec![
+            Token::String("QORVYNT\n\"VM\\core\t".into()), Token::End,
+        ]);
+    }
+
+    #[test]
+    fn lexer_rejects_unknown_escape_and_unterminated_string() {
+        assert!(lex(r#""bad\q""#).unwrap_err().contains("unsupported string escape"));
+        assert!(lex(r#""unfinished"#).unwrap_err().contains("unterminated string literal"));
+    }
+
+    #[test]
+    fn lexer_stops_at_hash_comment_and_reports_end_column() {
+        let (tokens, columns) = lex_with_columns("show 42 # comment").unwrap();
+        assert_eq!(tokens, vec![Token::Ident("show".into()), Token::Number(42), Token::End]);
+        assert_eq!(columns, vec![1, 6, 18]);
+    }
+}
