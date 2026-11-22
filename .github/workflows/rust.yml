@@ -82,6 +82,7 @@ jobs:
           cargo run --locked -- --qur-token-init examples/qur/manifest.qv /tmp/qorvynt-qvm-ledger.json
           cargo run --locked -- --qur-token-transfer-qvm /tmp/qorvynt-qvm-ledger.json /tmp/qorvynt-qvm-state.bin qur_tokens GOLD genesis alice 25 30000 | tee /tmp/qorvynt-qvm-receipt.txt
           grep -Fxq "event=TokenTransfer" /tmp/qorvynt-qvm-receipt.txt
+          grep -Eq "^execution_state_root=[0-9a-f]{64}$" /tmp/qorvynt-qvm-receipt.txt
           grep -Fxq "event_token=GOLD event_from=genesis event_to=alice event_amount=25" /tmp/qorvynt-qvm-receipt.txt
           cargo run --locked -- --qur-token-balance /tmp/qorvynt-qvm-ledger.json GOLD alice | grep -Fxq 25
           set +e
