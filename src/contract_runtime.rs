@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn source_outside_contract_is_not_executed_during_invocation() {
-        let source = format!("show 999\\n{}\\nshow 888\\n", COUNTER);
+        let source = format!("show 999\n{}\nshow 888\n", COUNTER);
         let mut state = ContractState::new();
         let receipt = execute(
             &source,
