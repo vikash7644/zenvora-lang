@@ -58,8 +58,11 @@ jobs:
       - name: Upload static website
         uses: actions/upload-pages-artifact@v3
         with:
+          name: qorvynt-site-${{ github.run_id }}
           path: website
 
       - name: Deploy website
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: qorvynt-site-${{ github.run_id }}
