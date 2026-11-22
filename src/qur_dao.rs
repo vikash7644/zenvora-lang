@@ -28,7 +28,7 @@ pub struct DaoProposal {
 }
 
 impl DaoProposal {
-    pub fn total_votes(&self) -> u64 { self.yes_votes + self.no_votes }
+    pub fn total_votes(&self) -> u128 { self.yes_votes as u128 + self.no_votes as u128 }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,7 +115,7 @@ pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     let mut overlay = state.begin(dao_id, AccessMode::Action)?;
     let mut proposal = load_proposal(state, &overlay, id)?;
     if proposal.status != ProposalStatus::Open { return Err("proposal has already been finalized".into()); }
-    proposal.status = if proposal.total_votes() < proposal.quorum { ProposalStatus::QuorumNotMet }
+    proposal.status = if proposal.total_votes() < proposal.quorum as u128 { ProposalStatus::QuorumNotMet }
         else if proposal.yes_votes > proposal.no_votes { ProposalStatus::Approved }
         else { ProposalStatus::Rejected };
     overlay.set(&proposal_key(id), serde_json::to_vec(&proposal).map_err(|e| e.to_string())?)?;
