@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#11162b"/><stop offset="1" stop-color="#070b14"/></linearGradient><radialGradient id="halo"><stop stop-color="#8175ff" stop-opacity=".28"/><stop offset="1" stop-color="#8175ff" stop-opacity="0"/></radialGradient></defs>
+<rect width="1200" height="630" fill="url(#bg)"/><circle cx="925" cy="300" r="370" fill="url(#halo)"/><circle cx="180" cy="570" r="270" fill="#5de3dc" opacity=".035"/>
+<g transform="translate(120 135) scale(1.35)"><path d="M54 102 74 38l47 38 7-58 20 58 44-38 10 64" fill="none" stroke="#bcb5ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/><path d="M62 111h132" stroke="#7fe7e2" stroke-width="11" stroke-linecap="round"/><circle cx="128" cy="151" r="69" fill="none" stroke="#a49aff" stroke-width="22"/><path d="m163 187 42 42" fill="none" stroke="#6ce5df" stroke-width="23" stroke-linecap="round"/></g>
+<text x="530" y="270" fill="#f5f5ff" font-family="Inter,Arial,sans-serif" font-size="82" font-weight="800" letter-spacing="5">QORVYNT</text>
+<text x="535" y="340" fill="#b9b5ff" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="600" letter-spacing="2">BUILD BEYOND BOUNDARIES</text>
+<path d="M535 390h420" stroke="#6de1db" stroke-width="3" opacity=".7"/>
+<text x="535" y="445" fill="#a6b2c8" font-family="Inter,Arial,sans-serif" font-size="24">Language · Developer tools · Decentralised systems</text>
+</svg>
