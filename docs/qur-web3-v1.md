@@ -28,6 +28,20 @@ Run `qorvynt --qur-check examples/qur/manifest.qv` for a human-readable validati
 
 The validator checks declaration names, duplicates, allowed and required fields, supported consensus/governance/token modes, positive u64 token supply, ticker shape, and wallet-to-chain references. It enforces a 1 MiB source limit and a 256-declaration limit. The CI suite also checks a deliberately invalid wallet-to-chain reference and requires `--qur-json` to return `valid: false` with a non-zero exit status.
 
+## Local token-ledger runtime prototype
+
+After validating the manifest, initialize a deterministic local token ledger:
+
+```sh
+qorvynt --qur-token-init examples/qur/manifest.qv token-ledger.json
+qorvynt --qur-token-transfer token-ledger.json GOLD genesis alice 25
+qorvynt --qur-token-balance token-ledger.json GOLD alice
+```
+
+Genesis allocates each declared token's full configured supply to the reserved `genesis` account. Transfers use checked integer arithmetic, reject zero amounts, unknown tokens, invalid account identifiers, insufficient funds, and sender/recipient aliasing. Every mutation preserves the declared total supply and writes a canonical state root into the JSON snapshot; the loader verifies that root before accepting a snapshot. Failed transfers leave the ledger unchanged.
+
+This is a local single-process ledger prototype. It is not yet backed by QVM contract bytecode, chain transaction admission, consensus, validator signatures, or peer-to-peer replication. The next integration milestone is to expose these state transitions as deterministic, gas-metered QVM contract calls rather than treating this file ledger as a production token network.
+
 ## Execution boundary
 
 This milestone **validates configuration only**. It does not create a blockchain node, start Proof of Stake, mint tokens, deploy contracts, create wallets/private keys, run a DAO, or launch an exchange. A consensus label is not a consensus implementation.
