@@ -63,6 +63,8 @@ pub struct DaoReceipt {
     pub gas_used: u64,
     pub state_root: [u8; 32],
     pub event_hash: [u8; 32],
+    /// Present only when the receipt commits both DAO storage and the QUR token ledger.
+    pub execution_state_root: Option<[u8; 32]>,
 }
 
 fn valid_id(value: &str) -> bool {
@@ -152,7 +154,7 @@ fn receipt(operation: &'static str, dao_id: &str, proposal_id: &str,
     h.update((payload.len() as u32).to_be_bytes());
     h.update(payload);
     DaoReceipt { operation, dao_id: dao_id.into(), proposal_id: proposal_id.into(), gas_used: gas.used(),
-        state_root: state.state_root(), event_hash: h.finalize().into() }
+        state_root: state.state_root(), event_hash: h.finalize().into(), execution_state_root: None }
 }
 
 pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, proposer: &str,
@@ -497,7 +499,9 @@ pub fn execute_treasury_token_proposal(state: &mut ContractState, ledger: &mut s
     gas.charge_event(event.len())?;
     state.commit(overlay)?;
     *ledger = candidate;
-    Ok(receipt("TreasuryTokenTransferExecuted", dao_id, id, &event, &gas, state))
+    let mut result = receipt("TreasuryTokenTransferExecuted", dao_id, id, &event, &gas, state);
+    result.execution_state_root = Some(super::qur_state::execution_state_root(ledger, state));
+    Ok(result)
 }
 
 pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<DaoProposal, String> {
