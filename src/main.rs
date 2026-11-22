@@ -15,7 +15,7 @@ mod chain_rpc;
 mod compiler_api;
 mod chain_p2p;
 mod tx_pool;
-mod bytecode_v2;
+use qorvynt_vm::bytecode_v2;
 mod qvm;
 use qvm::{Op, Value};
 pub(crate) use qvm::limits::{MAX_VALUE_DEPTH, MAX_VALUE_BYTES, MAX_STACK_VALUE_BYTES, MAX_RUNTIME_STATE_BYTES, MAX_COLLECTION_ITEMS, MAX_BYTECODE_BYTES, MAX_BYTECODE_INSTRUCTIONS, MAX_BYTECODE_STRING_BYTES, MAX_CALL_ARGUMENTS, MAX_STACK_VALUES};
