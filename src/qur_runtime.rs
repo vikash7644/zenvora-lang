@@ -208,8 +208,6 @@ supply = 100000000
     }
 
     #[test]
-
-    #[test]
     fn gas_metered_transfer_updates_contract_storage_atomically() {
         use super::super::contract_state::ContractState;
         let manifest = qur::parse(MANIFEST).unwrap();
@@ -219,6 +217,7 @@ supply = 100000000
         assert!(receipt.gas_used > 21_000);
         assert_eq!(state.get("qur_tokens", "token/GOLD/supply").unwrap(), Some(&b"100000000"[..]));
         assert_eq!(state.get("qur_tokens", "token/GOLD/balance/alice").unwrap(), Some(&b"25"[..]));
+        assert_eq!(state.get("qur_tokens", "token/GOLD/balance/genesis").unwrap(), Some(&b"99999975"[..]));
         assert_eq!(receipt.contract_state_root, state.state_root());
     }
 
@@ -235,6 +234,7 @@ supply = 100000000
         assert_eq!(state.state_root(), storage_root);
     }
 
+    #[test]
     fn ledger_json_round_trip_verifies_state_root() {
         let manifest = qur::parse(MANIFEST).unwrap();
         let mut ledger = QurLedger::from_manifest(&manifest).unwrap();
