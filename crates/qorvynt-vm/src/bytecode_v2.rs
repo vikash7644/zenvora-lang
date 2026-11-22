@@ -235,6 +235,68 @@ pub fn parse_and_verify_v2_file(input: &str) -> Result<ParsedV2File, String> {
     Ok(file)
 }
 
+/// Materialize only a fully verified v2 file into executable VM instructions.
+pub fn decode_verified_v2_file(file: &ParsedV2File) -> Result<Vec<crate::qvm::bytecode::Op>, String> {
+    verify_v2_file(file)?;
+    use crate::qvm::bytecode::Op;
+    let mut code = Vec::with_capacity(file.instructions.len());
+    for (pc, line) in file.instructions.iter().enumerate() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let invalid = || format!("bytecode v2: malformed instruction at index {pc}");
+        let op = match parts.as_slice() {
+            ["PUSH", value] => Op::Push(value.parse().map_err(|_| invalid())?),
+            ["PUSH_STRING_HEX", value] => Op::PushString(decode_hex_bytes(value).map_err(|_| invalid())?),
+            ["PUSH_BOOL", "true"] => Op::PushBool(true),
+            ["PUSH_BOOL", "false"] => Op::PushBool(false),
+            ["LOAD", name] => Op::Load((*name).into()),
+            ["STORE", name] => Op::Store((*name).into()),
+            ["DECLARE", name] => Op::Declare((*name).into()),
+            ["ADD"] => Op::Add, ["SUB"] => Op::Sub, ["MUL"] => Op::Mul, ["DIV"] => Op::Div,
+            ["NEG"] => Op::Neg, ["NOT"] => Op::Not, ["AND"] => Op::And, ["OR"] => Op::Or,
+            ["PRINT"] => Op::Print, ["EQ"] => Op::Eq, ["NE"] => Op::Ne,
+            ["LT"] => Op::Lt, ["LE"] => Op::Le, ["GT"] => Op::Gt, ["GE"] => Op::Ge,
+            ["INDEX"] => Op::Index,
+            ["SET_INDEX", name] => Op::SetIndex((*name).into()),
+            ["JUMP_IF_FALSE", target] => Op::JumpIfFalse(target.parse().map_err(|_| invalid())?),
+            ["JUMP_IF_FALSE_KEEP", target] => Op::JumpIfFalseKeep(target.parse().map_err(|_| invalid())?),
+            ["JUMP_IF_TRUE_KEEP", target] => Op::JumpIfTrueKeep(target.parse().map_err(|_| invalid())?),
+            ["JUMP", target] => {
+                let target: usize = target.parse().map_err(|_| invalid())?;
+                if pc + 1 == file.layout.main_end && target == file.layout.main_end {
+                    Op::Jump(file.layout.instruction_count)
+                } else { Op::Jump(target) }
+            }
+            ["CALL", target, count] => {
+                let target: usize = target.parse().map_err(|_| invalid())?;
+                let arg_count: usize = count.parse().map_err(|_| invalid())?;
+                let function = file.layout.functions.iter().find(|function| function.entry == target)
+                    .ok_or_else(|| invalid())?;
+                Op::CallTarget { target, params: function.parameters.clone(), arg_count }
+            }
+            ["BUILTIN", name, count] if is_supported_builtin(name) =>
+                Op::Builtin((*name).into(), count.parse().map_err(|_| invalid())?),
+            ["RETURN"] => Op::Return,
+            ["RETURN_VALUE"] => Op::ReturnValue,
+            _ => return Err(invalid()),
+        };
+        code.push(op);
+    }
+    Ok(code)
+}
+
+fn decode_hex_bytes(value: &str) -> Result<String, String> {
+    if value == "-" { return Ok(String::new()); }
+    if value.len() % 2 != 0 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("invalid hex string".into());
+    }
+    let mut bytes = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        let digit = |b: u8| -> u8 { match b { b'0'..=b'9' => b-b'0', b'a'..=b'f' => b-b'a'+10, b'A'..=b'F' => b-b'A'+10, _ => 0 } };
+        bytes.push((digit(pair[0]) << 4) | digit(pair[1]));
+    }
+    String::from_utf8(bytes).map_err(|_| "bytecode string is not valid UTF-8".into())
+}
+
 /// Serialize a structurally valid layout and its opaque instruction records.
 /// This is a framing round-trip helper, not an opcode serializer.
 pub fn serialize_v2_file(file: &ParsedV2File) -> Result<String, String> {
