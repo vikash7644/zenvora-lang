@@ -25,6 +25,8 @@ pub struct DaoProposal {
     pub no_votes: u64,
     pub status: ProposalStatus,
     pub treasury_recipient: Option<String>,
+    /// Asset explicitly approved for a token-ledger treasury payout.
+    pub treasury_token: Option<String>,
     pub treasury_amount: u64,
     pub timelock_blocks: u64,
     pub approved_at_height: Option<u64>,
@@ -51,6 +53,7 @@ impl DaoProposal {
             "no_votes": self.no_votes,
             "status": status_name(self.status),
             "treasury_recipient": self.treasury_recipient,
+            "treasury_token": self.treasury_token,
             "treasury_amount": self.treasury_amount,
             "timelock_blocks": self.timelock_blocks,
             "approved_at_height": self.approved_at_height,
@@ -133,6 +136,7 @@ fn proposal_bytes(proposal: &DaoProposal) -> Result<Vec<u8>, String> {
         "no_votes": proposal.no_votes,
         "status": status_name(proposal.status),
         "treasury_recipient": proposal.treasury_recipient,
+        "treasury_token": proposal.treasury_token,
         "treasury_amount": proposal.treasury_amount,
         "timelock_blocks": proposal.timelock_blocks,
         "approved_at_height": proposal.approved_at_height,
@@ -167,6 +171,7 @@ fn parse_proposal(bytes: &[u8]) -> Result<DaoProposal, String> {
         no_votes: value.get("no_votes").and_then(|v| v.as_u64()).ok_or("stored DAO no vote count is invalid")?,
         status,
         treasury_recipient: value.get("treasury_recipient").and_then(|v| v.as_str()).map(str::to_owned),
+        treasury_token: value.get("treasury_token").and_then(|v| v.as_str()).map(str::to_owned),
         treasury_amount: value.get("treasury_amount").and_then(|v| v.as_u64()).unwrap_or(0),
         timelock_blocks: value.get("timelock_blocks").and_then(|v| v.as_u64()).unwrap_or(0),
         approved_at_height: value.get("approved_at_height").and_then(|v| v.as_u64()),
@@ -222,7 +227,7 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     if overlay.get(state, &proposal_key(id))?.is_some() { return Err(format!("DAO proposal '{id}' already exists")); }
     let proposal = DaoProposal { id: id.into(), proposer: proposer.into(), title: title.into(),
         quorum, yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
-        treasury_recipient: None, treasury_amount: 0, timelock_blocks: 0,
+        treasury_recipient: None, treasury_token: None, treasury_amount: 0, timelock_blocks: 0,
         approved_at_height: None, executed: false, voting_token: None, snapshot_total_weight: 0, snapshot_ledger_root: None, voting_snapshot_root: None,
         snapshot_chain_id: None, snapshot_block_height: None, snapshot_block_hash: None, snapshot_chain_state_root: None };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
@@ -294,7 +299,7 @@ fn create_weighted_proposal_with_anchor(state: &mut ContractState, ledger: &supe
     let proposal = DaoProposal {
         id: id.into(), proposer: proposer.into(), title: title.into(), quorum,
         yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
-        treasury_recipient: None, treasury_amount: 0, timelock_blocks: 0,
+        treasury_recipient: None, treasury_token: None, treasury_amount: 0, timelock_blocks: 0,
         approved_at_height: None, executed: false,
         voting_token: Some(token.into()), snapshot_total_weight: total_weight,
         snapshot_ledger_root: Some(hex_digest(&ledger.state_root())),
@@ -330,6 +335,22 @@ fn create_weighted_proposal_with_anchor(state: &mut ContractState, ledger: &supe
 pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     proposer: &str, title: &str, recipient: &str, amount: u64, quorum: u64,
     timelock_blocks: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    create_treasury_proposal_with_token(state, dao_id, id, proposer, title, recipient,
+        amount, quorum, timelock_blocks, None, gas_limit)
+}
+
+/// Create a treasury proposal whose payout asset is committed before voting.
+pub fn create_treasury_token_proposal(state: &mut ContractState, dao_id: &str, id: &str,
+    proposer: &str, title: &str, recipient: &str, amount: u64, quorum: u64,
+    timelock_blocks: u64, token: &str, gas_limit: u64) -> Result<DaoReceipt, String> {
+    if !valid_id(token) { return Err("invalid treasury payout token identifier".into()); }
+    create_treasury_proposal_with_token(state, dao_id, id, proposer, title, recipient,
+        amount, quorum, timelock_blocks, Some(token), gas_limit)
+}
+
+fn create_treasury_proposal_with_token(state: &mut ContractState, dao_id: &str, id: &str,
+    proposer: &str, title: &str, recipient: &str, amount: u64, quorum: u64,
+    timelock_blocks: u64, treasury_token: Option<&str>, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) || !valid_id(proposer) || !valid_id(recipient) {
         return Err("invalid DAO, proposal, proposer, or treasury recipient identifier".into());
     }
@@ -346,8 +367,8 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
     let proposal = DaoProposal {
         id: id.into(), proposer: proposer.into(), title: title.into(), quorum,
         yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
-        treasury_recipient: Some(recipient.into()), treasury_amount: amount,
-        timelock_blocks, approved_at_height: None, executed: false,
+        treasury_recipient: Some(recipient.into()), treasury_token: treasury_token.map(str::to_owned),
+        treasury_amount: amount, timelock_blocks, approved_at_height: None, executed: false,
         voting_token: None, snapshot_total_weight: 0, snapshot_ledger_root: None, voting_snapshot_root: None,
         snapshot_chain_id: None, snapshot_block_height: None, snapshot_block_hash: None, snapshot_chain_state_root: None,
     };
@@ -359,6 +380,7 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
     payload.extend_from_slice(&amount.to_be_bytes());
     payload.extend_from_slice(&quorum.to_be_bytes());
     payload.extend_from_slice(&timelock_blocks.to_be_bytes());
+    if let Some(token) = treasury_token { append_field(&mut payload, token.as_bytes()); }
     gas.charge_event(payload.len())?;
     state.commit(overlay)?;
     Ok(receipt("TreasuryProposalCreated", dao_id, id, &payload, &gas, state))
@@ -606,6 +628,9 @@ pub fn execute_treasury_token_proposal(state: &mut ContractState, ledger: &mut s
     gas.charge(STORAGE_WRITE_GAS.checked_mul(4).ok_or("gas calculation overflow")?)?;
     let mut overlay = state.begin(dao_id, AccessMode::Action)?;
     let mut proposal = load_proposal(state, &overlay, id)?;
+    if proposal.treasury_token.as_deref() != Some(token) {
+        return Err("treasury payout token does not match the asset approved by DAO voters".into());
+    }
     if proposal.status != ProposalStatus::Approved { return Err("treasury proposal is not approved".into()); }
     if proposal.executed { return Err("treasury proposal has already executed".into()); }
     let recipient = proposal.treasury_recipient.clone().ok_or("proposal has no treasury transfer action")?;
@@ -648,7 +673,7 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, cast_vote_with_weight, create_proposal, create_weighted_proposal, create_weighted_proposal_at_anchor, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, cast_vote_with_weight, create_proposal, create_weighted_proposal, create_weighted_proposal_at_anchor, create_treasury_proposal, create_treasury_token_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
     use ed25519_dalek::{Signer, SigningKey, Signature};
 
@@ -756,8 +781,8 @@ token GOLD {
         let mut ledger = super::super::qur_runtime::QurLedger::from_manifest(&manifest).unwrap();
         ledger.transfer("GOLD", "genesis", "dao_community", 100).unwrap();
         let mut state = ContractState::new();
-        create_treasury_proposal(&mut state, "community", "tokenpay1", "founder",
-            "Contributor payout", "contributor", 40, 1, 5, 30_000).unwrap();
+        create_treasury_token_proposal(&mut state, "community", "tokenpay1", "founder",
+            "Contributor payout", "contributor", 40, 1, 5, "GOLD", 30_000).unwrap();
         let key = SigningKey::from_bytes(&[21u8; 32]);
         let message = vote_signing_message("community", "tokenpay1", VoteChoice::Yes).unwrap();
         let signature = key.sign(&message);
@@ -766,6 +791,10 @@ token GOLD {
         finalize_proposal_at_height(&mut state, "community", "tokenpay1", 100, 30_000).unwrap();
         let before_state = state.state_root();
         let before_ledger = ledger.state_root();
+        assert!(execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
+            "SILVER", 105, 50_000).is_err());
+        assert_eq!(state.state_root(), before_state);
+        assert_eq!(ledger.state_root(), before_ledger);
         assert!(execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
             "GOLD", 104, 50_000).is_err());
         assert_eq!(state.state_root(), before_state);
