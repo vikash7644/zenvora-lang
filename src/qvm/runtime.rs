@@ -4,9 +4,8 @@
 //! Compiler and verifier helpers remain in the host crate for now; the next
 //! boundary is to replace these host helper dependencies with a runtime API.
 
-use crate::{
-    builtin, contract_gas,
-};
+use crate::builtin;
+use crate::qvm::gas::GasMeter;
 use crate::qvm::runtime_support::{
     binding_map_size, binding_size, ensure_value_depth, pop_stack_value,
     push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update,
@@ -18,13 +17,13 @@ use std::collections::HashMap;
 pub(crate) fn run_with_output_metered<F>(
     code: &[Op],
     output: &mut F,
-    mut gas_meter: Option<&mut contract_gas::GasMeter>,
+    mut gas_meter: Option<&mut dyn GasMeter>,
 ) -> Result<(), String>
 where
     F: FnMut(String),
 {
     if let Some(meter) = gas_meter.as_deref_mut() {
-        meter.charge(contract_gas::BASE_EXECUTION_GAS)?;
+        meter.charge(crate::contract_gas::BASE_EXECUTION_GAS)?;
     }
     let mut stack: Vec<Value> = Vec::new();
     let mut stack_value_bytes = 0usize;
@@ -46,12 +45,12 @@ where
         }
         if let Some(meter) = gas_meter.as_deref_mut() {
             let cost = match code.get(pc) {
-                Some(Op::Load(_)) => contract_gas::LOCAL_READ_GAS,
-                Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => contract_gas::LOCAL_WRITE_GAS,
-                Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => contract_gas::CONDITIONAL_BRANCH_GAS,
-                Some(Op::Call(_, _) | Op::CallTarget { .. }) => contract_gas::FUNCTION_CALL_GAS,
+                Some(Op::Load(_)) => crate::contract_gas::LOCAL_READ_GAS,
+                Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => crate::contract_gas::LOCAL_WRITE_GAS,
+                Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => crate::contract_gas::CONDITIONAL_BRANCH_GAS,
+                Some(Op::Call(_, _) | Op::CallTarget { .. }) => crate::contract_gas::FUNCTION_CALL_GAS,
                 Some(Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Neg | Op::Not | Op::And | Op::Or
-                    | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge) => contract_gas::INTEGER_OPERATION_GAS,
+                    | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge) => crate::contract_gas::INTEGER_OPERATION_GAS,
                 Some(_) => 1,
                 None => return Err("instruction pointer out of range".into()),
             };
