@@ -630,7 +630,7 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, cast_vote_with_weight, create_proposal, create_weighted_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, cast_vote_with_weight, create_proposal, create_weighted_proposal, create_weighted_proposal_at_anchor, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
     use ed25519_dalek::{Signer, SigningKey, Signature};
 
@@ -837,6 +837,45 @@ token GOLD {
             &empty_key.verifying_key(), &empty_signature, VoteChoice::Yes, 30_000).is_err());
         let unchanged = get_proposal(&state, "community", "weighted1").unwrap();
         assert_eq!(unchanged.total_votes(), 100);
+    }
+
+    #[test]
+    fn weighted_proposal_persists_replay_verified_chain_anchor() {
+        let manifest = super::super::qur::parse(r#"
+chain MyChain {
+ consensus = "proof_of_stake"
+ native_token = "GOLD"
+}
+token GOLD {
+ standard = "fungible"
+ supply = 1000
+}
+"#).unwrap();
+        let ledger = super::super::qur_runtime::QurLedger::from_manifest(&manifest).unwrap();
+        let wallet = SigningKey::from_bytes(&[41u8; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&wallet.verifying_key().to_bytes()).unwrap();
+        let mut ledger = ledger;
+        ledger.transfer("GOLD", "genesis", &address, 100).unwrap();
+        let anchor = super::super::block_store::VerifiedBlockAnchor {
+            chain_id: 71,
+            height: 42,
+            block_hash: [0xabu8; 32],
+            state_root: [0xcdu8; 32],
+        };
+        let mut state = ContractState::new();
+        create_weighted_proposal_at_anchor(&mut state, &ledger, anchor, "community", "anchored1",
+            "founder", "Anchored weighted vote", "GOLD", 100, 100_000).unwrap();
+        let proposal = get_proposal(&state, "community", "anchored1").unwrap();
+        assert_eq!(proposal.snapshot_chain_id, Some(71));
+        assert_eq!(proposal.snapshot_block_height, Some(42));
+        assert_eq!(proposal.snapshot_block_hash, Some("ab".repeat(32)));
+        assert_eq!(proposal.snapshot_chain_state_root, Some("cd".repeat(32)));
+        let encoded = super::proposal_bytes(&proposal).unwrap();
+        let restored = super::parse_proposal(&encoded).unwrap();
+        assert_eq!(restored.snapshot_chain_id, proposal.snapshot_chain_id);
+        assert_eq!(restored.snapshot_block_height, proposal.snapshot_block_height);
+        assert_eq!(restored.snapshot_block_hash, proposal.snapshot_block_hash);
+        assert_eq!(restored.snapshot_chain_state_root, proposal.snapshot_chain_state_root);
     }
 
     #[test]
