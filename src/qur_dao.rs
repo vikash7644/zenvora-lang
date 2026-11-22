@@ -618,7 +618,7 @@ token GOLD {
     }
 
     #[test]
-    fn signed_dao_votes_use_qur_token_balance_as_weight() {
+    fn signed_dao_votes_use_proposal_creation_token_snapshot() {
         let manifest = super::super::qur::parse(r#"
 chain MyChain {
  consensus = "proof_of_stake"
@@ -637,25 +637,30 @@ token GOLD {
         ledger.transfer("GOLD", "genesis", &yes_address, 70).unwrap();
         ledger.transfer("GOLD", "genesis", &no_address, 30).unwrap();
         let mut state = ContractState::new();
-        create_proposal(&mut state, "community", "weighted1", "founder", "Weighted vote", 100, 30_000).unwrap();
+        create_weighted_proposal(&mut state, &ledger, "community", "weighted1", "founder",
+            "Weighted vote", "GOLD", 100, 50_000).unwrap();
+        // Moving tokens after proposal creation cannot change the stored voting power.
+        ledger.transfer("GOLD", &yes_address, &no_address, 70).unwrap();
         let yes_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
         let yes_signature = yes_key.sign(&yes_message);
-        cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+        cast_vote_weighted_signed(&mut state, "community", "weighted1", "GOLD",
             &yes_key.verifying_key(), &yes_signature, VoteChoice::Yes, 30_000).unwrap();
         let no_message = vote_signing_message("community", "weighted1", VoteChoice::No).unwrap();
         let no_signature = no_key.sign(&no_message);
-        cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+        cast_vote_weighted_signed(&mut state, "community", "weighted1", "GOLD",
             &no_key.verifying_key(), &no_signature, VoteChoice::No, 30_000).unwrap();
         let proposal = get_proposal(&state, "community", "weighted1").unwrap();
         assert_eq!(proposal.yes_votes, 70);
         assert_eq!(proposal.no_votes, 30);
         assert_eq!(proposal.total_votes(), 100);
-        assert!(cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+        assert_eq!(proposal.snapshot_total_weight, 100);
+        assert_eq!(proposal.voting_token.as_deref(), Some("GOLD"));
+        assert!(cast_vote_weighted_signed(&mut state, "community", "weighted1", "GOLD",
             &yes_key.verifying_key(), &yes_signature, VoteChoice::Yes, 30_000).is_err());
         let empty_key = SigningKey::from_bytes(&[33u8; 32]);
         let empty_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
         let empty_signature = empty_key.sign(&empty_message);
-        assert!(cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+        assert!(cast_vote_weighted_signed(&mut state, "community", "weighted1", "GOLD",
             &empty_key.verifying_key(), &empty_signature, VoteChoice::Yes, 30_000).is_err());
         let unchanged = get_proposal(&state, "community", "weighted1").unwrap();
         assert_eq!(unchanged.total_votes(), 100);
