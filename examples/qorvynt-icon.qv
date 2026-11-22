@@ -1,5 +1,5 @@
 # QORVYNT asset-generation starter
-# Run: qorvynt examples/qorvynt-icon.qv > qorvynt-icon.svg
+# Run: qorvynt --render examples/qorvynt-icon.qv qorvynt-icon.svg
 # Emits scalable SVG using QORVYNT string expressions.
 
 define background := "#10131c"
