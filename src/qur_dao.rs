@@ -911,6 +911,25 @@ mod tests {
     }
 
     #[test]
+    fn treasury_finalization_requires_exact_snapshot_and_same_chain_tip() {
+        let mut state = ContractState::new();
+        create_treasury_proposal_at_anchor(&mut state, test_anchor(), "community", "pay-anchor-check", "founder",
+            "Anchor check", "recipient", 5, 1, 2, 30_000).unwrap();
+        let proposal = get_proposal(&state, "community", "pay-anchor-check").unwrap();
+        let tip = VerifiedBlockAnchor::test_fixture(71, 20, [3u8; 32], [4u8; 32]);
+        assert!(super::validate_treasury_anchor_commitments(&proposal, test_anchor(), tip).is_ok());
+
+        let fork_snapshot = VerifiedBlockAnchor::test_fixture(71, 12, [9u8; 32], [2u8; 32]);
+        assert!(super::validate_treasury_anchor_commitments(&proposal, fork_snapshot, tip).is_err());
+        let other_chain_snapshot = VerifiedBlockAnchor::test_fixture(72, 12, [1u8; 32], [2u8; 32]);
+        assert!(super::validate_treasury_anchor_commitments(&proposal, other_chain_snapshot, tip).is_err());
+        let wrong_chain_tip = VerifiedBlockAnchor::test_fixture(72, 20, [3u8; 32], [4u8; 32]);
+        assert!(super::validate_treasury_anchor_commitments(&proposal, test_anchor(), wrong_chain_tip).is_err());
+        let behind_tip = VerifiedBlockAnchor::test_fixture(71, 11, [3u8; 32], [4u8; 32]);
+        assert!(super::validate_treasury_anchor_commitments(&proposal, test_anchor(), behind_tip).is_err());
+    }
+
+    #[test]
     fn treasury_vote_signature_rejects_wrong_snapshot_anchor() {
         let mut state = ContractState::new();
         create_treasury_proposal_at_anchor(&mut state, test_anchor(), "community", "pay-fork", "founder",
