@@ -365,16 +365,16 @@ fn parse_program(tokens) {
         }
       }
     } otherwise {
-      if kw == "if" {
-        define conditional := parse_if_statement(tokens, pos + 1, ln)
-        if get(conditional, "error") != "" {
-          err := get(conditional, "error")
+      if kw == "if" or kw == "repeat" {
+        if kw == "if" {
+          define conditional := parse_if_statement(tokens, pos + 1, ln)
+          if get(conditional, "error") != "" {
+            err := get(conditional, "error")
+          } otherwise {
+            ast := push(ast, get(conditional, "ast"))
+            pos := get(conditional, "pos")
+          }
         } otherwise {
-          ast := push(ast, get(conditional, "ast"))
-          pos := get(conditional, "pos")
-        }
-      } otherwise {
-        if kw == "repeat" {
           define condition := parse_expr(tokens, pos + 1)
           if get(condition, "error") != "" {
             err := get(condition, "error")
@@ -395,8 +395,9 @@ fn parse_program(tokens) {
               }
             }
           }
-        } otherwise {
-          if kw == "return" {
+        }
+      } otherwise {
+                  if kw == "return" {
             define expr := parse_expr(tokens, pos + 1)
             if get(expr, "error") != "" {
             err := get(expr, "error")
@@ -470,7 +471,6 @@ fn parse_program(tokens) {
           }
         }
       }
-    }
     }
     if pos < len(tokens) and get(at(tokens, pos), "line") == ln and err == "" {
       err := "unexpected token at end of statement"
