@@ -471,6 +471,7 @@ fn parse_program(tokens) {
         }
       }
     }
+    }
     if pos < len(tokens) and get(at(tokens, pos), "line") == ln and err == "" {
       err := "unexpected token at end of statement"
     }
