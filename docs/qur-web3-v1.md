@@ -67,3 +67,8 @@ The repository separately contains experimental QVM-backed contract execution, d
 - DAO governance: `on_chain`, `off_chain`, or `hybrid`.
 - Wallet network must reference a chain in the same manifest.
 - Quoted-string escapes and semicolons are not supported in v1.
+
+
+### Deterministic transfer events
+
+Gas-metered token transfer receipts now include a `TokenTransfer` event with token, sender, recipient, amount, and a domain-separated SHA-256 event hash. The event payload is encoded with length-prefixed fields and charged through the versioned event gas schedule. The CLI prints the event and hash; CI checks the receipt fields. This is a local receipt/event prototype, not yet a canonical block receipt or a QVM bytecode event opcode.
