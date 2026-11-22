@@ -47,7 +47,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                 let mut lines = headers.split("\r\n");
                 let request_line = lines.next().unwrap_or("");
                 if request_line == "OPTIONS /compile-run HTTP/1.1" || request_line == "OPTIONS /compile-run HTTP/1.0" {
-                    return respond(stream, "204 No Content", &json!({"ok":true}));
+                    return respond(stream, "204 No Content", &Value::Null);
                 }
                 if request_line != "GET /health HTTP/1.1" && request_line != "GET /health HTTP/1.0"
                     && request_line != "POST /compile-run HTTP/1.1" && request_line != "POST /compile-run HTTP/1.0" {
@@ -98,7 +98,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     Ok(code) => {
                         let mut lines = Vec::new();
                         match super::run_with_output(&code, &mut |line| lines.push(line)) {
-                            Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":"zenvora-rust-v0.8"}),
+                            Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":"qorvynt-v0.8"}),
                             Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":"zenvora-rust-v0.8"}),
                         }
                     }
@@ -114,7 +114,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
 }
 
 fn respond(stream: &mut TcpStream, status: &str, value: &Value) -> Result<(), String> {
-    let body = value.to_string();
+    let body = if status == "204 No Content" { String::new() } else { value.to_string() };
     let header = format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: https://vikash7644.github.io\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nVary: Origin\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         body.len()
