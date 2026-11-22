@@ -46,7 +46,13 @@ fn lex_with_columns(input: &str) -> Result<(Vec<Token>, Vec<usize>), String> {
         let c = chars[i];
         let token_column = i + 1;
         if c.is_whitespace() { i += 1; continue; }
-        if c == '#' { break; }
+        if c == '#' {
+            // A hash starts a comment only through the end of the current line.
+            // Keep lexing subsequent lines instead of silently dropping the rest
+            // of the source file.
+            while i < chars.len() && chars[i] != '\n' { i += 1; }
+            continue;
+        }
         if out.len() >= MAX_SOURCE_TOKENS {
             return Err(format!("column {}: token count exceeds safety limit ({MAX_SOURCE_TOKENS})", token_column));
         }
@@ -5246,7 +5252,14 @@ show index_of(array(7, "x", true), false)
     #[test]
     fn function_brace_count_ignores_braces_in_strings_and_comments() {
         let output = execute(
-            "show render()\nfn render() {\n # these braces are only comment text: } {{{\n show \"left { brace\"\n show \"right } brace\"\n return \"done { }\"\n}\n"
+            "show render()\nfn render() {\n # these braces are only comment text: } {{{\n show \"left { brace\"\n show \"right } brace\"\n return \"done { }\"
+    #[test]
+    fn lexer_continues_after_inline_and_full_line_comments() {
+        let tokens = super::lex("show 1 # inline comment\\n# full-line comment\\nshow 2").unwrap();
+        assert!(tokens.contains(&super::Token::Number(1)));
+        assert!(tokens.contains(&super::Token::Number(2)));
+    }
+\n}\n"
         ).unwrap();
         assert_eq!(output, vec!["left { brace", "right } brace", "done { }"]);
     }
