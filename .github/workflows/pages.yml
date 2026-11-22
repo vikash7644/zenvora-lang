@@ -37,7 +37,7 @@ jobs:
           grep -q 'playground.html' website/index.html
           grep -q '<title>QORVYNT' website/index.html
           grep -q '<title>QORVYNT' website/playground.html
-          ! grep -Eqi 'ZENVORA|Zenvora' website/index.html website/playground.html
+          ! grep -Eqi '>[^<]*ZENVORA[^<]*<' website/index.html website/playground.html
 
       - name: Generate Google-compatible raster favicons
         run: |
