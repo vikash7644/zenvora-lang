@@ -136,7 +136,7 @@ jobs:
           cargo run --locked -- --qur-dao-propose-treasury-anchored /tmp/qorvynt-dao-anchored-state.bin /tmp/qorvynt-dao-anchor-store.qvb 98765 0 community anchored1 founder "Anchored contributor payout" recipient 40 1 5 30000
           cargo run --locked -- --qur-dao-vote-signed /tmp/qorvynt-dao-anchored-state.bin community anchored1 /tmp/qorvynt-dao-alice.qvk yes 30000
           cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-anchored-state.bin community anchored1 > /tmp/qorvynt-dao-anchored-proposal.json
-          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-anchored-proposal.json")); assert p["snapshot_chain_id"] == 98765 and p["snapshot_block_height"] == 0 and len(p["snapshot_block_hash"]) == 64 and len(p["snapshot_chain_state_root"]) == 64 and p["yes_votes"] == 1 and p["status"] == "open'
+          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-anchored-proposal.json")); assert p["snapshot_chain_id"] == 98765 and p["snapshot_block_height"] == 0 and len(p["snapshot_block_hash"]) == 64 and len(p["snapshot_chain_state_root"]) == 64 and p["yes_votes"] == 1 and p["status"] == "open"'
       - name: Test token-weighted DAO wallet voting
         shell: bash
         run: |
