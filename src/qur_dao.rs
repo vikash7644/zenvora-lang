@@ -402,6 +402,7 @@ mod tests {
         let sig = key.sign(&msg);
         cast_vote_signed(&mut state, "community", "pay1", &key.verifying_key(), &sig,
             VoteChoice::Yes, 30_000).unwrap();
+        assert!(finalize_proposal(&mut state, "community", "pay1", 30_000).is_err());
         finalize_proposal_at_height(&mut state, "community", "pay1", 100, 30_000).unwrap();
         let root = state.state_root();
         assert!(execute_treasury_proposal(&mut state, "community", "pay1", 109, 30_000).is_err());
