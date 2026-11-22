@@ -1,0 +1,9 @@
+# Invalid fixture: wallet points to a chain that is not declared.
+chain Main {
+    consensus = "proof_of_stake"
+    native_token = "QOR"
+}
+
+wallet Treasury {
+    network = MissingChain
+}
