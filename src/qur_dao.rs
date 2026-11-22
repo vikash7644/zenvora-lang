@@ -388,6 +388,26 @@ pub fn vote_signing_message_for_chain(chain_id: u64, dao_id: &str, proposal_id: 
     Ok(message)
 }
 
+/// Bind a weighted vote to the exact verified snapshot anchor, preventing replay
+/// between chains and between competing forks of the same chain.
+pub fn vote_signing_message_for_anchor(chain_id: u64, block_height: u64,
+    block_hash: &str, state_root: &str, dao_id: &str, proposal_id: &str,
+    choice: VoteChoice) -> Result<Vec<u8>, String> {
+    if chain_id == 0 || !valid_id(dao_id) || !valid_id(proposal_id)
+        || !is_lower_hex_digest(block_hash) || !is_lower_hex_digest(state_root) {
+        return Err("invalid chain snapshot anchor, DAO, or proposal identifier".into());
+    }
+    let mut message = b"QORVYNT_DAO_VOTE_V3\\0".to_vec();
+    message.extend_from_slice(&chain_id.to_be_bytes());
+    message.extend_from_slice(&block_height.to_be_bytes());
+    append_field(&mut message, block_hash.as_bytes());
+    append_field(&mut message, state_root.as_bytes());
+    append_field(&mut message, dao_id.as_bytes());
+    append_field(&mut message, proposal_id.as_bytes());
+    message.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
+    Ok(message)
+}
+
 /// Apply a vote only after verifying the Ed25519 signature against the wallet public key.
 pub fn cast_vote_signed(state: &mut ContractState, dao_id: &str, id: &str,
     public_key: &VerifyingKey, signature: &Signature, choice: VoteChoice,
@@ -449,9 +469,12 @@ pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &s
     token: &str, public_key: &VerifyingKey, signature: &Signature,
     choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
     let proposal = get_proposal(state, dao_id, id)?;
-    let message = match proposal.snapshot_chain_id {
-        Some(chain_id) => vote_signing_message_for_chain(chain_id, dao_id, id, choice)?,
-        None => vote_signing_message(dao_id, id, choice)?,
+    let message = match (proposal.snapshot_chain_id, proposal.snapshot_block_height.as_ref(),
+        proposal.snapshot_block_hash.as_deref(), proposal.snapshot_chain_state_root.as_deref()) {
+        (Some(chain_id), Some(height), Some(block_hash), Some(state_root)) =>
+            vote_signing_message_for_anchor(chain_id, *height, block_hash, state_root, dao_id, id, choice)?,
+        (None, None, None, None) => vote_signing_message(dao_id, id, choice)?,
+        _ => return Err("weighted DAO snapshot has an incomplete or malformed chain anchor".into()),
     };
     public_key.verify_strict(&message, signature)
         .map_err(|_| "invalid DAO vote signature".to_string())?;
@@ -919,11 +942,19 @@ token GOLD {
             serde_json::to_vec(&malformed_json).unwrap()).unwrap();
         malformed_state.commit(overlay).unwrap();
         let before = malformed_state.state_root();
-        let message = super::vote_signing_message_for_chain(71, "community", "anchored1", VoteChoice::Yes).unwrap();
+        let block_hash = "ab".repeat(32);
+        let state_root = "cd".repeat(32);
+        let message = super::vote_signing_message_for_anchor(71, 42, &block_hash, &state_root,
+            "community", "anchored1", VoteChoice::Yes).unwrap();
         let signature = wallet.sign(&message);
-        let other_chain_message = super::vote_signing_message_for_chain(72, "community", "anchored1", VoteChoice::Yes).unwrap();
+        let other_chain_message = super::vote_signing_message_for_anchor(72, 42, &block_hash, &state_root,
+            "community", "anchored1", VoteChoice::Yes).unwrap();
+        let other_fork_message = super::vote_signing_message_for_anchor(71, 42, &"ef".repeat(32), &state_root,
+            "community", "anchored1", VoteChoice::Yes).unwrap();
         assert!(wallet.verifying_key().verify_strict(&other_chain_message, &signature).is_err(),
             "a signed vote must not replay on a different chain ID");
+        assert!(wallet.verifying_key().verify_strict(&other_fork_message, &signature).is_err(),
+            "a signed vote must not replay on a different block fork");
         assert!(cast_vote_weighted_signed(&mut malformed_state, "community", "anchored1", "GOLD",
             &wallet.verifying_key(), &signature, VoteChoice::Yes, 100_000).is_err());
         assert_eq!(malformed_state.state_root(), before);
