@@ -546,7 +546,7 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, create_proposal, create_weighted_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, cast_vote_with_weight, create_proposal, create_weighted_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
     use ed25519_dalek::{Signer, SigningKey, Signature};
 
@@ -712,6 +712,11 @@ token GOLD {
         let restored = super::parse_proposal(&snapshot_json).unwrap();
         assert_eq!(restored.snapshot_ledger_root, snapshot.snapshot_ledger_root);
         assert_eq!(restored.voting_snapshot_root, snapshot.voting_snapshot_root);
+        // Public caller-supplied weights must not bypass wallet-authenticated snapshot voting.
+        let before_untrusted_weight = state.state_root();
+        assert!(cast_vote_with_weight(&mut state, "community", "weighted1", &yes_address,
+            VoteChoice::Yes, 1000, 30_000).is_err());
+        assert_eq!(state.state_root(), before_untrusted_weight);
         // Moving tokens after proposal creation cannot change the stored voting power.
         ledger.transfer("GOLD", &yes_address, &no_address, 70).unwrap();
         let yes_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
