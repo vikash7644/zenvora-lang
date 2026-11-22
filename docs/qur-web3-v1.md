@@ -113,7 +113,16 @@ Treasury proposals must carry a replay-verified snapshot anchor before they can 
 
 The block store exposes `verified_anchor_at(height)` for historical blocks accepted by its append/replay validation. The DAO library's verified-tip helpers re-fetch the proposal's stored snapshot height from the supplied store, compare the exact chain ID, block hash, and state root, require the current tip to be on the same chain and at or above the snapshot, and derive the finalization/execution height from that tip. Execution also checks that the recorded approval height lies between the snapshot and current verified tip.
 
-These are local replay-verified library helpers, not distributed finality or consensus execution. The caller must supply the correct canonical block store for the DAO's chain. Treasury finalization/execution CLI commands remain disabled; no caller-supplied height is accepted as authority.
+The anchored proposal path is also available through the CLI. It loads and replay-verifies the supplied block store, retrieves the requested historical height, and persists that anchor before any signed treasury vote:
+
+```sh
+qorvynt --chain-keygen validator.qvk
+qorvynt --chain-store-init dao-chain.qvb 98765 validator.qvk 100
+qorvynt --qur-dao-propose-treasury-anchored dao-state.bin dao-chain.qvb 98765 0 community payout1 founder "Contributor payout" contributor 40 1 5 30000
+qorvynt --qur-dao-vote-signed dao-state.bin community payout1 alice.qvk yes 30000
+```
+
+These are local replay-verified library/CLI helpers, not distributed finality or consensus execution. The caller must supply the correct canonical block store for the DAO's chain. Treasury finalization/execution CLI commands remain disabled; no caller-supplied height is accepted as authority.
 
 ### DAO treasury payouts using the QUR token ledger
 
