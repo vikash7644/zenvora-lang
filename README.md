@@ -121,8 +121,6 @@ curl -sS http://127.0.0.1:8787/compile-run \
 End users do **not** need Rust, Cargo, or Termux. Download the prebuilt CLI for your operating system from the [QORVYNT pre-release](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1), extract it, and place the `qorvynt` executable on your `PATH`. Open a terminal and verify it with `qorvynt --version`. The commands below assume that the executable is on your `PATH`.
 
 ```sh
-cargo check
-cargo test
 qorvynt new my-first-project
 qorvynt run my-first-project/main.qv
 qorvynt check my-first-project/main.qv
@@ -165,7 +163,7 @@ qorvynt run my-first-project/main.qv
 qorvynt check my-first-project/main.qv
 ```
 
-The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. When using a built release binary, the same commands are `qorvynt --new my-first-project`, `qorvynt my-first-project/main.qv`, and `qorvynt --check my-first-project/main.qv`.
+The generated program demonstrates variables, strings, arithmetic, arrays, and `sum`. The first-class commands are `qorvynt new`, `qorvynt run`, `qorvynt check`, and `qorvynt compile`.
 
 ## Beginner workflow: from idea to runnable project
 
@@ -175,7 +173,7 @@ The generated program demonstrates variables, strings, arithmetic, arrays, and `
 4. Run it: `qorvynt run my-project/main.qv`.
 5. Keep a small runnable example for each new feature and add a regression test when changing the compiler or VM.
 
-When developing from source, build once with `cargo build --release --bin qorvynt`, then use `./target/release/qorvynt` (or `target\\release\\qorvynt.exe` on Windows). Cargo is only the Rust-hosted development/build tool; it is not part of the QORVYNT user command. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The CLI is not yet a full package manager. QORVYNT Studio is an early Windows IDE preview; project workspaces, debugger support, and a signed public installer are still pending.
+When developing from source, build once with `cargo build --release --bin qorvynt`, then use `./target/release/qorvynt` (or `target\\release\\qorvynt.exe` on Windows). Run `cargo check` and `cargo test` only when contributing to the Rust-hosted compiler. Cargo is only the current compiler-development/build tool; it is not part of the QORVYNT user command. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The CLI is not yet a full package manager. QORVYNT Studio is an early Windows IDE preview; project workspaces, debugger support, and a signed public installer are still pending.
 
 ## Automated regression tests
 
