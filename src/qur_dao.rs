@@ -42,6 +42,7 @@ impl DaoProposal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DaoReceipt {
     pub operation: &'static str,
+    pub dao_id: String,
     pub proposal_id: String,
     pub gas_used: u64,
     pub state_root: [u8; 32],
@@ -103,13 +104,24 @@ fn load_proposal(state: &ContractState, overlay: &super::contract_state::StateOv
     parse_proposal(bytes)
 }
 
-fn receipt(operation: &'static str, proposal_id: &str, gas: &GasMeter, state: &ContractState) -> DaoReceipt {
+fn append_field(out: &mut Vec<u8>, bytes: &[u8]) {
+    out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+    out.extend_from_slice(bytes);
+}
+
+fn receipt(operation: &'static str, dao_id: &str, proposal_id: &str,
+    payload: &[u8], gas: &GasMeter, state: &ContractState) -> DaoReceipt {
     let mut h = Sha256::new();
-    h.update(b"QORVYNT_DAO_EVENT_V1\0");
+    h.update(b"QORVYNT_DAO_EVENT_V1\\0");
+    h.update((operation.len() as u32).to_be_bytes());
     h.update(operation.as_bytes());
+    h.update((dao_id.len() as u32).to_be_bytes());
+    h.update(dao_id.as_bytes());
     h.update((proposal_id.len() as u32).to_be_bytes());
     h.update(proposal_id.as_bytes());
-    DaoReceipt { operation, proposal_id: proposal_id.into(), gas_used: gas.used(),
+    h.update((payload.len() as u32).to_be_bytes());
+    h.update(payload);
+    DaoReceipt { operation, dao_id: dao_id.into(), proposal_id: proposal_id.into(), gas_used: gas.used(),
         state_root: state.state_root(), event_hash: h.finalize().into() }
 }
 
@@ -127,9 +139,13 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     let proposal = DaoProposal { id: id.into(), proposer: proposer.into(), title: title.into(),
         quorum, yes_votes: 0, no_votes: 0, status: ProposalStatus::Open };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
-    gas.charge_event(title.len() + id.len())?;
+    let mut event_payload = Vec::new();
+    append_field(&mut event_payload, proposer.as_bytes());
+    append_field(&mut event_payload, title.as_bytes());
+    event_payload.extend_from_slice(&quorum.to_be_bytes());
+    gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
-    Ok(receipt("ProposalCreated", id, &gas, state))
+    Ok(receipt("ProposalCreated", dao_id, id, &event_payload, &gas, state))
 }
 
 pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
@@ -150,9 +166,12 @@ pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     }
     overlay.set(&key, match choice { VoteChoice::Yes => b"yes".to_vec(), VoteChoice::No => b"no".to_vec() })?;
     overlay.set(&proposal_key(id), serde_json::to_vec(&proposal).map_err(|e| e.to_string())?)?;
-    gas.charge_event(id.len() + voter.len() + 1)?;
+    let mut event_payload = Vec::new();
+    append_field(&mut event_payload, voter.as_bytes());
+    event_payload.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
+    gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
-    Ok(receipt("VoteCast", id, &gas, state))
+    Ok(receipt("VoteCast", dao_id, id, &event_payload, &gas, state))
 }
 
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
@@ -169,9 +188,10 @@ pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
         else if proposal.yes_votes > proposal.no_votes { ProposalStatus::Approved }
         else { ProposalStatus::Rejected };
     overlay.set(&proposal_key(id), serde_json::to_vec(&proposal).map_err(|e| e.to_string())?)?;
-    gas.charge_event(id.len())?;
+    let event_payload = status_name(proposal.status).as_bytes();
+    gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
-    Ok(receipt("ProposalFinalized", id, &gas, state))
+    Ok(receipt("ProposalFinalized", dao_id, id, event_payload, &gas, state))
 }
 
 pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<DaoProposal, String> {
