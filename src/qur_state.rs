@@ -98,6 +98,31 @@ supply = 100000000
     }
 
     #[test]
+    fn execution_snapshot_round_trip_and_rejects_tampering() {
+        use super::{decode_execution_snapshot, encode_execution_snapshot};
+        let mut ledger = genesis();
+        ledger.transfer("GOLD", "genesis", "alice", 42).unwrap();
+        let mut contracts = ContractState::new();
+        let mut action = contracts.begin("vault", AccessMode::Action).unwrap();
+        action.set("owner", b"alice".to_vec()).unwrap();
+        contracts.commit(action).unwrap();
+
+        let snapshot = encode_execution_snapshot(&ledger, &contracts).unwrap();
+        let (restored_ledger, restored_contracts) = decode_execution_snapshot(&snapshot).unwrap();
+        assert_eq!(restored_ledger, ledger);
+        assert_eq!(restored_contracts, contracts);
+        assert_eq!(execution_state_root(&ledger, &contracts),
+            execution_state_root(&restored_ledger, &restored_contracts));
+
+        let mut tampered = snapshot.clone();
+        tampered["contract_snapshot_hex"] = serde_json::Value::String("00".repeat(8));
+        assert!(decode_execution_snapshot(&tampered).is_err());
+        let mut wrong_root = snapshot;
+        wrong_root["execution_state_root"] = serde_json::Value::String("00".repeat(32));
+        assert!(decode_execution_snapshot(&wrong_root).unwrap_err().contains("root mismatch"));
+    }
+
+    #[test]
     fn component_order_is_fixed_and_roots_are_not_interchangeable() {
         let ledger = genesis();
         let contracts = ContractState::new();
@@ -128,4 +153,70 @@ pub fn chain_execution_state_root(
     hasher.update(b"CONTRACT_STORAGE\0");
     hasher.update(contracts.state_root());
     hasher.finalize().into()
+}
+
+
+/// Build a portable, root-checked snapshot for the QUR ledger + contract storage pair.
+/// This is suitable as an input to deterministic replay; it is not a consensus block format.
+pub fn encode_execution_snapshot(
+    ledger: &QurLedger,
+    contracts: &ContractState,
+) -> Result<serde_json::Value, String> {
+    let contract_bytes = contracts.encode_snapshot()?;
+    Ok(serde_json::json!({
+        "schema": "qorvynt.execution-state.v1",
+        "ledger": ledger.to_json(),
+        "contract_snapshot_hex": encode_hex(&contract_bytes),
+        "execution_state_root": encode_hex(&execution_state_root(ledger, contracts)),
+    }))
+}
+
+/// Restore a bounded snapshot and verify its component-derived root before returning state.
+pub fn decode_execution_snapshot(
+    value: &serde_json::Value,
+) -> Result<(QurLedger, ContractState), String> {
+    if value.get("schema").and_then(|v| v.as_str()) != Some("qorvynt.execution-state.v1") {
+        return Err("unsupported QORVYNT execution snapshot schema".into());
+    }
+    let ledger_value = value.get("ledger").ok_or("execution snapshot ledger is missing")?;
+    let ledger = QurLedger::from_json(ledger_value)?;
+    let encoded = value.get("contract_snapshot_hex").and_then(|v| v.as_str())
+        .ok_or("execution snapshot contract bytes are missing")?;
+    if encoded.len() > 2 * (super::contract_state::MAX_CONTRACT_STORAGE_BYTES + 1024 * 1024) {
+        return Err("execution snapshot contract bytes exceed size limit".into());
+    }
+    let contract_bytes = decode_hex(encoded)?;
+    let contracts = ContractState::decode_snapshot(&contract_bytes)?;
+    let expected = value.get("execution_state_root").and_then(|v| v.as_str())
+        .ok_or("execution snapshot root is missing")?;
+    if expected != encode_hex(&execution_state_root(&ledger, &contracts)) {
+        return Err("QORVYNT execution snapshot root mismatch".into());
+    }
+    Ok((ledger, contracts))
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
+fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
+    if value.len() % 2 != 0 || !value.is_ascii() {
+        return Err("invalid execution snapshot hex encoding".into());
+    }
+    value.as_bytes().chunks_exact(2).map(|pair| {
+        let digit = |byte: u8| match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            _ => None,
+        };
+        let high = digit(pair[0]).ok_or("invalid execution snapshot hex encoding")?;
+        let low = digit(pair[1]).ok_or("invalid execution snapshot hex encoding")?;
+        Ok((high << 4) | low)
+    }).collect()
 }
