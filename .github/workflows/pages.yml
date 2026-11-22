@@ -43,7 +43,6 @@ jobs:
           grep -q '<title>QORVYNT Developers' website/developers.html
           grep -q 'playground.html' website/index.html
           grep -q 'developers.html' website/index.html
-          grep -q 'developers.html' website/developers.html
           echo "QORVYNT_PAGES_CONTENT_VALIDATION_PASS"
 
   deploy:
