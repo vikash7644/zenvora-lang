@@ -123,7 +123,7 @@ This is not yet a transfer of native tokens or chain assets: treasury funding is
 
 ### DAO treasury payouts using the QUR token ledger
 
-The DAO runtime now has a token-backed treasury execution path. Fund the DAO's token account by transferring tokens to the deterministic account `dao_<dao-id>`, then create and approve a treasury proposal with a signed wallet vote. At the authenticated integration boundary currently exposed by the local CLI, pass the block height explicitly; the transfer will be rejected before the timelock expires. On success, the QUR token ledger moves the proposal amount from `dao_<dao-id>` to the proposal recipient, preserves total token supply, stores the DAO execution marker and token balances in the contract-state overlay, and marks the proposal executed.
+The DAO runtime now has a token-backed treasury execution path. Fund the DAO's token account by transferring tokens to the deterministic account `dao_<dao-id>`, then create and approve a treasury proposal with a signed wallet vote. The local CLI accepts a caller-supplied block height; the transfer is rejected before the timelock expires, but that height is not authenticated against a canonical chain header. On success, the QUR token ledger moves the proposal amount from `dao_<dao-id>` to the proposal recipient, preserves total token supply, stores the DAO execution marker and token balances in the contract-state overlay, and marks the proposal executed.
 
 ```sh
 qorvynt --qur-token-init examples/qur/manifest.qv token-ledger.json
@@ -146,4 +146,4 @@ qorvynt --qur-dao-propose-weighted token-ledger.json dao-state.bin community pro
 qorvynt --qur-dao-vote-weighted dao-state.bin community proposal1 alice.qvk GOLD yes 30000
 ```
 
-The snapshot is currently taken from the local QUR token ledger supplied at proposal creation. It is not yet anchored to a canonical block height or consensus state root, and snapshot entries are not yet generated from chain replay. Production governance must authenticate the snapshot against a finalized chain block, and the wallet signature CLI must be replaced or complemented by externally signed transaction admission.
+The snapshot is currently taken from the local QUR token ledger supplied at proposal creation. The proposal quorum and yes/no totals are measured in token units, not wallet count. It is not yet anchored to a canonical block height or consensus state root, and snapshot entries are not yet generated from chain replay. Production governance must authenticate the snapshot against a finalized chain block, and the wallet signature CLI must be replaced or complemented by externally signed transaction admission.
