@@ -5,7 +5,7 @@
 
 use super::super::*;
 
-fn run(code: &[Op]) -> Result<(), String> {
+pub(super) fn run(code: &[Op]) -> Result<(), String> {
     run_with_output(code, &mut |line| println!("{line}"))
 }
 
