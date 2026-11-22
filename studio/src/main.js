@@ -1,4 +1,5 @@
-import { basicSetup, EditorView, keymap } from 'codemirror';
+import { basicSetup, EditorView } from 'codemirror';
+import { keymap } from '@codemirror/view';
 import { StreamLanguage, HighlightStyle } from '@codemirror/language';
 import { autocompletion, completeFromList } from '@codemirror/autocomplete';
 import { tags } from '@lezer/highlight';
