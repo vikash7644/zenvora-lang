@@ -11,7 +11,7 @@ This package owns:
 - built-in dispatch and collection/value helpers
 - resource limits and the host-neutral gas-meter interface
 
-The host compiler currently owns source parsing, bytecode serialization, and Bytecode v2 verification. The root repository adapter validates artifacts before handing instructions to this runtime. Do not execute unverified instructions from untrusted files.
+The host compiler still owns QORVYNT source parsing and source-to-bytecode compilation. This crate now owns Bytecode v2 framing and structural/control-flow verification through `bytecode_v2::{parse_v2_file, verify_v2_file}`. The host adapter uses that verifier before converting instruction records into executable VM instructions. Do not execute unverified instructions from untrusted files.
 
 ## API sketch
 
@@ -27,4 +27,4 @@ assert_eq!(output, vec!["42"]);
 
 Run package tests from the repository root with `cargo test -p qorvynt-vm`.
 
-This is the first extraction milestone, not yet a stable published crate or an independent bytecode loader.
+This is an extraction milestone, not yet a stable published crate or a complete independent bytecode-to-opcode loader. The verifier is reusable from this crate, but source compilation and opcode materialization remain in the host compiler.
