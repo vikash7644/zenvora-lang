@@ -16,7 +16,25 @@ pub struct QurLedger {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct QurTransferReceipt { pub token: String, pub from: String, pub to: String, pub amount: u64, pub gas_used: u64, pub contract_state_root: [u8; 32] }
+pub struct QurTransferEvent {
+    pub name: &'static str,
+    pub token: String,
+    pub from: String,
+    pub to: String,
+    pub amount: u64,
+    pub event_hash: [u8; 32],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QurTransferReceipt {
+    pub token: String,
+    pub from: String,
+    pub to: String,
+    pub amount: u64,
+    pub gas_used: u64,
+    pub contract_state_root: [u8; 32],
+    pub event: QurTransferEvent,
+}
 
 impl QurLedger {
     /// Allocate each declared token's complete genesis supply to the reserved genesis account.
@@ -69,6 +87,17 @@ impl QurLedger {
         meter.charge(STORAGE_WRITE_GAS.checked_mul(2).ok_or("gas calculation overflow")?)?;
         let mut candidate = self.clone();
         candidate.transfer(token, from, to, amount)?;
+        let mut event_bytes = Vec::new();
+        for field in [token.as_bytes(), from.as_bytes(), to.as_bytes()] {
+            event_bytes.extend_from_slice(&(field.len() as u32).to_be_bytes());
+            event_bytes.extend_from_slice(field);
+        }
+        event_bytes.extend_from_slice(&amount.to_be_bytes());
+        meter.charge_event(event_bytes.len())?;
+        let mut event_hasher = Sha256::new();
+        event_hasher.update(b"QORVYNT_QUR_TOKEN_TRANSFER_EVENT_V1\\0");
+        event_hasher.update(&event_bytes);
+        let event_hash: [u8; 32] = event_hasher.finalize().into();
         let supply = candidate.total_supply(token).ok_or_else(|| format!("unknown token '{token}'"))?;
         let mut overlay = state.begin(contract_id, AccessMode::Action)?;
         overlay.set(&format!("token/{token}/supply"), supply.to_string().into_bytes())?;
@@ -80,8 +109,12 @@ impl QurLedger {
         }
         state.commit(overlay)?;
         *self = candidate;
-        Ok(QurTransferReceipt { token: token.into(), from: from.into(), to: to.into(), amount,
-            gas_used: meter.used(), contract_state_root: state.state_root() })
+        Ok(QurTransferReceipt {
+            token: token.into(), from: from.into(), to: to.into(), amount,
+            gas_used: meter.used(), contract_state_root: state.state_root(),
+            event: QurTransferEvent { name: "TokenTransfer", token: token.into(), from: from.into(),
+                to: to.into(), amount, event_hash }
+        })
     }
 
     pub fn state_root(&self) -> [u8; 32] {
@@ -215,6 +248,8 @@ supply = 100000000
         let mut state = ContractState::new();
         let receipt = ledger.transfer_with_contract_gas(&mut state, "qur_tokens", "GOLD", "genesis", "alice", 25, 30_000).unwrap();
         assert!(receipt.gas_used > 21_000);
+        assert_eq!(receipt.event.name, "TokenTransfer");
+        assert_eq!(receipt.event.amount, 25);
         assert_eq!(state.get("qur_tokens", "token/GOLD/supply").unwrap(), Some(&b"100000000"[..]));
         assert_eq!(state.get("qur_tokens", "token/GOLD/balance/alice").unwrap(), Some(&b"25"[..]));
         assert_eq!(state.get("qur_tokens", "token/GOLD/balance/genesis").unwrap(), Some(&b"99999975"[..]));
