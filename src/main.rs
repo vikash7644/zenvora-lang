@@ -3482,7 +3482,7 @@ fn main() {
             } else { contract_state::ContractState::new() };
             if mode == "--qur-dao-show" {
                 let proposal = qur_dao::get_proposal(&state, &args[3], &args[4])?;
-                println!("{}", serde_json::to_string_pretty(&proposal).map_err(|e| e.to_string())?);
+                println!("{}", serde_json::to_string_pretty(&proposal.to_json()).map_err(|e| e.to_string())?);
                 return Ok(());
             }
             let receipt = match mode {
