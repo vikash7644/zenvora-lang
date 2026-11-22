@@ -2342,7 +2342,7 @@ fn execute_plan_code(code, initial_env, initial_output, functions, call_depth) {
                           if not found_fn and err == "" {
                             if is_builtin_function(fn_name) {
                               # Stack pops are reversed; restore source argument order for built-ins.
-                              define builtin_result := execute_plan_builtin(fn_name, reverse(args))
+                              define builtin_result := execute_plan_builtin(fn_name, args)
                               if get(builtin_result, "ok") {
                                 stack := push(stack, get(builtin_result, "value"))
                               } otherwise {
