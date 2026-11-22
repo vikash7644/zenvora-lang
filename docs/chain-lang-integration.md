@@ -10,10 +10,10 @@ After building the `zv` binary, the current prototype supports:
 
 ```text
 # Earlier VM-backed transfer ledger
-zv --chain-init ledger.zvr alice 1000
-zv --chain-transfer ledger.zvr alice bob 125
-zv --chain-balance ledger.zvr alice
-zv --chain-receipts ledger.zvr
+zv --chain-init ledger.qvr alice 1000
+zv --chain-transfer ledger.qvr alice bob 125
+zv --chain-balance ledger.qvr alice
+zv --chain-receipts ledger.qvr
 
 # Signed local block-store prototype
 zv --chain-keygen owner.zvk
