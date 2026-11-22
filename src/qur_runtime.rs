@@ -60,8 +60,8 @@ impl QurLedger {
     pub fn token_holders(&self, token: &str) -> Result<Vec<(String, u64)>, String> {
         if !self.supplies.contains_key(token) { return Err(format!("unknown token '{token}'")); }
         Ok(self.balances.iter()
-            .filter(|((name, _), balance)| name == token && **balance > 0)
-            .map(|((_, account), balance)| (account.clone(), *balance))
+            .filter(|((name, _), balance)| name.as_str() == token && **balance > 0)
+            .map(|((_, account), balance)| (account.as_str().to_owned(), *balance))
             .collect())
     }
 
