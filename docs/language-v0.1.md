@@ -11,30 +11,30 @@ cargo check --all-targets
 cargo clippy --all-targets
 cargo test --all-targets
 
-cargo run -- --new my-first-project
-cargo run -- --check my-first-project/main.qv
-cargo run -- my-first-project/main.qv
+qorvynt new my-first-project
+qorvynt check my-first-project/main.qv
+qorvynt run my-first-project/main.qv
 
-cargo run -- examples/hello.qv
-cargo run -- examples/loops.qv
-cargo run -- examples/functions.qv
-cargo run -- examples/functions-basic.qv
-cargo run -- examples/functions-summary.qv
-cargo run -- examples/booleans.qv
-cargo run -- examples/strings.qv
-cargo run -- examples/collections.qv
-cargo run -- examples/indexing.qv
-cargo run -- examples/stdlib.qv
-cargo run -- examples/stdlib-strings.qv
-cargo run -- examples/science.qv
-cargo run -- examples/contracts.qv
-cargo run -- examples/chain_transfer.qv
-cargo run -- examples/modules.qv
+qorvynt run examples/hello.qv
+qorvynt run examples/loops.qv
+qorvynt run examples/functions.qv
+qorvynt run examples/functions-basic.qv
+qorvynt run examples/functions-summary.qv
+qorvynt run examples/booleans.qv
+qorvynt run examples/strings.qv
+qorvynt run examples/collections.qv
+qorvynt run examples/indexing.qv
+qorvynt run examples/stdlib.qv
+qorvynt run examples/stdlib-strings.qv
+qorvynt run examples/science.qv
+qorvynt run examples/contracts.qv
+qorvynt run examples/chain_transfer.qv
+qorvynt run examples/modules.qv
 
-cargo run -- --emit-bytecode examples/functions.qv functions.zvb
-cargo run -- --run-bytecode functions.zvb
-cargo run -- --version
-cargo run -- --help
+qorvynt --emit-bytecode examples/functions.qv functions.zvb
+qorvynt --run-bytecode functions.zvb
+qorvynt --version
+qorvynt --help
 ```
 
 Use `cargo test --all-targets` as the authoritative test result for the checked-out revision. GitHub Actions also runs Clippy, the Rust tests, runnable examples, bytecode round-trip checks, CLI checks, and the separate `compiler/` interpreter MVP suite. Green CI is useful evidence, not a proof of correctness or security.
