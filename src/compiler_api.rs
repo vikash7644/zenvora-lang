@@ -54,7 +54,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     return respond(stream, "404 Not Found", &json!({"ok":false,"error":"use GET /health or POST /compile-run"}));
                 }
                 if request_line.starts_with("GET ") {
-                    return respond(stream, "200 OK", &json!({"ok":true,"service":"qorvynt-compiler-api","compiler":"Rust","mode":"development"}));
+                    return respond(stream, "200 OK", &json!({"ok":true,"service":"qorvynt-compiler-api","language":"QORVYNT","compiler":"QORVYNT","compiler_host":"Rust","compiler_version":"0.8.0","mode":"development"}));
                 }
                 let mut length = None;
                 for line in lines {
@@ -98,11 +98,11 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     Ok(code) => {
                         let mut lines = Vec::new();
                         match super::run_with_output(&code, &mut |line| lines.push(line)) {
-                            Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":"zenvora-rust-v0.8"}),
-                            Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":"zenvora-rust-v0.8"}),
+                            Ok(()) => json!({"ok":true,"output":lines.join("\n"),"lines":lines,"compiler":"QORVYNT","compiler_host":"Rust","compiler_version":"0.8.0"}),
+                            Err(error) => json!({"ok":false,"error":error,"phase":"runtime","compiler":"QORVYNT","compiler_host":"Rust","compiler_version":"0.8.0"}),
                         }
                     }
-                    Err(error) => json!({"ok":false,"error":error,"phase":"compile","compiler":"zenvora-rust-v0.8"}),
+                    Err(error) => json!({"ok":false,"error":error,"phase":"compile","compiler":"QORVYNT","compiler_host":"Rust","compiler_version":"0.8.0"}),
                 };
                 return respond(stream, "200 OK", &result);
             }
@@ -176,6 +176,20 @@ mod tests {
         );
         assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
         assert!(response.contains("body must be valid JSON"));
+    }
+
+
+    #[test]
+    fn health_endpoint_reports_qorvynt_identity_and_explicit_host() {
+        let response = response_for(
+            b"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n",
+        );
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert!(response.contains("\\"service\\":\\"qorvynt-compiler-api\\""));
+        assert!(response.contains("\\"language\\":\\"QORVYNT\\""));
+        assert!(response.contains("\\"compiler\\":\\"QORVYNT\\""));
+        assert!(response.contains("\\"compiler_host\\":\\"Rust\\""));
+        assert!(!response.contains("zenvora-rust"));
     }
 
     #[test]
