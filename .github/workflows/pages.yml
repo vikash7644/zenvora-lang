@@ -1,4 +1,4 @@
-name: Deploy Zenvora website
+name: Deploy QORVYNT website
 
 on:
   push:
@@ -35,6 +35,9 @@ jobs:
           test -s website/playground.html
           grep -q '<title>' website/index.html
           grep -q 'playground.html' website/index.html
+          grep -q '<title>QORVYNT' website/index.html
+          grep -q '<title>QORVYNT' website/playground.html
+          ! grep -Eqi 'ZENVORA|Zenvora' website/index.html website/playground.html
 
       - name: Generate Google-compatible raster favicons
         run: |
