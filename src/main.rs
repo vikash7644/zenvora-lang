@@ -5489,7 +5489,7 @@ fn factorial(n) {
 
         let ledger_bytes = br#"{"schema":"state-only-recovery"}"#;
         let state_bytes = b"recovered-dao-state";
-        let mut journal = b"QORVYNT_DAO_TX_V1\\0".to_vec();
+        let mut journal = b"QORVYNT_DAO_TX_V1\0".to_vec();
         super::dao_tx_put_bytes(&mut journal, ledger.to_str().unwrap().as_bytes()).unwrap();
         super::dao_tx_put_bytes(&mut journal, state.to_str().unwrap().as_bytes()).unwrap();
         journal.extend_from_slice(&(ledger_bytes.len() as u64).to_be_bytes());
