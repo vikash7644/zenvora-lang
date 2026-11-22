@@ -2655,7 +2655,7 @@ if not get(malformed_instruction_result, "ok") and get(malformed_instruction_res
 
 # Self-hosted parser regression: "otherwise if" must lower to a nested conditional
 # and compile through the QORVYNT source-to-bytecode pipeline.
-define otherwise_if_program := compile_source("define branch_value := 2\\nif branch_value == 1 {\\nshow \\"one\\"\\n} otherwise if branch_value == 2 {\\nshow \\"two\\"\\n}\\n")
+define otherwise_if_program := compile_source("define branch_value := 2\nif branch_value == 1 {\nshow \"one\"\n} otherwise if branch_value == 2 {\nshow \"two\"\n}\n")
 define otherwise_if_run := execute_bytecode_plan(get(otherwise_if_program, "plan"))
 if get(otherwise_if_program, "ok") and get(otherwise_if_run, "ok") and get(get(otherwise_if_run, "output"), 0) == "two" {
   show "QORVYNT_OTHERWISE_IF_FRONTEND_PASS"
