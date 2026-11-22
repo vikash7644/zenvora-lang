@@ -117,9 +117,21 @@ supply = 100000000
         let mut tampered = snapshot.clone();
         tampered["contract_snapshot_hex"] = serde_json::Value::String("00".repeat(8));
         assert!(decode_execution_snapshot(&tampered).is_err());
-        let mut wrong_root = snapshot;
+        let mut wrong_root = snapshot.clone();
         wrong_root["execution_state_root"] = serde_json::Value::String("00".repeat(32));
         assert!(decode_execution_snapshot(&wrong_root).unwrap_err().contains("root mismatch"));
+
+        let mut bad_schema = snapshot.clone();
+        bad_schema["schema"] = serde_json::Value::String("qorvynt.execution-state.v0".into());
+        assert!(decode_execution_snapshot(&bad_schema).unwrap_err().contains("schema"));
+
+        let mut bad_hex = snapshot.clone();
+        bad_hex["contract_snapshot_hex"] = serde_json::Value::String("0g".into());
+        assert!(decode_execution_snapshot(&bad_hex).unwrap_err().contains("hex"));
+
+        let mut bad_ledger = snapshot;
+        bad_ledger["ledger"]["balances"][0]["amount"] = serde_json::Value::Number(999999999u64.into());
+        assert!(decode_execution_snapshot(&bad_ledger).is_err());
     }
 
     #[test]
