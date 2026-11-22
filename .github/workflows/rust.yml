@@ -127,6 +127,22 @@ jobs:
           cargo run --locked -- --qur-dao-treasury-balance /tmp/qorvynt-dao-state.bin community | grep -Fxq 60
           cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-state.bin community treasury1 > /tmp/qorvynt-dao-treasury.json
           python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-treasury.json")); assert p["executed"] is True and p["treasury_amount"] == 40 and p["approved_at_height"] == 100'
+      - name: Test token-weighted DAO wallet voting
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes_address=$(cargo run --quiet --locked -- --chain-keygen /tmp/qorvynt-weighted-yes.qvk | sed -n 's/^Address: //p')
+          no_address=$(cargo run --quiet --locked -- --chain-keygen /tmp/qorvynt-weighted-no.qvk | sed -n 's/^Address: //p')
+          test -n "$yes_address"
+          test -n "$no_address"
+          cargo run --locked -- --qur-token-init examples/qur/manifest.qv /tmp/qorvynt-weighted-ledger.json
+          cargo run --locked -- --qur-token-transfer /tmp/qorvynt-weighted-ledger.json GOLD genesis "$yes_address" 70
+          cargo run --locked -- --qur-token-transfer /tmp/qorvynt-weighted-ledger.json GOLD genesis "$no_address" 30
+          cargo run --locked -- --qur-dao-propose /tmp/qorvynt-weighted-state.bin community weighted1 founder "Weighted governance vote" 100 30000
+          cargo run --locked -- --qur-dao-vote-weighted /tmp/qorvynt-weighted-ledger.json /tmp/qorvynt-weighted-state.bin community weighted1 /tmp/qorvynt-weighted-yes.qvk GOLD yes 30000
+          cargo run --locked -- --qur-dao-vote-weighted /tmp/qorvynt-weighted-ledger.json /tmp/qorvynt-weighted-state.bin community weighted1 /tmp/qorvynt-weighted-no.qvk GOLD no 30000
+          cargo run --locked -- --qur-dao-show /tmp/qorvynt-weighted-state.bin community weighted1 > /tmp/qorvynt-weighted-proposal.json
+          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-weighted-proposal.json")); assert p["yes_votes"] == 70 and p["no_votes"] == 30 and p["quorum"] == 100'
       - name: Execute DAO treasury payout against QUR token ledger
         shell: bash
         run: |
