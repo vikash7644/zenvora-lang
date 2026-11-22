@@ -345,6 +345,11 @@ pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
 /// Record a vote with a positive, caller-validated voting weight.
 pub fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     choice: VoteChoice, weight: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    cast_vote_with_weight_inner(state, dao_id, id, voter, choice, weight, gas_limit, false)
+}
+
+fn cast_vote_with_weight_inner(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
+    choice: VoteChoice, weight: u64, gas_limit: u64, allow_weighted_snapshot: bool) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) || !valid_id(voter) { return Err("invalid DAO, proposal, or voter identifier".into()); }
     if weight == 0 { return Err("voting weight must be greater than zero".into()); }
     let mut gas = GasMeter::new(gas_limit);
@@ -353,6 +358,9 @@ pub fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, 
     gas.charge(STORAGE_WRITE_GAS.checked_mul(2).ok_or("gas calculation overflow")?)?;
     let mut overlay = state.begin(dao_id, AccessMode::Action)?;
     let mut proposal = load_proposal(state, &overlay, id)?;
+    if proposal.voting_token.is_some() && !allow_weighted_snapshot {
+        return Err("weighted DAO proposals require the authenticated snapshot-vote path".into());
+    }
     if proposal.status != ProposalStatus::Open { return Err("proposal is not open for voting".into()); }
     let key = vote_key(id, voter);
     if overlay.get(state, &key)?.is_some() { return Err("voter has already voted on this proposal".into()); }
@@ -422,7 +430,8 @@ pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &s
     let mut gas = GasMeter::new(gas_limit);
     gas.charge(BASE_EXECUTION_GAS)?;
     gas.charge(STORAGE_READ_GAS.checked_mul(read_count).ok_or("gas calculation overflow")?)?;
-    cast_vote_with_weight(state, dao_id, id, &voter, choice, weight, gas_limit.saturating_sub(gas.used()))
+    cast_vote_with_weight_inner(state, dao_id, id, &voter, choice, weight,
+        gas_limit.saturating_sub(gas.used()), true)
 }
 
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
