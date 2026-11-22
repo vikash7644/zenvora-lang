@@ -4,10 +4,9 @@
 //! Compiler and verifier helpers remain in the host crate for now; the next
 //! boundary is to replace these host helper dependencies with a runtime API.
 
-use crate::builtin;
 use crate::qvm::gas::GasMeter;
 use crate::qvm::runtime_support::{
-    binding_map_size, binding_size, ensure_value_depth, pop_stack_value,
+    builtin, binding_map_size, binding_size, ensure_value_depth, pop_stack_value,
     push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update,
     set_indexed_value, value_to_string,
 };
