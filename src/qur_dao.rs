@@ -7,7 +7,7 @@ use super::contract_state::{AccessMode, ContractState};
 
 const MAX_ID_BYTES: usize = 64;
 const MAX_TITLE_BYTES: usize = 256;
-const MAX_DAO_SNAPSHOT_VOTERS: usize = 4096;
+const MAX_DAO_SNAPSHOT_VOTERS: usize = 2048;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VoteChoice { Yes, No }
