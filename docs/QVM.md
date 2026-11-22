@@ -65,3 +65,8 @@ The VM instruction enum, runtime value type, and instruction execution loop now 
 ### VM-owned resource limits
 
 The deterministic input and resource ceilings now live in `src/qvm/limits.rs`, owned by the QVM module and shared by bytecode verification/loading and runtime execution. The root crate keeps compatibility re-exports for existing compiler and regression-test callers. The runtime gas-meter interface is still coupled to the host contract-gas module and remains a separate extraction step.
+
+
+### Gas-meter boundary
+
+The QVM executor now accepts its own `qvm::gas::GasMeter` trait rather than depending on the concrete contract host meter type. The current contract gas meter implements that trait as an adapter, preserving the existing deterministic charging behavior. Gas schedule constants are still sourced from the host contract-gas module and are the next boundary to extract.
