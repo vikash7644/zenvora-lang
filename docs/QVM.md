@@ -60,3 +60,8 @@ The generic `--run-bytecode` command continues to support legacy v1 and v2 artif
 
 
 The VM instruction enum, runtime value type, and instruction execution loop now live in `src/qvm/bytecode.rs`, `src/qvm/value.rs`, and `src/qvm/runtime.rs`. The CLI retains a thin compatibility wrapper. The extracted runner is crate-visible only so the host wrapper can pass the optional contract gas meter; it is not a public library API yet. The extracted runtime still depends on host-crate helpers and is not yet standalone.
+
+
+### VM-owned resource limits
+
+The deterministic input and resource ceilings now live in `src/qvm/limits.rs`, owned by the QVM module and shared by bytecode verification/loading and runtime execution. The root crate keeps compatibility re-exports for existing compiler and regression-test callers. The runtime gas-meter interface is still coupled to the host contract-gas module and remains a separate extraction step.
