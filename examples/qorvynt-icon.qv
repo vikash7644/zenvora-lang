@@ -1,0 +1,14 @@
+# QORVYNT asset-generation starter
+# Run: qorvynt examples/qorvynt-icon.qv > qorvynt-icon.svg
+# Emits scalable SVG using QORVYNT string expressions.
+
+define background := "#10131c"
+define accent := "#aab5ff"
+define title := "QORVYNT"
+
+show "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\" viewBox=\"0 0 32 32\">"
+show "<title>" + title + " icon</title>"
+show "<rect width=\"32\" height=\"32\" rx=\"7\" fill=\"" + background + "\"/>"
+show "<circle cx=\"15.5\" cy=\"14.5\" r=\"10\" fill=\"none\" stroke=\"" + accent + "\" stroke-width=\"3\"/>"
+show "<path d=\"M19 18 L25 24\" fill=\"none\" stroke=\"" + accent + "\" stroke-width=\"3\" stroke-linecap=\"round\"/>"
+show "</svg>"
