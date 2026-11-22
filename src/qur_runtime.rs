@@ -8,6 +8,9 @@ use super::contract_state::{AccessMode, ContractState};
 
 const DOMAIN: &[u8] = b"QORVYNT_QUR_TOKEN_LEDGER_V1\\0";
 const MAX_ACCOUNT_BYTES: usize = 128;
+const MAX_TOKEN_NAME_BYTES: usize = 128;
+const MAX_LEDGER_TOKENS: usize = 4096;
+const MAX_LEDGER_BALANCES: usize = 1_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QurLedger {
@@ -40,7 +43,11 @@ impl QurLedger {
     /// Allocate each declared token's complete genesis supply to the reserved genesis account.
     pub fn from_manifest(manifest: &QurManifest) -> Result<Self, String> {
         let mut ledger = Self { supplies: BTreeMap::new(), balances: BTreeMap::new() };
+        if manifest.tokens.len() > MAX_LEDGER_TOKENS {
+            return Err("QUR ledger token count exceeds the 4096-token safety limit".into());
+        }
         for token in &manifest.tokens {
+            validate_token_name(&token.name)?;
             if ledger.supplies.insert(token.name.clone(), token.supply).is_some() {
                 return Err(format!("duplicate token '{}' in QUR ledger", token.name));
             }
@@ -58,6 +65,7 @@ impl QurLedger {
 
     /// Return the deterministic, non-zero token-holder set for governance snapshots.
     pub fn token_holders(&self, token: &str) -> Result<Vec<(String, u64)>, String> {
+        validate_token_name(token)?;
         if !self.supplies.contains_key(token) { return Err(format!("unknown token '{token}'")); }
         Ok(self.balances.iter()
             .filter(|((name, _), balance)| name.as_str() == token && **balance > 0)
@@ -67,6 +75,7 @@ impl QurLedger {
 
     /// Apply a transfer atomically; failed checks never mutate the ledger.
     pub fn transfer(&mut self, token: &str, from: &str, to: &str, amount: u64) -> Result<(), String> {
+        validate_token_name(token)?;
         validate_account(from)?;
         validate_account(to)?;
         if amount == 0 { return Err("token transfer amount must be greater than zero".into()); }
@@ -160,16 +169,26 @@ impl QurLedger {
             return Err("unsupported QUR token ledger schema".into());
         }
         let mut ledger = Self { supplies: BTreeMap::new(), balances: BTreeMap::new() };
-        for item in value.get("tokens").and_then(|v| v.as_array()).ok_or("ledger tokens must be an array")? {
+        let tokens = value.get("tokens").and_then(|v| v.as_array()).ok_or("ledger tokens must be an array")?;
+        if tokens.len() > MAX_LEDGER_TOKENS {
+            return Err("ledger token count exceeds the 4096-token safety limit".into());
+        }
+        for item in tokens {
             let name = item.get("name").and_then(|v| v.as_str()).ok_or("ledger token name is missing")?;
+            validate_token_name(name)?;
             let supply = item.get("supply").and_then(|v| v.as_u64()).ok_or("ledger token supply must be an unsigned integer")?;
             if supply == 0 || ledger.supplies.insert(name.to_owned(), supply).is_some() {
                 return Err("invalid or duplicate ledger token".into());
             }
         }
-        for item in value.get("balances").and_then(|v| v.as_array()).ok_or("ledger balances must be an array")? {
+        let balances = value.get("balances").and_then(|v| v.as_array()).ok_or("ledger balances must be an array")?;
+        if balances.len() > MAX_LEDGER_BALANCES {
+            return Err("ledger balance count exceeds the 1000000-entry safety limit".into());
+        }
+        for item in balances {
             let token = item.get("token").and_then(|v| v.as_str()).ok_or("ledger balance token is missing")?;
             let account = item.get("account").and_then(|v| v.as_str()).ok_or("ledger balance account is missing")?;
+            validate_token_name(token)?;
             validate_account(account)?;
             let balance = item.get("balance").and_then(|v| v.as_u64()).ok_or("ledger balance must be an unsigned integer")?;
             if !ledger.supplies.contains_key(token) || balance == 0
@@ -195,6 +214,16 @@ impl QurLedger {
         }
         Ok(())
     }
+}
+
+fn validate_token_name(token: &str) -> Result<(), String> {
+    let mut bytes = token.bytes();
+    let valid_first = matches!(bytes.next(), Some(b'a'..=b'z' | b'A'..=b'Z' | b'_'));
+    if !valid_first || token.len() > MAX_TOKEN_NAME_BYTES
+        || !bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+        return Err("invalid token identifier (expected an ASCII identifier up to 128 bytes)".into());
+    }
+    Ok(())
 }
 
 fn validate_account(account: &str) -> Result<(), String> {
@@ -276,6 +305,26 @@ supply = 100000000
         assert!(ledger.transfer_with_contract_gas(&mut state, "qur_tokens", "GOLD", "genesis", "alice", 25, 21_001).is_err());
         assert_eq!(ledger.state_root(), ledger_root);
         assert_eq!(state.state_root(), storage_root);
+    }
+
+    #[test]
+    fn ledger_loader_rejects_invalid_token_identifiers_and_excessive_entries() {
+        let manifest = qur::parse(MANIFEST).unwrap();
+        let ledger = QurLedger::from_manifest(&manifest).unwrap().to_json();
+
+        let mut invalid_name = ledger.clone();
+        invalid_name["tokens"][0]["name"] = serde_json::json!("bad-token");
+        assert!(QurLedger::from_json(&invalid_name).unwrap_err().contains("invalid token identifier"));
+
+        let mut empty_name = ledger.clone();
+        empty_name["tokens"][0]["name"] = serde_json::json!("");
+        assert!(QurLedger::from_json(&empty_name).is_err());
+
+        let mut oversized_balances = ledger;
+        oversized_balances["balances"] = serde_json::json!(vec![serde_json::json!({
+            "token": "GOLD", "account": "alice", "balance": 1
+        }); MAX_LEDGER_BALANCES + 1]);
+        assert!(QurLedger::from_json(&oversized_balances).unwrap_err().contains("1000000-entry safety limit"));
     }
 
     #[test]
