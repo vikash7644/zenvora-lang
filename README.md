@@ -189,21 +189,21 @@ A local-only signed transaction workflow is available in the `qorvynt` CLI:
 
 ```sh
 qorvynt --chain-keygen owner.qvk
-qorvynt --chain-store-init dev.qvb 71 owner.qvk 1000000
-qorvynt --chain-store-transfer dev.qvb 71 owner.qvk bob 125 3
-qorvynt --chain-store-balance dev.qvb 71 bob
-qorvynt --chain-store-info dev.qvb 71
-qorvynt --chain-rpc dev.qvb 71 8545
+qorvynt --chain-store-init dev.qvstore 71 owner.qvk 1000000
+qorvynt --chain-store-transfer dev.qvstore 71 owner.qvk bob 125 3
+qorvynt --chain-store-balance dev.qvstore 71 bob
+qorvynt --chain-store-info dev.qvstore 71
+qorvynt --chain-rpc dev.qvstore 71 8545
 # Signed transaction pool + manual validator block production:
-qorvynt --chain-rpc-pool dev.qvb 71 pending.qvp 8545
-qorvynt --chain-store-produce dev.qvb 71 pending.qvp owner.qvk
+qorvynt --chain-rpc-pool dev.qvstore 71 pending.qvp 8545
+qorvynt --chain-store-produce dev.qvstore 71 pending.qvp owner.qvk
 # On a trusted private network only:
-qorvynt --chain-p2p-serve dev.qvb 71 0.0.0.0 9000
+qorvynt --chain-p2p-serve dev.qvstore 71 0.0.0.0 9000
 # On another node initialized from the exact same genesis:
-qorvynt --chain-p2p-sync node-b.qvb 71 192.168.1.10:9000
+qorvynt --chain-p2p-sync node-b.qvstore 71 192.168.1.10:9000
 # Optional manual transaction gossip (pool-enabled peer):
-qorvynt --chain-p2p-serve-pool dev.qvb 71 pending.qvp 0.0.0.0 9000
-qorvynt --chain-p2p-gossip node-b.qvb 71 pending-b.qvp 192.168.1.10:9000
+qorvynt --chain-p2p-serve-pool dev.qvstore 71 pending.qvp 0.0.0.0 9000
+qorvynt --chain-p2p-gossip node-b.qvstore 71 pending-b.qvp 192.168.1.10:9000
 ```
 
 The prototype signs Ed25519 transactions, verifies genesis-authorized validator quorum signatures, executes transfers through the QORVYNT Lang VM, checks block commitments, persists a local block store and signed transaction pool, replays stored blocks to verify the resulting state, and exposes loopback JSON-RPC (read-only or pool-enabled) plus TCP block sync. The CLI supports multi-validator genesis configs and manually supplied quorum signers; see [the chain integration guide](docs/chain-lang-integration.md) for the exact format and limits.
