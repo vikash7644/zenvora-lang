@@ -39,11 +39,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run reference runtime regression suite
         run: cargo test --locked
+      - name: Build standalone QORVYNT compiler host
+        run: cargo build --locked --release --bin qorvynt
       - name: Execute QORVYNT-written compiler frontend
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.qv > parser-output.txt
+          ./target/release/qorvynt compiler/parser.qv > parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_DRIVER_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
@@ -76,11 +78,11 @@ jobs:
           with open("self-hosted-native-v2.zv2b", "w", encoding="utf-8", newline="") as output:
               output.write(bytecode)
           PY
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
+          ./target/release/qorvynt --emit-plan-bytecode-v2 self-hosted-plan.json self-hosted-compiler.zv2b
           cmp self-hosted-native-v2.zv2b self-hosted-compiler.zv2b
           grep -F 'QORVYNT_BYTECODE 2' self-hosted-compiler.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
-          cargo run --locked --quiet -- --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
+          ./target/release/qorvynt --run-bytecode self-hosted-compiler.zv2b > self-hosted-bytecode-output.txt
+          ./target/release/qorvynt --run-bytecode self-hosted-native-v2.zv2b > self-hosted-native-v2-output.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-native-v2-output.txt
           python3 - <<'PY'
           expected = [
@@ -98,7 +100,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked --quiet -- compiler/parser.qv > parser-output-repeat.txt
+          ./target/release/qorvynt compiler/parser.qv > parser-output-repeat.txt
           awk '/^QORVYNT_BYTECODE_PLAN_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-plan-repeat.json
           awk '/^QORVYNT_BYTECODE_V2_JSON$/ { getline; print; exit }' parser-output-repeat.txt > self-hosted-native-v2-repeat.json
           diff -u self-hosted-plan.json self-hosted-plan-repeat.json
@@ -110,7 +112,7 @@ jobs:
               output.write(bytecode)
           PY
           cmp self-hosted-native-v2.zv2b self-hosted-native-v2-repeat.zv2b
-          cargo run --locked --quiet -- --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
+          ./target/release/qorvynt --emit-plan-bytecode-v2 self-hosted-plan-repeat.json self-hosted-compiler-repeat.zv2b
           cmp self-hosted-compiler.zv2b self-hosted-compiler-repeat.zv2b
-          cargo run --locked --quiet -- --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
+          ./target/release/qorvynt --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
