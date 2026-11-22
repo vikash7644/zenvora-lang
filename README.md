@@ -14,7 +14,7 @@ QORVYNT is an actively developed programming language. The canonical and only su
 
 A prior integration effort left chain-specific code, workflows, and design drafts in this repository. They are **not part of the QORVYNT Lang release scope** and must be moved to a separate, independently maintained blockchain repository only after that destination and its tests are verified.
 
-- [Legacy chain technical specification draft](docs/zenvora-technical-spec-v1.md)
+- [Archived legacy chain technical specification draft](docs/legacy-chain-technical-spec-v1.md)
 - [Legacy chain protocol specification draft](docs/chain-protocol-specification-draft.md)
 - [Legacy chain implementation roadmap](docs/chain-implementation-roadmap.md)
 
