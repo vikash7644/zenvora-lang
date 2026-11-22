@@ -122,6 +122,27 @@ mod tests {
     }
 
     #[test]
+    fn verifier_builtin_allowlist_has_runtime_dispatch_for_every_name() {
+        let names = [
+            "array", "map", "get", "len", "contains", "push", "put", "keys", "values",
+            "hex_encode", "type_of", "to_string", "abs", "min", "max", "range", "assert",
+            "sum", "starts_with", "ends_with", "split", "join", "replace", "char_at",
+            "first", "last", "reverse", "is_empty", "clamp", "trim", "lower", "upper",
+            "char_count", "to_int", "index_of", "unique", "assert_eq", "gcd", "lcm",
+            "factorial", "is_prime", "fibonacci", "pow_int", "mean", "speed", "density",
+            "molarity", "force", "kinetic_energy", "bmi_x10", "molar_mass",
+            "dna_complement", "gc_content_percent",
+        ];
+
+        for name in names {
+            assert!(crate::bytecode_v2::is_supported_builtin(name), "{name} missing from verifier allowlist");
+            if let Err(error) = crate::qvm::builtins::builtin_unchecked(name, Vec::new()) {
+                assert!(!error.starts_with("unknown builtin"), "{name} is accepted by verifier but missing runtime dispatch");
+            }
+        }
+    }
+
+    #[test]
     fn standalone_runtime_executes_arithmetic_and_emits_output() {
         let program = [Op::Push(40), Op::Push(2), Op::Add, Op::Print];
         let mut output = Vec::new();
