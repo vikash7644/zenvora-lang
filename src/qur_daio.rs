@@ -312,6 +312,7 @@ mod tests {
         proposal.treasury_recipient = Some("bob".into());
         proposal.treasury_amount = 100;
         proposal.timelock_blocks = 0;
+        proposal.approved_at_height = Some(10);
 
         let assessment = assess_proposal(&proposal);
         assert!(assessment.findings.iter().any(|finding|
