@@ -56,6 +56,15 @@ impl QurLedger {
 
     pub fn total_supply(&self, token: &str) -> Option<u64> { self.supplies.get(token).copied() }
 
+    /// Return the deterministic, non-zero token-holder set for governance snapshots.
+    pub fn token_holders(&self, token: &str) -> Result<Vec<(String, u64)>, String> {
+        if !self.supplies.contains_key(token) { return Err(format!("unknown token '{token}'")); }
+        Ok(self.balances.iter()
+            .filter(|((name, _), balance)| name == token && **balance > 0)
+            .map(|((_, account), balance)| (account.clone(), *balance))
+            .collect())
+    }
+
     /// Apply a transfer atomically; failed checks never mutate the ledger.
     pub fn transfer(&mut self, token: &str, from: &str, to: &str, amount: u64) -> Result<(), String> {
         validate_account(from)?;
