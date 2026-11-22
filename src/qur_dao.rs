@@ -919,8 +919,11 @@ token GOLD {
             serde_json::to_vec(&malformed_json).unwrap()).unwrap();
         malformed_state.commit(overlay).unwrap();
         let before = malformed_state.state_root();
-        let message = vote_signing_message("community", "anchored1", VoteChoice::Yes).unwrap();
+        let message = vote_signing_message_for_chain(71, "community", "anchored1", VoteChoice::Yes).unwrap();
         let signature = wallet.sign(&message);
+        let other_chain_message = vote_signing_message_for_chain(72, "community", "anchored1", VoteChoice::Yes).unwrap();
+        assert!(wallet.verifying_key().verify_strict(&other_chain_message, &signature).is_err(),
+            "a signed vote must not replay on a different chain ID");
         assert!(cast_vote_weighted_signed(&mut malformed_state, "community", "anchored1", "GOLD",
             &wallet.verifying_key(), &signature, VoteChoice::Yes, 100_000).is_err());
         assert_eq!(malformed_state.state_root(), before);
