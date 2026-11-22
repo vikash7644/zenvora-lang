@@ -13,6 +13,19 @@ This package owns:
 
 The host compiler still owns QORVYNT source parsing and source-to-bytecode compilation. This crate now owns Bytecode v2 framing and structural/control-flow verification through `bytecode_v2::{parse_v2_file, verify_v2_file}`. The crate also exposes `decode_verified_v2_file`, which converts only verified instruction records into VM instructions. Do not execute unverified instructions from untrusted files.
 
+
+## Verified Bytecode v2 API
+
+```rust
+use qorvynt_vm::bytecode_v2::{parse_and_verify_v2_file, decode_verified_v2_file};
+
+let parsed = parse_and_verify_v2_file(bytecode_text)?;
+let instructions = decode_verified_v2_file(&parsed)?;
+# Ok::<(), String>(())
+```
+
+`parse_and_verify_v2_file` is the preferred untrusted-input boundary: it parses the file and runs structural, control-flow, jump-target, call-target, and operand-stack verification before decoding. `decode_verified_v2_file` rechecks verification before materializing executable instructions.
+
 ## API sketch
 
 ```rust
