@@ -116,7 +116,7 @@ fn reads_legacy_zenvora_v1_bytecode_during_identity_migration() {
 #[test]
 fn first_class_run_command_executes_qorvynt_source() {
     let path = std::env::temp_dir().join(format!("qorvynt_run_alias_{}.qv", std::process::id()));
-    fs::write(&path, "show 6 * 7\\n").unwrap();
+    fs::write(&path, "show 6 * 7\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
         .arg("run")
         .arg(&path)
@@ -130,7 +130,7 @@ fn first_class_run_command_executes_qorvynt_source() {
 #[test]
 fn first_class_check_command_validates_qorvynt_source() {
     let path = std::env::temp_dir().join(format!("qorvynt_check_alias_{}.qv", std::process::id()));
-    fs::write(&path, "show 6 * 7\\n").unwrap();
+    fs::write(&path, "show 6 * 7\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
         .arg("check")
         .arg(&path)
@@ -146,7 +146,7 @@ fn first_class_compile_command_emits_verified_bytecode_v2() {
     let base = std::env::temp_dir().join(format!("qorvynt_compile_alias_{}", std::process::id()));
     let source = base.with_extension("qv");
     let output_path = base.with_extension("qv2b");
-    fs::write(&source, "show 6 * 7\\n").unwrap();
+    fs::write(&source, "show 6 * 7\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_qorvynt"))
         .arg("compile")
         .arg(&source)
@@ -155,6 +155,6 @@ fn first_class_compile_command_emits_verified_bytecode_v2() {
         .unwrap();
     let _ = fs::remove_file(source);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(fs::read_to_string(&output_path).unwrap().starts_with("QORVYNT_BYTECODE 2\\n"));
+    assert!(fs::read_to_string(&output_path).unwrap().starts_with("QORVYNT_BYTECODE 2\n"));
     let _ = fs::remove_file(output_path);
 }
