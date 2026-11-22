@@ -3459,6 +3459,13 @@ fn dao_tx_atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         file.write_all(bytes).map_err(|e| format!("cannot write DAO transaction staging file: {e}"))?;
         file.sync_all().map_err(|e| format!("cannot sync DAO transaction staging file: {e}"))?;
         fs::rename(&temp_path, path).map_err(|e| format!("cannot atomically install DAO transaction file: {e}"))?;
+        #[cfg(unix)]
+        {
+            let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+            fs::File::open(parent)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|e| format!("cannot sync DAO transaction directory: {e}"))?;
+        }
         Ok(())
     })();
     if result.is_err() { let _ = fs::remove_file(&temp_path); }
@@ -3520,7 +3527,16 @@ fn persist_dao_token_transaction(ledger_path: &Path, state_path: &Path,
     journal.extend_from_slice(ledger_bytes);
     journal.extend_from_slice(&u64::try_from(state_bytes.len()).map_err(|_| "DAO state payload too large")?.to_be_bytes());
     journal.extend_from_slice(state_bytes);
+    const MAX_DAO_TX_JOURNAL_BYTES: usize = 64 * 1024 * 1024;
+    if journal.len() > MAX_DAO_TX_JOURNAL_BYTES {
+        return Err("DAO transaction journal exceeds the 64 MiB safety limit".into());
+    }
     let journal_path = dao_tx_journal_path(ledger_path);
+    if &journal_path == state_path || &journal_path == ledger_path {
+        return Err("DAO transaction journal path conflicts with an output path".into());
+    }
+    // Finish any earlier committed transaction before installing a new journal.
+    recover_dao_token_transaction(ledger_path, state_path)?;
     dao_tx_atomic_write(&journal_path, &journal)?;
     recover_dao_token_transaction(ledger_path, state_path)
 }
