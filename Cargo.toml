@@ -24,4 +24,5 @@ serde_json = "1"
 
 [workspace]
 members = ["crates/qorvynt-vm"]
+exclude = ["compiler"]
 resolver = "2"
