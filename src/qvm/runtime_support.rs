@@ -4,7 +4,7 @@
 //! runtime without duplicating value-safety rules.
 
 use crate::qvm::Value;
-use crate::{MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUE_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_COLLECTION_ITEMS};
+use crate::qvm::limits::{MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUE_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_COLLECTION_ITEMS};
 use crate::qvm::builtins::builtin_unchecked;
 use std::collections::HashMap;
 
