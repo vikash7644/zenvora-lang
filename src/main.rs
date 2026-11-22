@@ -3477,11 +3477,11 @@ fn main() {
                 _ => return Err("vote choice must be yes or no".into()),
             };
             let gas = args[9].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
-            let signing_key = read_chain_key(&args[7])?;
+            let signing_key = read_chain_key(&args[6])?;
             let message = qur_dao::vote_signing_message(&args[4], &args[5], choice)?;
             let signature = signing_key.sign(&message);
             let receipt = qur_dao::cast_vote_weighted_signed(&mut state, &ledger, &args[4], &args[5],
-                &args[6], &signing_key.verifying_key(), &signature, choice, gas)?;
+                &args[7], &signing_key.verifying_key(), &signature, choice, gas)?;
             state.save_snapshot(snapshot)?;
             println!("operation={}", receipt.operation);
             println!("dao_id={}", receipt.dao_id);
