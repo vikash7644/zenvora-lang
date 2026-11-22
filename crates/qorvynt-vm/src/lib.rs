@@ -25,14 +25,14 @@ mod tests {
 
     #[test]
     fn standalone_bytecode_v2_verifier_accepts_valid_program() {
-        let source = "QORVYNT_BYTECODE 2\\nPROGRAM 0 3\\nCODE\\nPUSH 42\\nPRINT\\nJUMP 3\\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nPUSH 42\nPRINT\nJUMP 3\n";
         let parsed = parse_v2_file(source).unwrap();
         verify_v2_file(&parsed).unwrap();
     }
 
     #[test]
     fn standalone_bytecode_v2_verifier_rejects_stack_underflow() {
-        let source = "QORVYNT_BYTECODE 2\\nPROGRAM 0 2\\nCODE\\nADD\\nJUMP 2\\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nADD\nJUMP 2\n";
         let parsed = parse_v2_file(source).unwrap();
         assert!(verify_v2_file(&parsed).unwrap_err().contains("stack underflow"));
     }
