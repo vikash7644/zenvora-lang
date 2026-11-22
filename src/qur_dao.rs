@@ -391,7 +391,7 @@ pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
 }
 
 /// Record a vote with a positive, caller-validated voting weight.
-pub fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
+fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     choice: VoteChoice, weight: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     cast_vote_with_weight_inner(state, dao_id, id, voter, choice, weight, gas_limit, false)
 }
