@@ -26,6 +26,17 @@ pub struct DaoProposal {
 
 impl DaoProposal {
     pub fn total_votes(&self) -> u128 { self.yes_votes as u128 + self.no_votes as u128 }
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "id": self.id,
+            "proposer": self.proposer,
+            "title": self.title,
+            "quorum": self.quorum,
+            "yes_votes": self.yes_votes,
+            "no_votes": self.no_votes,
+            "status": status_name(self.status)
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
