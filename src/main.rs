@@ -3498,6 +3498,9 @@ fn main() {
             println!("token={} from={} to={} amount={}", receipt.token, receipt.from, receipt.to, receipt.amount);
             println!("gas_used={}", receipt.gas_used);
             println!("contract_state_root={}", hex_encode_bytes(&receipt.contract_state_root));
+            println!("event={}", receipt.event.name);
+            println!("event_token={} event_from={} event_to={} event_amount={}", receipt.event.token, receipt.event.from, receipt.event.to, receipt.event.amount);
+            println!("event_hash={}", hex_encode_bytes(&receipt.event.event_hash));
             Ok(())
         })();
         if let Err(error) = result { eprintln!("QORVYNT QUR QVM error: {error}"); process::exit(1); }
