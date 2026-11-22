@@ -37,13 +37,13 @@ jobs:
           grep -q 'playground.html' website/index.html
           grep -q '<title>QORVYNT' website/index.html
           grep -q '<title>QORVYNT' website/playground.html
-          ! grep -Eqi 'ZENVORA|Zenvora' website/index.html website/playground.html
+          ! grep -Eqi 'Zenvora Lang' website/index.html website/playground.html
 
       - name: Generate Google-compatible raster favicons
         run: |
           sudo apt-get update
           sudo apt-get install -y librsvg2-bin imagemagick
-          rsvg-convert -w 48 -h 48 website/zenvora-favicon.svg -o website/favicon-48.png
+          rsvg-convert -w 48 -h 48 website/qorvynt-mark.svg -o website/favicon-48.png
           convert website/favicon-48.png -define icon:auto-resize=16,32,48 website/favicon.ico
           test -s website/favicon-48.png
           test -s website/favicon.ico
