@@ -1,4 +1,4 @@
-use crate::{compiler_lexer::Token, qvm::Op, MAX_PARSE_NESTING};
+use crate::{compiler_lexer::Token, is_builtin, qvm::Op, MAX_PARSE_NESTING};
 
 pub(crate) struct Parser { pub(crate) tokens: Vec<Token>, pub(crate) columns: Vec<usize>, pub(crate) pos: usize, pub(crate) nesting_depth: usize, pub(crate) error_column_override: Option<usize>, pub(crate) code: Vec<Op> }
 impl Parser {
