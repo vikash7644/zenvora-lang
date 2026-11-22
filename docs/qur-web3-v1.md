@@ -101,3 +101,21 @@ qorvynt --qur-dao-vote-signed dao-state.bin community proposal1 alice.qvk yes 30
 ```
 
 The older `--qur-dao-vote` command remains only as a local test/development path and accepts an unauthenticated label; do not use it for real governance. Signed voting authenticates key ownership but does not yet establish token-weighted voting power, membership eligibility, chain-level transaction finality, hardware-wallet signing, or a consensus-enforced DAO.
+
+
+### DAO treasury and block-height timelock (local accounting prototype)
+
+DAO proposals may carry a single treasury-transfer action. The local contract-state ledger supports funding the DAO treasury, creating a transfer proposal with a positive quorum and block delay, finalizing it at an explicit block height, and executing it only after the delay has elapsed. Execution atomically debits the treasury, stores a transfer record, and marks the proposal executed. Re-execution and insufficient funds are rejected without partial state changes.
+
+Example CLI flow:
+
+```sh
+qorvynt --qur-dao-treasury-fund dao-state.bin community 100 30000
+qorvynt --qur-dao-propose-treasury dao-state.bin community payout1 founder "Contributor payout" contributor 40 1 5 30000
+qorvynt --qur-dao-vote-signed dao-state.bin community payout1 alice.qvk yes 30000
+qorvynt --qur-dao-finalize-height dao-state.bin community payout1 100 30000
+qorvynt --qur-dao-treasury-execute dao-state.bin community payout1 105 30000
+qorvynt --qur-dao-treasury-balance dao-state.bin community
+```
+
+This is not yet a transfer of native tokens or chain assets: treasury funding is local accounting state, the recipient is an identifier, and the supplied block height is not authenticated against a canonical chain header. Production use requires chain transaction admission, authenticated block context, token custody/escrow, consensus replay, and an on-chain execution adapter.
