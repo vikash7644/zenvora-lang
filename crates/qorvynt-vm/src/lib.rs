@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn standalone_bytecode_v2_decoder_materializes_verified_program() {
-        let source = "QORVYNT_BYTECODE 2\\nPROGRAM 0 3\\nCODE\\nPUSH 42\\nPRINT\\nJUMP 3\\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nPUSH 42\nPRINT\nJUMP 3\n";
         let parsed = parse_and_verify_v2_file(source).unwrap();
         let program = decode_verified_v2_file(&parsed).unwrap();
         let mut output = Vec::new();
@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn standalone_decoder_preserves_utf8_string_constants() {
-        let source = "QORVYNT_BYTECODE 2\\nPROGRAM 0 3\\nCODE\\nPUSH_STRING_HEX 6869\\nPRINT\\nJUMP 3\\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nPUSH_STRING_HEX 6869\nPRINT\nJUMP 3\n";
         let parsed = parse_and_verify_v2_file(source).unwrap();
         let program = decode_verified_v2_file(&parsed).unwrap();
         let mut output = Vec::new();
