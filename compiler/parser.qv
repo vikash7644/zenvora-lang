@@ -624,9 +624,18 @@ fn lex(source) {
 # QORVYNT-written structured IR lowering. This is deliberately separate from the Rust reference VM.
 # Expression IR is a flat stack sequence; control-flow IR remains structured for later bytecode emission.
 fn append_instructions(target, source) {
+  # Each emitted statement fragment owns a local instruction address space.
+  # When fragments are concatenated (notably nested if/repeat bodies), rebase
+  # branch targets by the destination offset or jumps can land in the wrong loop.
+  define offset := len(target)
   define i := 0
   repeat i < len(source) {
-    target := push(target, get(source, i))
+    define instruction := get(source, i)
+    define op := get(instruction, "op")
+    if op == "jump" or op == "jump_if_false" {
+      instruction := put(instruction, "target", offset + get(instruction, "target"))
+    }
+    target := push(target, instruction)
     i := i + 1
   }
   return target
