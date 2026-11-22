@@ -138,8 +138,8 @@ qorvynt run examples/stdlib-strings.qv
 qorvynt run examples/contracts.qv
 qorvynt run examples/modules.qv
 qorvynt check examples/functions.qv
-qorvynt --emit-bytecode examples/functions.qv functions.qvb
-qorvynt --run-bytecode functions.qvb
+qorvynt compile examples/functions.qv functions.qv2b
+qorvynt --run-bytecode functions.qv2b
 qorvynt --version
 qorvynt --help
 ```
