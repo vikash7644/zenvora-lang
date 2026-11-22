@@ -89,3 +89,15 @@ qorvynt --qur-dao-show dao-state.bin community proposal1
 Each operation uses the deterministic local gas meter and an atomic contract-state overlay, and emits a state root plus a domain-separated event hash. A voter can vote only once per proposal. Finalization requires the configured vote-count quorum; if quorum is met, yes votes must strictly exceed no votes for approval. A tie is rejected. Proposal status is terminal after finalization.
 
 Important limitations: voter identifiers are currently caller-supplied labels, not authenticated wallet identities; quorum counts votes, not token-weighted voting power; there is no voting deadline, delegation, treasury execution, timelock, chain transaction admission, or consensus replay. An `Approved` status records the result only and does not execute arbitrary actions. Treat this as a local governance-engine prototype, not a production DAO.
+
+
+### Wallet-authenticated DAO voting
+
+The signed-vote path uses Ed25519 keys from the existing QORVYNT key-file format. The wallet signs a domain-separated message containing the DAO ID, proposal ID, and vote choice. The runtime verifies the signature before deriving the voter address from the public key and recording the vote. The voter address is the replay-protection key, so one wallet can vote only once per proposal.
+
+```sh
+qorvynt --chain-keygen alice.qvk
+qorvynt --qur-dao-vote-signed dao-state.bin community proposal1 alice.qvk yes 30000
+```
+
+The older `--qur-dao-vote` command remains only as a local test/development path and accepts an unauthenticated label; do not use it for real governance. Signed voting authenticates key ownership but does not yet establish token-weighted voting power, membership eligibility, chain-level transaction finality, hardware-wallet signing, or a consensus-enforced DAO.
