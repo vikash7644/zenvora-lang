@@ -23,6 +23,11 @@ pub struct DaoProposal {
     pub yes_votes: u64,
     pub no_votes: u64,
     pub status: ProposalStatus,
+    pub treasury_recipient: Option<String>,
+    pub treasury_amount: u64,
+    pub timelock_blocks: u64,
+    pub approved_at_height: Option<u64>,
+    pub executed: bool,
 }
 
 impl DaoProposal {
@@ -74,7 +79,12 @@ fn proposal_bytes(proposal: &DaoProposal) -> Result<Vec<u8>, String> {
         "quorum": proposal.quorum,
         "yes_votes": proposal.yes_votes,
         "no_votes": proposal.no_votes,
-        "status": status_name(proposal.status)
+        "status": status_name(proposal.status),
+        "treasury_recipient": proposal.treasury_recipient,
+        "treasury_amount": proposal.treasury_amount,
+        "timelock_blocks": proposal.timelock_blocks,
+        "approved_at_height": proposal.approved_at_height,
+        "executed": proposal.executed
     })).map_err(|e| e.to_string())
 }
 
@@ -96,6 +106,11 @@ fn parse_proposal(bytes: &[u8]) -> Result<DaoProposal, String> {
         yes_votes: value.get("yes_votes").and_then(|v| v.as_u64()).ok_or("stored DAO yes vote count is invalid")?,
         no_votes: value.get("no_votes").and_then(|v| v.as_u64()).ok_or("stored DAO no vote count is invalid")?,
         status,
+        treasury_recipient: value.get("treasury_recipient").and_then(|v| v.as_str()).map(str::to_owned),
+        treasury_amount: value.get("treasury_amount").and_then(|v| v.as_u64()).unwrap_or(0),
+        timelock_blocks: value.get("timelock_blocks").and_then(|v| v.as_u64()).unwrap_or(0),
+        approved_at_height: value.get("approved_at_height").and_then(|v| v.as_u64()),
+        executed: value.get("executed").and_then(|v| v.as_bool()).unwrap_or(false),
     })
 }
 fn vote_key(id: &str, voter: &str) -> String { format!("vote/{id}/{voter}") }
@@ -138,7 +153,9 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     let mut overlay = state.begin(dao_id, AccessMode::Action)?;
     if overlay.get(state, &proposal_key(id))?.is_some() { return Err(format!("DAO proposal '{id}' already exists")); }
     let proposal = DaoProposal { id: id.into(), proposer: proposer.into(), title: title.into(),
-        quorum, yes_votes: 0, no_votes: 0, status: ProposalStatus::Open };
+        quorum, yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
+        treasury_recipient: None, treasury_amount: 0, timelock_blocks: 0,
+        approved_at_height: None, executed: false };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut event_payload = Vec::new();
     append_field(&mut event_payload, proposer.as_bytes());
