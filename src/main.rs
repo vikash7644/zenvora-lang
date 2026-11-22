@@ -3467,6 +3467,9 @@ fn dao_tx_atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 /// Recover a committed write-ahead journal before reading either side of a DAO/token transaction.
 fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Result<(), String> {
+    if ledger_path == state_path {
+        return Err("DAO ledger and state snapshot paths must differ".into());
+    }
     let journal_path = dao_tx_journal_path(ledger_path);
     if !journal_path.exists() { return Ok(()); }
     let metadata = fs::metadata(&journal_path).map_err(|e| format!("cannot stat DAO transaction journal: {e}"))?;
@@ -5361,6 +5364,36 @@ fn factorial(n) {
         assert_eq!(meter.used(), super::contract_gas::BASE_EXECUTION_GAS + 1);
     }
 
+
+
+    #[test]
+    fn dao_token_journal_rejects_corrupt_and_path_mismatched_records() {
+        let base = std::env::temp_dir();
+        let ledger = base.join(format!("qorvynt-dao-corrupt-ledger-{}.json", std::process::id()));
+        let state = base.join(format!("qorvynt-dao-corrupt-state-{}.bin", std::process::id()));
+        let journal_path = super::dao_tx_journal_path(&ledger);
+        for path in [&ledger, &state, &journal_path] { let _ = std::fs::remove_file(path); }
+
+        std::fs::write(&ledger, b"ledger-before").unwrap();
+        std::fs::write(&state, b"state-before").unwrap();
+        std::fs::write(&journal_path, b"QORVYNT_DAO_TX_V1\0truncated").unwrap();
+        assert!(super::recover_dao_token_transaction(&ledger, &state).is_err());
+        assert_eq!(std::fs::read(&ledger).unwrap(), b"ledger-before");
+        assert_eq!(std::fs::read(&state).unwrap(), b"state-before");
+
+        let mut journal = b"QORVYNT_DAO_TX_V1\0".to_vec();
+        super::dao_tx_put_bytes(&mut journal, b"wrong-ledger-path").unwrap();
+        super::dao_tx_put_bytes(&mut journal, state.to_str().unwrap().as_bytes()).unwrap();
+        journal.extend_from_slice(&0u64.to_be_bytes());
+        journal.extend_from_slice(&0u64.to_be_bytes());
+        std::fs::write(&journal_path, journal).unwrap();
+        assert!(super::recover_dao_token_transaction(&ledger, &state).is_err());
+        assert_eq!(std::fs::read(&ledger).unwrap(), b"ledger-before");
+        assert_eq!(std::fs::read(&state).unwrap(), b"state-before");
+        assert!(super::recover_dao_token_transaction(&ledger, &ledger).is_err());
+
+        for path in [&ledger, &state, &journal_path] { let _ = std::fs::remove_file(path); }
+    }
 
     #[test]
     fn dao_token_journal_recovers_interrupted_two_file_publish() {
