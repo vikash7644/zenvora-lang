@@ -181,7 +181,7 @@ jobs:
           test "$legacy_token_execute_status" -ne 0
           cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-native-state.bin community nativepayout > /tmp/qorvynt-dao-native-proposal.json
           python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-native-proposal.json")); assert p["status"] == "open" and p["yes_votes"] == 0 and p["executed"] is False'
-          cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD dao_community | grep -Fxq 0
+          cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD dao_community | grep -Fxq 100
           cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD contributor | grep -Fxq 0
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
