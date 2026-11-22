@@ -705,6 +705,13 @@ token GOLD {
         let mut state = ContractState::new();
         create_weighted_proposal(&mut state, &ledger, "community", "weighted1", "founder",
             "Weighted vote", "GOLD", 100, 50_000).unwrap();
+        let snapshot = get_proposal(&state, "community", "weighted1").unwrap();
+        assert_eq!(snapshot.snapshot_ledger_root, Some(super::hex_digest(&ledger.state_root())));
+        assert_eq!(snapshot.voting_snapshot_root.as_ref().map(String::len), Some(64));
+        let snapshot_json = super::proposal_bytes(&snapshot).unwrap();
+        let restored = super::parse_proposal(&snapshot_json).unwrap();
+        assert_eq!(restored.snapshot_ledger_root, snapshot.snapshot_ledger_root);
+        assert_eq!(restored.voting_snapshot_root, snapshot.voting_snapshot_root);
         // Moving tokens after proposal creation cannot change the stored voting power.
         ledger.transfer("GOLD", &yes_address, &no_address, 70).unwrap();
         let yes_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
