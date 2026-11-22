@@ -152,10 +152,14 @@ impl BlockStore {
     pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> Result<(), String> {
         use std::io::Write;
         let path = path.as_ref();
-        let temporary = path.with_extension("zblocks.tmp");
+        let mut temporary_name = path.file_name()
+            .ok_or_else(|| "block-store path must name a file".to_string())?
+            .to_os_string();
+        temporary_name.push(format!(".zblocks-tmp-{}", std::process::id()));
+        let temporary = path.with_file_name(temporary_name);
         let result = (|| -> Result<(), String> {
-            let mut file = std::fs::File::create(&temporary)
-                .map_err(|error| format!("cannot create block-store temporary file: {error}"))?;
+            let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary)
+                .map_err(|error| format!("cannot create exclusive block-store temporary file: {error}"))?;
             writeln!(file, "{STORE_VERSION}").map_err(|error| format!("cannot write block store: {error}"))?;
             writeln!(file, "C\t{}", self.chain_id).map_err(|error| format!("cannot write chain ID: {error}"))?;
             for (address, balance) in &self.genesis_balances {
@@ -183,6 +187,14 @@ impl BlockStore {
             }
             std::fs::rename(&temporary, path)
                 .map_err(|error| format!("cannot replace block store: {error}"))?;
+            #[cfg(unix)]
+            {
+                let parent = path.parent().filter(|p| !p.as_os_str().is_empty())
+                    .unwrap_or_else(|| std::path::Path::new("."));
+                std::fs::File::open(parent)
+                    .and_then(|directory| directory.sync_all())
+                    .map_err(|error| format!("cannot sync block-store directory: {error}"))?;
+            }
             Ok(())
         })();
         if result.is_err() {
