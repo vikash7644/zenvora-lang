@@ -46,6 +46,9 @@ jobs:
       - name: Validate distributable Rust package
         run: cargo package --locked
 
+      - name: Validate QUR Web3 manifest
+        run: cargo run --locked -- --qur-check examples/qur_web3.qv
+
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 

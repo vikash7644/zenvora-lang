@@ -21,6 +21,7 @@ use qvm::{Op, Value};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
+mod qur;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -3423,7 +3424,7 @@ fn main() {
         return;
     }
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
-        println!("QORVYNT v0.8.0\nUsage: qorvynt <file.qv>\n       qorvynt --compiler-api [port]  (loopback development API, default 8787)\n       qorvynt --new <project-name>\n       qorvynt --check <file.qv>\n       qorvynt --emit-bytecode <file.qv> <output.qvb>\n       qorvynt --emit-bytecode-v2 <file.qv> <output.qv2b>\n       qorvynt --emit-plan-bytecode-v2 <plan.json> <output.qv2b>\n       qorvynt --run-bytecode <file.qvb>\n       qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       qorvynt --chain-init <ledger.qvr> <address> <balance>\n       qorvynt --chain-transfer <ledger.qvr> <from> <to> <amount>\n       qorvynt --chain-balance <ledger.qvr> <address>\n       qorvynt --chain-receipts <ledger.qvr>\n       qorvynt --chain-keygen <keyfile>\n       qorvynt --chain-store-init <store.qvb> <chain-id> <keyfile> <balance>\n       qorvynt --chain-store-init-multi <store.qvb> <chain-id> <genesis.txt>\n       qorvynt --chain-store-transfer <store.qvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       qorvynt --chain-store-transfer-multi <store.qvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       qorvynt --chain-store-balance <store.qvb> <chain-id> <address>\n       qorvynt --chain-store-info <store.qvb> <chain-id>\n       qorvynt --chain-store-produce <store.qvb> <chain-id> <pool-file> <validator-key>...\n       qorvynt --chain-store-produce-peer-quorum <store.qvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       qorvynt --chain-rpc <store.qvb> <chain-id> [port]\n       qorvynt --chain-rpc-pool <store.qvb> <chain-id> <pool-file> [port]\n       qorvynt --chain-p2p-serve <store.qvb> <chain-id> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-pool <store.qvb> <chain-id> <pool-file> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-validator <store.qvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       qorvynt --chain-p2p-gossip <store.qvb> <chain-id> <pool-file> <peer-ip:port>\n       qorvynt --chain-p2p-sync <store.qvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
+        println!("QORVYNT v0.8.0\nUsage: qorvynt <file.qv>\n       qorvynt --qur-check <file.qv>\n       qorvynt --compiler-api [port]  (loopback development API, default 8787)\n       qorvynt --new <project-name>\n       qorvynt --check <file.qv>\n       qorvynt --emit-bytecode <file.qv> <output.qvb>\n       qorvynt --emit-bytecode-v2 <file.qv> <output.qv2b>\n       qorvynt --emit-plan-bytecode-v2 <plan.json> <output.qv2b>\n       qorvynt --run-bytecode <file.qvb>\n       qorvynt --contract-run <file.qv> <contract-id> <snapshot.bin> <action|view> <method(args)> [gas-limit] (experimental local integer-state runtime)\n       qorvynt --qur-check <file.qv> (validate QUR Web3 manifest v1)\n       qorvynt --chain-init <ledger.qvr> <address> <balance>\n       qorvynt --chain-transfer <ledger.qvr> <from> <to> <amount>\n       qorvynt --chain-balance <ledger.qvr> <address>\n       qorvynt --chain-receipts <ledger.qvr>\n       qorvynt --chain-keygen <keyfile>\n       qorvynt --chain-store-init <store.qvb> <chain-id> <keyfile> <balance>\n       qorvynt --chain-store-init-multi <store.qvb> <chain-id> <genesis.txt>\n       qorvynt --chain-store-transfer <store.qvb> <chain-id> <keyfile> <recipient> <amount> <max-fee>\n       qorvynt --chain-store-transfer-multi <store.qvb> <chain-id> <tx-key> <recipient> <amount> <max-fee> <validator-key>...\n       qorvynt --chain-store-balance <store.qvb> <chain-id> <address>\n       qorvynt --chain-store-info <store.qvb> <chain-id>\n       qorvynt --chain-store-produce <store.qvb> <chain-id> <pool-file> <validator-key>...\n       qorvynt --chain-store-produce-peer-quorum <store.qvb> <chain-id> <pool-file> <proposer-key> <peer-ip:port>...\n       qorvynt --chain-rpc <store.qvb> <chain-id> [port]\n       qorvynt --chain-rpc-pool <store.qvb> <chain-id> <pool-file> [port]\n       qorvynt --chain-p2p-serve <store.qvb> <chain-id> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-pool <store.qvb> <chain-id> <pool-file> <bind-ip> <port>\n       qorvynt --chain-p2p-serve-validator <store.qvb> <chain-id> <pool-file> <validator-key> <bind-ip> <port>\n       qorvynt --chain-p2p-gossip <store.qvb> <chain-id> <pool-file> <peer-ip:port>\n       qorvynt --chain-p2p-sync <store.qvb> <chain-id> <peer-ip:port>\n\nSyntax: define total := 10 + 20\n        show total * 2\n        if total >= 18 {{ ... }}");
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--contract-run") {
@@ -3452,6 +3453,24 @@ fn main() {
                 eprintln!("QORVYNT contract error: {error}");
                 process::exit(1);
             }
+        }
+        return;
+    }
+    if args.get(1).is_some_and(|mode| mode == "--qur-check") {
+        if args.len() != 3 {
+            eprintln!("Usage: qorvynt --qur-check <file.qv>");
+            process::exit(2);
+        }
+        match read_program(&args[2]).and_then(|source| qur::parse(&source)) {
+            Ok(manifest) => {
+                println!("QUR manifest valid");
+                println!("chains={} tokens={} daos={} wallets={}", manifest.chains.len(), manifest.tokens.len(), manifest.daos.len(), manifest.wallets.len());
+                for chain in manifest.chains { println!("chain={} consensus={} native_token={}", chain.name, chain.consensus, chain.native_token); }
+                for token in manifest.tokens { println!("token={} standard={} supply={}", token.name, token.standard, token.supply); }
+                for dao in manifest.daos { println!("dao={} governance={}", dao.name, dao.governance); }
+                for wallet in manifest.wallets { println!("wallet={} network={}", wallet.name, wallet.network); }
+            }
+            Err(error) => { eprintln!("QUR manifest error: {error}"); process::exit(1); }
         }
         return;
     }

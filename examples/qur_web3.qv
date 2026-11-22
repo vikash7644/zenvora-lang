@@ -1,0 +1,20 @@
+# QORVYNT Universal Runtime (QUR) Web3 manifest v1
+# Validate with: qorvynt --qur-check examples/qur_web3.qv
+
+chain MyChain {
+    consensus = "proof_of_stake"
+    native_token = "QOR"
+}
+
+token GOLD {
+    standard = "fungible"
+    supply = 100000000
+}
+
+dao Community {
+    governance = "on_chain"
+}
+
+wallet MyWallet {
+    network = MyChain
+}
