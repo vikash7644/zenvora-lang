@@ -141,8 +141,8 @@ jobs:
           cargo run --locked -- --qur-token-transfer /tmp/qorvynt-weighted-ledger.json GOLD genesis "$no_address" 30
           cargo run --locked -- --qur-dao-propose-weighted /tmp/qorvynt-weighted-ledger.json /tmp/qorvynt-weighted-state.bin community weighted1 founder "Weighted governance vote" GOLD 100 50000
           cargo run --locked -- --qur-token-transfer /tmp/qorvynt-weighted-ledger.json GOLD "$yes_address" "$no_address" 70
-          cargo run --locked -- --qur-dao-vote-weighted /tmp/qorvynt-weighted-state.bin community weighted1 /tmp/qorvynt-weighted-yes.qvk GOLD yes 30000
-          cargo run --locked -- --qur-dao-vote-weighted /tmp/qorvynt-weighted-state.bin community weighted1 /tmp/qorvynt-weighted-no.qvk GOLD no 30000
+          cargo run --locked -- --qur-dao-vote-weighted /tmp/qorvynt-weighted-state.bin community weighted1 /tmp/qorvynt-weighted-yes.qvk GOLD yes 100000
+          cargo run --locked -- --qur-dao-vote-weighted /tmp/qorvynt-weighted-state.bin community weighted1 /tmp/qorvynt-weighted-no.qvk GOLD no 100000
           cargo run --locked -- --qur-dao-show /tmp/qorvynt-weighted-state.bin community weighted1 > /tmp/qorvynt-weighted-proposal.json
           python3 -c 'import json; p=json.load(open("/tmp/qorvynt-weighted-proposal.json")); assert p["yes_votes"] == 70 and p["no_votes"] == 30 and p["quorum"] == 100; assert len(p["snapshot_ledger_root"]) == 64 and len(p["voting_snapshot_root"]) == 64'
       - name: Execute DAO treasury payout against QUR token ledger
