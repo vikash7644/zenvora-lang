@@ -42,6 +42,34 @@ supply = 100000000
     }
 
     #[test]
+    fn chain_execution_root_commits_native_tokens_and_contract_storage() {
+        use super::chain_execution_state_root;
+        use super::super::chain_runtime::ChainRuntime;
+
+        let mut native_a = ChainRuntime::new();
+        native_a.set_genesis_balance("alice", 100).unwrap();
+        let mut native_b = native_a.clone();
+        let ledger_a = genesis();
+        let mut ledger_b = genesis();
+        let contracts_a = ContractState::new();
+        let mut contracts_b = ContractState::new();
+
+        let root = chain_execution_state_root(&native_a, &ledger_a, &contracts_a);
+        assert_eq!(root, chain_execution_state_root(&native_a, &ledger_a, &contracts_a));
+
+        native_b.transfer("alice", "bob", 1).unwrap();
+        assert_ne!(root, chain_execution_state_root(&native_b, &ledger_a, &contracts_a));
+
+        ledger_b.transfer("GOLD", "genesis", "alice", 1).unwrap();
+        assert_ne!(root, chain_execution_state_root(&native_a, &ledger_b, &contracts_a));
+
+        let mut action = contracts_b.begin("counter", AccessMode::Action).unwrap();
+        action.set("value", b"1".to_vec()).unwrap();
+        contracts_b.commit(action).unwrap();
+        assert_ne!(root, chain_execution_state_root(&native_a, &ledger_a, &contracts_b));
+    }
+
+    #[test]
     fn execution_root_is_deterministic_for_identical_components() {
         let ledger_a = genesis();
         let ledger_b = genesis();
@@ -79,4 +107,25 @@ supply = 100000000
         assert_ne!(first, ledger.state_root());
         assert_ne!(first, contracts.state_root());
     }
+}
+
+
+/// Versioned commitment spanning native chain accounts, QUR tokens, and contract storage.
+/// This is a deterministic composition primitive; block execution/replay must still
+/// compute and verify it before it can be treated as a consensus state root.
+pub fn chain_execution_state_root(
+    chain: &super::chain_runtime::ChainRuntime,
+    ledger: &QurLedger,
+    contracts: &ContractState,
+) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"QORVYNT_CHAIN_EXECUTION_STATE_V1\\0");
+    hasher.update(1u16.to_be_bytes());
+    hasher.update(b"NATIVE_CHAIN_ACCOUNTS\\0");
+    hasher.update(chain.state_root());
+    hasher.update(b"QUR_TOKEN_LEDGER\\0");
+    hasher.update(ledger.state_root());
+    hasher.update(b"CONTRACT_STORAGE\\0");
+    hasher.update(contracts.state_root());
+    hasher.finalize().into()
 }
