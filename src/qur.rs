@@ -159,7 +159,8 @@ pub fn parse(source: &str) -> Result<QurManifest, String> {
             Kind::Wallet => {
                 let (network, quoted) = required(&decl, "network")?;
                 if *quoted || !valid_identifier(network) { return Err(format!("line {}: wallet network must be an unquoted chain identifier", decl.line)); }
-                manifest.wallets.push(WalletSpec { name: decl.name, network: network.clone() });
+                let network = network.clone();
+                manifest.wallets.push(WalletSpec { name: decl.name, network });
             }
         }
     }
