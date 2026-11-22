@@ -7,6 +7,35 @@
 
 pub mod bytecode_v2;
 
+
+/// An executable instruction stream that can only be constructed after
+/// Bytecode v2 parsing and verifier checks succeed.
+pub struct VerifiedProgram {
+    instructions: Vec<qvm::bytecode::Op>,
+}
+
+impl VerifiedProgram {
+    /// Parse and verify an untrusted QORVYNT Bytecode v2 artifact.
+    pub fn from_v2_source(source: &str) -> Result<Self, String> {
+        let parsed = bytecode_v2::parse_and_verify_v2_file(source)?;
+        let instructions = bytecode_v2::decode_verified_v2_file(&parsed)?;
+        Ok(Self { instructions })
+    }
+
+    /// Borrow the verifier-approved instruction stream.
+    pub fn instructions(&self) -> &[qvm::bytecode::Op] {
+        &self.instructions
+    }
+
+    /// Execute the verified program with a host-provided output sink.
+    pub fn execute_with_output<F>(&self, mut output: F) -> Result<(), String>
+    where
+        F: FnMut(String),
+    {
+        qvm::runtime::run_with_output_metered(&self.instructions, &mut output, None)
+    }
+}
+
 pub mod qvm {
     pub mod bytecode;
     pub mod builtins;
@@ -57,6 +86,21 @@ mod tests {
         let mut output = Vec::new();
         run_with_output_metered(&program, &mut |line| output.push(line), None).unwrap();
         assert_eq!(output, vec!["hi"]);
+    }
+
+    #[test]
+    fn verified_program_api_loads_and_executes_v2_artifacts() {
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nPUSH 42\nPRINT\nJUMP 3\n";
+        let program = crate::VerifiedProgram::from_v2_source(source).unwrap();
+        let mut output = Vec::new();
+        program.execute_with_output(|line| output.push(line)).unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+
+    #[test]
+    fn verified_program_api_rejects_unverified_artifacts() {
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 2\nCODE\nADD\nJUMP 2\n";
+        assert!(crate::VerifiedProgram::from_v2_source(source).is_err());
     }
 
     #[test]
