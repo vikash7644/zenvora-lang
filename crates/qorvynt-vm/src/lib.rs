@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn verified_program_executes_supported_builtins() {
-        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 3\nCODE\nPUSH_STRING_HEX 6869\nBUILTIN len 1\nPRINT\n";
+        let source = "QORVYNT_BYTECODE 2\nPROGRAM 0 4\nCODE\nPUSH_STRING_HEX 6869\nBUILTIN len 1\nPRINT\nJUMP 4\n";
         let program = crate::VerifiedProgram::from_v2_source(source).unwrap();
         let mut output = Vec::new();
         program.execute_with_output(|line| output.push(line)).unwrap();
