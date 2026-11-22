@@ -1,4 +1,4 @@
-name: QORVYNT self-hosted compiler and Bytecode v2 validation
+name: QORVYNT source-frontend and Bytecode v2 parity (Rust reference host)
 
 on:
   pull_request:
@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Install stable Rust reference host
+      - name: Install temporary Rust reference host (not a self-hosting proof)
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -52,6 +52,9 @@ jobs:
           grep -F 'QORVYNT_MULTI_CONTROL_FLOW_PLAN_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_FUNCTION_SEMANTICS_PASS' parser-output.txt
           grep -F 'QORVYNT_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_PASS' parser-output.txt
+          grep -F 'QORVYNT_LEXER_MULTILINE_COMMENT_PASS' parser-output.txt
+          grep -F 'QORVYNT_LEXER_STRING_DELIMITERS_PASS' parser-output.txt
+          grep -F 'QORVYNT_LEXER_UNTERMINATED_STRING_PASS' parser-output.txt
           grep -F 'QORVYNT_NATIVE_BYTECODE_V2_EMIT_PASS' parser-output.txt
           ! grep -F 'QORVYNT_NATIVE_BYTECODE_V2_EMIT_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_FAIL' parser-output.txt
@@ -116,3 +119,22 @@ jobs:
           cmp self-hosted-compiler.zv2b self-hosted-compiler-repeat.zv2b
           ./target/release/qorvynt --run-bytecode self-hosted-compiler-repeat.zv2b > self-hosted-bytecode-output-repeat.txt
           diff -u self-hosted-bytecode-output.txt self-hosted-bytecode-output-repeat.txt
+
+      - name: Create reproducibility evidence manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum self-hosted-plan.json self-hosted-compiler.zv2b self-hosted-bytecode-output.txt > self-hosted-evidence.sha256
+          cat self-hosted-evidence.sha256
+      - name: Upload source-frontend parity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qorvynt-source-frontend-bytecode-v2-evidence
+          path: |
+            parser-output.txt
+            self-hosted-plan.json
+            self-hosted-compiler.zv2b
+            self-hosted-bytecode-output.txt
+            self-hosted-evidence.sha256
+          if-no-files-found: error
+          retention-days: 14
