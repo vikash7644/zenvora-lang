@@ -6,9 +6,9 @@
 
 pub(crate) use qorvynt_vm::qvm::{Op, Value};
 pub(crate) use qorvynt_vm::VerifiedProgram;
-pub(crate) use qorvynt_vm::qvm::{builtins, gas, limits, runtime, runtime_support};
+pub(crate) use qorvynt_vm::qvm::{builtins, gas, limits, runtime_support};
 
-use super::{deserialize_bytecode_v2, read_bytecode_source, write_bytecode_v2};
+use super::{read_bytecode_source, write_bytecode_v2};
 
 /// Compile QORVYNT source into a verified Bytecode v2 QVM artifact.
 pub(super) fn compile(source_path: &str, output_path: &str) -> Result<(), String> {
