@@ -25,10 +25,22 @@ pub struct StoredBlock {
 /// Header commitments exposed only from a block store whose prefix was accepted and replayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VerifiedBlockAnchor {
-    pub chain_id: u64,
-    pub height: u64,
-    pub block_hash: [u8; 32],
-    pub state_root: [u8; 32],
+    chain_id: u64,
+    height: u64,
+    block_hash: [u8; 32],
+    state_root: [u8; 32],
+}
+
+impl VerifiedBlockAnchor {
+    pub fn chain_id(&self) -> u64 { self.chain_id }
+    pub fn height(&self) -> u64 { self.height }
+    pub fn block_hash(&self) -> &[u8; 32] { &self.block_hash }
+    pub fn state_root(&self) -> &[u8; 32] { &self.state_root }
+
+    #[cfg(test)]
+    pub(crate) fn test_fixture(chain_id: u64, height: u64, block_hash: [u8; 32], state_root: [u8; 32]) -> Self {
+        Self { chain_id, height, block_hash, state_root }
+    }
 }
 
 #[derive(Debug, Clone)]
