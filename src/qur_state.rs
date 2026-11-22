@@ -119,13 +119,13 @@ pub fn chain_execution_state_root(
     contracts: &ContractState,
 ) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(b"QORVYNT_CHAIN_EXECUTION_STATE_V1\\0");
+    hasher.update(b"QORVYNT_CHAIN_EXECUTION_STATE_V1\0");
     hasher.update(1u16.to_be_bytes());
-    hasher.update(b"NATIVE_CHAIN_ACCOUNTS\\0");
+    hasher.update(b"NATIVE_CHAIN_ACCOUNTS\0");
     hasher.update(chain.state_root());
-    hasher.update(b"QUR_TOKEN_LEDGER\\0");
+    hasher.update(b"QUR_TOKEN_LEDGER\0");
     hasher.update(ledger.state_root());
-    hasher.update(b"CONTRACT_STORAGE\\0");
+    hasher.update(b"CONTRACT_STORAGE\0");
     hasher.update(contracts.state_root());
     hasher.finalize().into()
 }
