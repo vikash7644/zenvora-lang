@@ -19,7 +19,7 @@ mod bytecode_v2;
 mod qvm;
 use qvm::{Op, Value};
 pub(crate) use qvm::runtime_support::{
-    binding_map_size, binding_size, check_map_capacity, ensure_value_depth,
+    binding_map_size, binding_size, builtin, check_map_capacity, ensure_value_depth,
     pop_stack_value, push_stack_value, runtime_state_bytes_after_sizes,
     runtime_state_bytes_after_update, set_indexed_value, value_depth, value_size,
     value_to_string,
