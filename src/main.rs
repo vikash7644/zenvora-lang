@@ -23,6 +23,7 @@ mod contract_runtime;
 mod contract_gas;
 mod qur;
 mod qur_runtime;
+mod qur_state;
 mod qur_dao;
 
 #[derive(Debug, Clone, PartialEq)]
