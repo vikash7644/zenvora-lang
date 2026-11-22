@@ -792,6 +792,10 @@ token GOLD {
         let before_state = state.state_root();
         let before_ledger = ledger.state_root();
         assert!(execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
+            "SILVER", 105, 50_000).is_err());
+        assert_eq!(state.state_root(), before_state);
+        assert_eq!(ledger.state_root(), before_ledger);
+        assert!(execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
             "GOLD", 104, 50_000).is_err());
         assert_eq!(state.state_root(), before_state);
         assert_eq!(ledger.state_root(), before_ledger);
