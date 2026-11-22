@@ -396,8 +396,9 @@ fn parse_program(tokens) {
             }
           }
         } otherwise {
-          define expr := parse_expr(tokens, pos + 1)
-          if get(expr, "error") != "" {
+          if kw == "return" {
+            define expr := parse_expr(tokens, pos + 1)
+            if get(expr, "error") != "" {
             err := get(expr, "error")
           } otherwise {
             if get(expr, "pos") == pos + 1 {
