@@ -145,6 +145,19 @@ jobs:
           cargo run --locked -- --qur-dao-vote-weighted /tmp/qorvynt-weighted-state.bin community weighted1 /tmp/qorvynt-weighted-no.qvk GOLD no 100000
           cargo run --locked -- --qur-dao-show /tmp/qorvynt-weighted-state.bin community weighted1 > /tmp/qorvynt-weighted-proposal.json
           python3 -c 'import json; p=json.load(open("/tmp/qorvynt-weighted-proposal.json")); assert p["yes_votes"] == 70 and p["no_votes"] == 30 and p["quorum"] == 100; assert len(p["snapshot_ledger_root"]) == 64 and len(p["voting_snapshot_root"]) == 64'
+      - name: Test replay-anchored weighted DAO proposal CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          validator_address=$(cargo run --quiet --locked -- --chain-keygen /tmp/qorvynt-anchor-validator.qvk | sed -n 's/^Address: //p')
+          test -n "$validator_address"
+          cargo run --locked -- --chain-store-init /tmp/qorvynt-anchor-blocks.jsonl 777 /tmp/qorvynt-anchor-validator.qvk 1000000
+          cargo run --locked -- --qur-token-init examples/qur/manifest.qv /tmp/qorvynt-anchor-ledger.json
+          cargo run --locked -- --qur-token-transfer /tmp/qorvynt-anchor-ledger.json GOLD genesis "$validator_address" 100
+          cargo run --locked -- --qur-dao-propose-weighted-anchored /tmp/qorvynt-anchor-ledger.json /tmp/qorvynt-anchor-state.bin /tmp/qorvynt-anchor-blocks.jsonl 777 community anchor1 founder "Replay anchored governance" GOLD 100 100000
+          cargo run --locked -- --qur-dao-show /tmp/qorvynt-anchor-state.bin community anchor1 > /tmp/qorvynt-anchor-proposal.json
+          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-anchor-proposal.json")); assert p["snapshot_chain_id"] == 777 and p["snapshot_block_height"] == 0; assert len(p["snapshot_block_hash"]) == 64 and len(p["snapshot_chain_state_root"]) == 64; assert len(p["snapshot_ledger_root"]) == 64 and len(p["voting_snapshot_root"]) == 64'
+
       - name: Execute DAO treasury payout against QUR token ledger
         shell: bash
         run: |
