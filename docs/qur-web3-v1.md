@@ -117,8 +117,9 @@ Example CLI flow:
 qorvynt --qur-dao-treasury-fund dao-state.bin community 100 30000
 qorvynt --qur-dao-propose-treasury dao-state.bin community payout1 founder "Contributor payout" contributor 40 1 5 30000
 qorvynt --qur-dao-vote-signed dao-state.bin community payout1 alice.qvk yes 30000
-qorvynt --qur-dao-finalize-height dao-state.bin community payout1 100 30000
-qorvynt --qur-dao-treasury-execute dao-state.bin community payout1 105 30000
+# Height-based finalization and treasury execution are intentionally disabled.
+# The current local DAO prototype does not yet bind treasury proposals to a
+# replay-verified chain anchor and cannot safely derive a consensus execution height.
 qorvynt --qur-dao-treasury-balance dao-state.bin community
 ```
 
