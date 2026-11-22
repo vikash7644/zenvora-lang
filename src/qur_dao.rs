@@ -364,10 +364,24 @@ pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &st
     Ok(receipt("TreasuryProposalCreated", dao_id, id, &payload, &gas, state))
 }
 
-/// Canonical message signed by the wallet for a DAO vote.
+/// Canonical message for legacy, local-only DAO votes without a chain anchor.
 pub fn vote_signing_message(dao_id: &str, proposal_id: &str, choice: VoteChoice) -> Result<Vec<u8>, String> {
     if !valid_id(dao_id) || !valid_id(proposal_id) { return Err("invalid DAO or proposal identifier".into()); }
-    let mut message = b"QORVYNT_DAO_VOTE_V1\0".to_vec();
+    let mut message = b"QORVYNT_DAO_VOTE_V1\\0".to_vec();
+    append_field(&mut message, dao_id.as_bytes());
+    append_field(&mut message, proposal_id.as_bytes());
+    message.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
+    Ok(message)
+}
+
+/// Chain-domain-separated message for votes on replay-anchored proposals.
+pub fn vote_signing_message_for_chain(chain_id: u64, dao_id: &str, proposal_id: &str,
+    choice: VoteChoice) -> Result<Vec<u8>, String> {
+    if chain_id == 0 || !valid_id(dao_id) || !valid_id(proposal_id) {
+        return Err("invalid chain, DAO, or proposal identifier".into());
+    }
+    let mut message = b"QORVYNT_DAO_VOTE_V2\\0".to_vec();
+    message.extend_from_slice(&chain_id.to_be_bytes());
     append_field(&mut message, dao_id.as_bytes());
     append_field(&mut message, proposal_id.as_bytes());
     message.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
@@ -434,11 +448,14 @@ fn cast_vote_with_weight_inner(state: &mut ContractState, dao_id: &str, id: &str
 pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &str,
     token: &str, public_key: &VerifyingKey, signature: &Signature,
     choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
-    let message = vote_signing_message(dao_id, id, choice)?;
+    let proposal = get_proposal(state, dao_id, id)?;
+    let message = match proposal.snapshot_chain_id {
+        Some(chain_id) => vote_signing_message_for_chain(chain_id, dao_id, id, choice)?,
+        None => vote_signing_message(dao_id, id, choice)?,
+    };
     public_key.verify_strict(&message, signature)
         .map_err(|_| "invalid DAO vote signature".to_string())?;
     let voter = crate::chain_protocol::address_from_public_key(&public_key.to_bytes())?;
-    let proposal = get_proposal(state, dao_id, id)?;
     if proposal.voting_token.as_deref() != Some(token) {
         return Err("proposal voting token does not match the selected token".into());
     }
