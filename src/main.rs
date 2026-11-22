@@ -3471,7 +3471,7 @@ fn recover_dao_token_transaction(ledger_path: &Path, state_path: &Path) -> Resul
     if !journal_path.exists() { return Ok(()); }
     let bytes = fs::read(&journal_path).map_err(|e| format!("cannot read DAO transaction journal: {e}"))?;
     let mut pos = 0usize;
-    if dao_tx_take(&bytes, &mut pos, 20)? != b"QORVYNT_DAO_TX_V1\0" {
+    if dao_tx_take(&bytes, &mut pos, 18)? != b"QORVYNT_DAO_TX_V1\0" {
         return Err("unsupported DAO transaction journal version".into());
     }
     let stored_ledger = std::str::from_utf8(dao_tx_read_bytes(&bytes, &mut pos)?)
