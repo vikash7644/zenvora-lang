@@ -54,6 +54,12 @@ jobs:
           set -euo pipefail
           cargo run --locked -- --qur-json examples/qur/manifest.qv > /tmp/qorvynt-qur.json
           python3 -c 'import json; d=json.load(open("/tmp/qorvynt-qur.json")); assert d["schema"] == "qorvynt.qur.manifest.v1" and d["valid"] is True; assert len(d["chains"]) == 1 and d["chains"][0]["name"] == "MyChain"; assert d["tokens"][0]["supply"] == 100000000; assert d["wallets"][0]["network"] == "MyChain"'
+          set +e
+          cargo run --locked -- --qur-json examples/qur/invalid-wallet.qv > /tmp/qorvynt-qur-invalid.json
+          invalid_status=$?
+          set -e
+          test "$invalid_status" -eq 1
+          python3 -c 'import json; d=json.load(open("/tmp/qorvynt-qur-invalid.json")); assert d["schema"] == "qorvynt.qur.manifest.v1" and d["valid"] is False; assert "unknown chain" in d["error"]'
 
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
