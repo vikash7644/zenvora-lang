@@ -5,6 +5,7 @@
 //! boundary out first gives the runtime a stable seam for later extraction.
 
 mod bytecode;
+pub(super) mod runtime;
 mod value;
 pub(crate) use bytecode::Op;
 pub(crate) use value::Value;
