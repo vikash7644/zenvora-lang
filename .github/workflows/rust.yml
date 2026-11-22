@@ -114,6 +114,19 @@ jobs:
           cargo run --locked -- --qur-dao-finalize /tmp/qorvynt-dao-state.bin community proposal2 30000
           cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-state.bin community proposal2 > /tmp/qorvynt-dao-quorum.json
           python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-quorum.json")); assert p["status"] == "quorum_not_met"'
+          cargo run --locked -- --qur-dao-treasury-fund /tmp/qorvynt-dao-state.bin community 100 30000
+          cargo run --locked -- --qur-dao-propose-treasury /tmp/qorvynt-dao-state.bin community treasury1 founder "Pay contributor" contributor 40 1 5 30000
+          cargo run --locked -- --qur-dao-vote-signed /tmp/qorvynt-dao-state.bin community treasury1 /tmp/qorvynt-dao-alice.qvk yes 30000
+          cargo run --locked -- --qur-dao-finalize-height /tmp/qorvynt-dao-state.bin community treasury1 100 30000
+          set +e
+          cargo run --locked -- --qur-dao-treasury-execute /tmp/qorvynt-dao-state.bin community treasury1 104 30000
+          timelock_status=$?
+          set -e
+          test "$timelock_status" -eq 1
+          cargo run --locked -- --qur-dao-treasury-execute /tmp/qorvynt-dao-state.bin community treasury1 105 30000
+          cargo run --locked -- --qur-dao-treasury-balance /tmp/qorvynt-dao-state.bin community | grep -Fxq 60
+          cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-state.bin community treasury1 > /tmp/qorvynt-dao-treasury.json
+          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-treasury.json")); assert p["executed"] is True and p["treasury_amount"] == 40 and p["approved_at_height"] == 100'
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
