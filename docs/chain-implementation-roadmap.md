@@ -156,3 +156,20 @@ Publish reproducible benchmarks rather than unsupported claims. Measure transact
 6. Only then connect multi-node P2P and select/implement consensus against a reviewed threat model.
 
 **Non-goal for the immediate milestone:** do not start a DEX, bridge, stablecoin, mainnet, or token sale while the core transaction/state/consensus foundations remain prototypes.
+
+
+## Block-store durability hardening — 2026-11-22
+
+The local append-only block store now creates its staging file with exclusive
+creation and a process-specific name, rather than truncating a shared fixed
+temporary path. This prevents a second writer from silently overwriting an
+existing staging file. After the atomic rename, Unix builds sync the containing
+directory so the directory entry is flushed as well as the file contents.
+
+A regression test pre-creates the staging path and verifies that persistence
+fails without modifying the existing file or creating/replacing the destination.
+
+**Boundary:** this improves local single-file publication safety; it does not
+provide cross-process locking, distributed consensus, or a multi-node commit
+protocol. The block store remains a local persistence prototype whose blocks
+are independently validated and replayed on load.
