@@ -91,6 +91,26 @@ jobs:
           test "$transfer_status" -eq 1
           cargo run --locked -- --qur-token-balance /tmp/qorvynt-qvm-ledger.json GOLD alice | grep -Fxq 25
 
+      - name: Exercise QUR DAO proposal, voting, quorum, and persistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -- --qur-dao-propose /tmp/qorvynt-dao-state.bin community proposal1 alice "Fund public goods" 2 30000
+          cargo run --locked -- --qur-dao-vote /tmp/qorvynt-dao-state.bin community proposal1 alice yes 30000
+          cargo run --locked -- --qur-dao-vote /tmp/qorvynt-dao-state.bin community proposal1 bob yes 30000
+          set +e
+          cargo run --locked -- --qur-dao-vote /tmp/qorvynt-dao-state.bin community proposal1 bob no 30000
+          duplicate_status=$?
+          set -e
+          test "$duplicate_status" -eq 1
+          cargo run --locked -- --qur-dao-finalize /tmp/qorvynt-dao-state.bin community proposal1 30000
+          cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-state.bin community proposal1 > /tmp/qorvynt-dao-proposal.json
+          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-proposal.json")); assert p["status"] == "approved" and p["yes_votes"] == 2 and p["no_votes"] == 0 and p["quorum"] == 2'
+          cargo run --locked -- --qur-dao-propose /tmp/qorvynt-dao-state.bin community proposal2 alice "Treasury policy" 3 30000
+          cargo run --locked -- --qur-dao-vote /tmp/qorvynt-dao-state.bin community proposal2 carol yes 30000
+          cargo run --locked -- --qur-dao-finalize /tmp/qorvynt-dao-state.bin community proposal2 30000
+          cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-state.bin community proposal2 > /tmp/qorvynt-dao-quorum.json
+          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-quorum.json")); assert p["status"] == "quorum_not_met"'
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
