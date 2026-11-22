@@ -409,8 +409,6 @@ fn parse_program(tokens) {
               } otherwise {
                 if kw == "if" {
                   ast := push(ast, node("if", "", get(condition, "ast"), map("then", get(body_result, "ast"), "otherwise", array()), ln))
-                } otherwise {
-                  ast := push(ast, node("repeat", "", get(condition, "ast"), get(body_result, "ast"), ln))
                 }
                 next_pos := close_pos + 1
               }
