@@ -6,7 +6,7 @@
 
 use crate::*;
 
-pub(super) fn run_with_output_metered<F>(
+pub(crate) fn run_with_output_metered<F>(
     code: &[Op],
     output: &mut F,
     mut gas_meter: Option<&mut contract_gas::GasMeter>,
