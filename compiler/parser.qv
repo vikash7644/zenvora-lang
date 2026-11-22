@@ -2626,3 +2626,38 @@ if not get(malformed_instruction_result, "ok") and get(malformed_instruction_res
   show string_jump_result
   show function_bad_jump_result
 }
+
+
+# Lexer/parser regressions: comments must stop at the newline, and comment/block
+# delimiters inside string literals must remain ordinary string data.
+define multiline_comment_source := "show 1 # trailing comment\nshow 2\n"
+define multiline_comment_compiled := compile_source(multiline_comment_source)
+define multiline_comment_run := execute_bytecode_plan(get(multiline_comment_compiled, "plan"))
+define multiline_comment_output := get(multiline_comment_run, "output")
+if get(multiline_comment_compiled, "ok") and get(multiline_comment_run, "ok") and len(multiline_comment_output) == 2 and get(multiline_comment_output, 0) == "1" and get(multiline_comment_output, 1) == "2" {
+  show "QORVYNT_LEXER_MULTILINE_COMMENT_PASS"
+} otherwise {
+  show "QORVYNT_LEXER_MULTILINE_COMMENT_FAIL"
+  show multiline_comment_compiled
+  show multiline_comment_run
+}
+
+define string_delimiter_source := "show \"{# this is string data } # still data\"\n"
+define string_delimiter_compiled := compile_source(string_delimiter_source)
+define string_delimiter_run := execute_bytecode_plan(get(string_delimiter_compiled, "plan"))
+define string_delimiter_output := get(string_delimiter_run, "output")
+if get(string_delimiter_compiled, "ok") and get(string_delimiter_run, "ok") and len(string_delimiter_output) == 1 and get(string_delimiter_output, 0) == "{# this is string data } # still data" {
+  show "QORVYNT_LEXER_STRING_DELIMITERS_PASS"
+} otherwise {
+  show "QORVYNT_LEXER_STRING_DELIMITERS_FAIL"
+  show string_delimiter_compiled
+  show string_delimiter_run
+}
+
+define unterminated_string_compiled := compile_source("show \"unfinished\n")
+if not get(unterminated_string_compiled, "ok") and get(unterminated_string_compiled, "stage") == "lex" {
+  show "QORVYNT_LEXER_UNTERMINATED_STRING_PASS"
+} otherwise {
+  show "QORVYNT_LEXER_UNTERMINATED_STRING_FAIL"
+  show unterminated_string_compiled
+}
