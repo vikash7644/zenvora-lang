@@ -17,13 +17,13 @@ zv --chain-receipts ledger.zvr
 
 # Signed local block-store prototype
 zv --chain-keygen owner.zvk
-zv --chain-store-init dev.zvb 71 owner.zvk 1000000
-zv --chain-store-transfer dev.zvb 71 owner.zvk bob 125 3
-zv --chain-store-balance dev.zvb 71 bob
-zv --chain-store-info dev.zvb 71
+zv --chain-store-init dev.qvstore 71 owner.zvk 1000000
+zv --chain-store-transfer dev.qvstore 71 owner.zvk bob 125 3
+zv --chain-store-balance dev.qvstore 71 bob
+zv --chain-store-info dev.qvstore 71
 # Persisted transaction-pool flow
-zv --chain-rpc-pool dev.zvb 71 pending.zvp 8545
-zv --chain-store-produce dev.zvb 71 pending.zvp owner.zvk
+zv --chain-rpc-pool dev.qvstore 71 pending.zvp 8545
+zv --chain-store-produce dev.qvstore 71 pending.zvp owner.zvk
 ```
 
 `--chain-init` creates a new V2-compatible local transfer ledger and refuses to overwrite an existing file. The newer signed workflow creates an Ed25519 key file, initializes a height-zero genesis block, signs a transfer with the key, executes it through the Zenvora Lang VM, builds a block with transaction/receipt/state roots, appends it to the local block store, and verifies the store by replay. The single-account initializer remains available, and `--chain-store-init-multi` accepts a multi-account genesis config. Genesis headers use a deterministic timestamp so stores initialized from the same chain ID and allocations share the same genesis hash.
@@ -44,9 +44,9 @@ chain_id=71
 Replace each placeholder with the exact `zv...` address printed by key generation; do not include angle brackets. The address and balance are whitespace-separated. Replace each placeholder with the entire exact address printed by `--chain-keygen` (including its `zv` prefix). The config accepts up to 42 funded public-key-derived validator addresses, plus optional ordinary genesis allocations.
 
 ```text
-zv --chain-store-init-multi dev.zvb 71 genesis.txt
+zv --chain-store-init-multi dev.qvstore 71 genesis.txt
 # For four validators, provide at least three distinct authorized validator keys:
-zv --chain-store-transfer-multi dev.zvb 71 validator-1.zvk bob 125 3 validator-1.zvk validator-2.zvk validator-3.zvk
+zv --chain-store-transfer-multi dev.qvstore 71 validator-1.zvk bob 125 3 validator-1.zvk validator-2.zvk validator-3.zvk
 ```
 
 The transaction key must control a funded account. The trailing validator key files must match genesis validators and meet the 2/3+1 quorum. For a four-validator set, two signatures are insufficient; three are required. The CLI does not coordinate these signatures over the network—you supply the validator key files locally.
@@ -67,8 +67,8 @@ The CI workflow must pass before this prototype is considered verified. This is 
 Run the local query server against a replay-verified block store:
 
 ```text
-zv --chain-rpc dev.zvb 71
-zv --chain-rpc dev.zvb 71 8545
+zv --chain-rpc dev.qvstore 71
+zv --chain-rpc dev.qvstore 71 8545
 ```
 
 The service binds only to `127.0.0.1` and supports JSON-RPC 2.0 methods:
@@ -83,11 +83,11 @@ Example request body:
 {"jsonrpc":"2.0","id":1,"method":"chain_getInfo","params":[]}
 ```
 
-With a persisted transaction pool enabled, use `zv --chain-rpc-pool dev.zvb 71 pending.zvp 8545`. This mode additionally supports:
+With a persisted transaction pool enabled, use `zv --chain-rpc-pool dev.qvstore 71 pending.zvp 8545`. This mode additionally supports:
 - `chain_submitTransaction` — parameters `publicKey` and `transaction`, both lowercase hex; the transaction field is the canonical signed `TransactionV1` envelope.
 - `chain_getPendingTransactions` — list pending transaction IDs and basic fields.
 
-The pool verifies the transaction signature, chain ID, expiry, sender nonce, and balance/fee reserve against a cloned runtime with earlier pool entries replayed. It persists to a bounded local file scoped to the next block height. Produce a block with `zv --chain-store-produce dev.zvb 71 pending.zvp validator-1.zvk ...`; supply enough distinct genesis-authorized validator keys to meet the quorum. After a successful block commit, the producer resets the pool for the next height. This is manual local submission and block production; transaction gossip and automatic validator coordination are not implemented.
+The pool verifies the transaction signature, chain ID, expiry, sender nonce, and balance/fee reserve against a cloned runtime with earlier pool entries replayed. It persists to a bounded local file scoped to the next block height. Produce a block with `zv --chain-store-produce dev.qvstore 71 pending.zvp validator-1.zvk ...`; supply enough distinct genesis-authorized validator keys to meet the quorum. After a successful block commit, the producer resets the pool for the next height. This is manual local submission and block production; transaction gossip and automatic validator coordination are not implemented.
 
 This is read-only and reloads/replays the local block store for each request. It is deliberately not a public RPC endpoint and has no authentication layer because it only binds loopback. Do not expose it through a tunnel or public interface. HTTP requests are size-bounded; chunked transfer encoding and non-POST requests are rejected. The RPC does not submit transactions or implement peer networking.
 
@@ -98,17 +98,17 @@ Two local nodes can exchange blocks over a length-prefixed TCP protocol:
 ```text
 # Node A: create the genesis store and serve it on a trusted network interface
 zv --chain-keygen owner.zvk
-zv --chain-store-init node-a.zvb 71 owner.zvk 1000000
-zv --chain-p2p-serve node-a.zvb 71 0.0.0.0 9000
+zv --chain-store-init node-a.qvstore 71 owner.zvk 1000000
+zv --chain-p2p-serve node-a.qvstore 71 0.0.0.0 9000
 
 # Node B: use the exact same genesis key/config, then sync from Node A
-zv --chain-store-init node-b.zvb 71 owner.zvk 1000000
-zv --chain-p2p-sync node-b.zvb 71 192.168.1.10:9000
-zv --chain-store-info node-b.zvb 71
+zv --chain-store-init node-b.qvstore 71 owner.zvk 1000000
+zv --chain-p2p-sync node-b.qvstore 71 192.168.1.10:9000
+zv --chain-store-info node-b.qvstore 71
 
 # Optional pool-enabled peer for manual transaction gossip
-zv --chain-p2p-serve-pool node-a.zvb 71 node-a-pool.zvp 0.0.0.0 9000
-zv --chain-p2p-gossip node-b.zvb 71 node-b-pool.zvp 192.168.1.10:9000
+zv --chain-p2p-serve-pool node-a.qvstore 71 node-a-pool.zvp 0.0.0.0 9000
+zv --chain-p2p-gossip node-b.qvstore 71 node-b-pool.zvp 192.168.1.10:9000
 ```
 
 The protocol supports peer status, fetching a block by height, and optional signed-transaction gossip between pool-enabled peers. Sync verifies the chain ID, exact genesis header hash and state root, header linkage, canonical transaction encodings, signatures, nonce/balance rules, quorum signatures, and transaction/receipt/state roots by replaying blocks before persisting them. Manual gossip sends pending transactions to one peer; it does not discover peers or run periodically. Sync is append-only: it refuses a peer that is behind or has a different tip at the same height; fork choice and reorganization are not implemented.
