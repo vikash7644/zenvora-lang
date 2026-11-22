@@ -5,11 +5,11 @@
 **Repository:** `vikash7644/zenvora-lang`  
 **Related protocol design:** [Chain protocol specification draft](./chain-protocol-specification-draft.md)
 
-This document unifies the proposed Legacy Legacy Zenvora Chain protocol, developer infrastructure, applications, ecosystem, and measurable engineering goals. It is a decision framework, not a claim that these features already exist.
+This document unifies the proposed Legacy Zenvora Chain protocol, developer infrastructure, applications, ecosystem, and measurable engineering goals. It is a decision framework, not a claim that these features already exist.
 
 ## 1. Product thesis: what should make Legacy Zenvora different?
 
-Legacy Zenvora should not compete by merely reproducing a list of Ethereum/BNB features. The initial thesis to validate is:
+The legacy chain should not compete by merely reproducing a list of Ethereum/BNB features. The initial thesis to validate is:
 
 > **A developer-first chain where QORVYNT Lang is a first-class path from learning and prototyping to deterministic on-chain programs, supported by transparent security rules and reproducible tooling.**
 
@@ -33,7 +33,7 @@ Every feature in project plans and dashboards should carry one status:
 - **Reviewed:** design/code has received a documented independent review.
 - **Production-ready:** only after explicit release gates and operational/security evidence.
 
-A checklist item or document is not proof of implementation. Current Legacy Legacy Zenvora Chain remains at prototype/local-development maturity; this draft does not upgrade that status.
+A checklist item or document is not proof of implementation. Current Legacy Zenvora Chain remains at prototype/local-development maturity; this draft does not upgrade that status.
 
 ## 3. Core protocol and execution
 
