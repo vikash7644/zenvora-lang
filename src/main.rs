@@ -5351,4 +5351,35 @@ fn factorial(n) {
         assert_eq!(meter.used(), super::contract_gas::BASE_EXECUTION_GAS + 1);
     }
 
+
+    #[test]
+    fn dao_token_journal_recovers_interrupted_two_file_publish() {
+        let base = std::env::temp_dir();
+        let ledger = base.join(format!("qorvynt-dao-journal-ledger-{}.json", std::process::id()));
+        let state = base.join(format!("qorvynt-dao-journal-state-{}.bin", std::process::id()));
+        let journal_path = super::dao_tx_journal_path(&ledger);
+        for path in [&ledger, &state, &journal_path] { let _ = std::fs::remove_file(path); }
+
+        let ledger_bytes = br#"{"schema":"test-ledger"}"#;
+        let state_bytes = b"canonical-contract-state";
+        let mut journal = b"QORVYNT_DAO_TX_V1\0".to_vec();
+        super::dao_tx_put_bytes(&mut journal, ledger.to_str().unwrap().as_bytes()).unwrap();
+        super::dao_tx_put_bytes(&mut journal, state.to_str().unwrap().as_bytes()).unwrap();
+        journal.extend_from_slice(&(ledger_bytes.len() as u64).to_be_bytes());
+        journal.extend_from_slice(ledger_bytes);
+        journal.extend_from_slice(&(state_bytes.len() as u64).to_be_bytes());
+        journal.extend_from_slice(state_bytes);
+
+        std::fs::write(&journal_path, journal).unwrap();
+        // Simulate a crash after publishing only the first half: recovery must replay both outputs.
+        std::fs::write(&ledger, b"partially-published").unwrap();
+        super::recover_dao_token_transaction(&ledger, &state).unwrap();
+        assert_eq!(std::fs::read(&ledger).unwrap(), ledger_bytes);
+        assert_eq!(std::fs::read(&state).unwrap(), state_bytes);
+        assert!(!journal_path.exists());
+
+        let _ = std::fs::remove_file(&ledger);
+        let _ = std::fs::remove_file(&state);
+    }
+
 }
