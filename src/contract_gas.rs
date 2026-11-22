@@ -49,6 +49,13 @@ impl GasMeter {
     }
 }
 
+
+impl crate::qvm::gas::GasMeter for GasMeter {
+    fn charge(&mut self, amount: u64) -> Result<(), String> {
+        GasMeter::charge(self, amount)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{GasMeter, BASE_EXECUTION_GAS, EVENT_BASE_GAS, EVENT_BYTE_GAS};
