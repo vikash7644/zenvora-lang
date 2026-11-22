@@ -208,6 +208,9 @@ pub fn create_weighted_proposal(state: &mut ContractState, ledger: &super::qur_r
     let total_weight = holders.iter().try_fold(0u64, |sum, (_, balance)| {
         sum.checked_add(*balance).ok_or_else(|| "voting snapshot total overflow".to_string())
     })?;
+    if quorum > total_weight {
+        return Err(format!("weighted DAO quorum ({quorum}) exceeds eligible snapshot voting power ({total_weight})"));
+    }
     let mut gas = GasMeter::new(gas_limit);
     gas.charge(BASE_EXECUTION_GAS)?;
     let writes = u64::try_from(holders.len()).map_err(|_| "too many token holders")?
@@ -688,6 +691,32 @@ token GOLD {
             &empty_key.verifying_key(), &empty_signature, VoteChoice::Yes, 30_000).is_err());
         let unchanged = get_proposal(&state, "community", "weighted1").unwrap();
         assert_eq!(unchanged.total_votes(), 100);
+    }
+
+    #[test]
+    fn weighted_proposal_rejects_quorum_above_eligible_snapshot_power() {
+        let manifest = super::super::qur::parse(r#"
+chain MyChain {
+ consensus = "proof_of_stake"
+ native_token = "GOLD"
+}
+token GOLD {
+ standard = "fungible"
+ supply = 1000
+}
+"#).unwrap();
+        let mut ledger = super::super::qur_runtime::QurLedger::from_manifest(&manifest).unwrap();
+        let key = SigningKey::from_bytes(&[41u8; 32]);
+        let address = super::super::chain_protocol::address_from_public_key(&key.verifying_key().to_bytes()).unwrap();
+        ledger.transfer("GOLD", "genesis", &address, 100).unwrap();
+        let mut state = ContractState::new();
+        let root = state.state_root();
+        let error = create_weighted_proposal(&mut state, &ledger, "community", "weighted-too-high",
+            "founder", "Impossible quorum", "GOLD", 101, 50_000).unwrap_err();
+        assert!(error.contains("exceeds eligible snapshot voting power"));
+        assert_eq!(state.state_root(), root);
+        assert!(create_weighted_proposal(&mut state, &ledger, "community", "weighted-exact",
+            "founder", "Reachable quorum", "GOLD", 100, 50_000).is_ok());
     }
 
     #[test]
