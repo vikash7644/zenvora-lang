@@ -234,6 +234,133 @@ fn is_digest(value: &str) -> bool {
         && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
+
+/// Maximum size of untrusted, off-chain advisor output accepted by the boundary.
+pub const MAX_ADVISOR_SUMMARY_BYTES: usize = 1_024;
+pub const MAX_ADVISOR_FINDINGS: usize = 16;
+pub const MAX_ADVISOR_EVIDENCE_REFS: usize = 16;
+pub const MAX_ADVISOR_FIELD_BYTES: usize = 256;
+
+/// Read-only facts supplied to an optional advisor. Proposal text is untrusted input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdvisorContext {
+    pub proposal_id: String,
+    pub title: String,
+    pub status: &'static str,
+    pub yes_votes: u64,
+    pub no_votes: u64,
+    pub quorum: u64,
+    pub treasury_recipient: Option<String>,
+    pub treasury_amount: u64,
+    pub timelock_blocks: u64,
+}
+
+impl AdvisorContext {
+    pub fn from_proposal(proposal: &DaoProposal) -> Self {
+        let status = match proposal.status {
+            ProposalStatus::Open => "open",
+            ProposalStatus::Approved => "approved",
+            ProposalStatus::Rejected => "rejected",
+            ProposalStatus::QuorumNotMet => "quorum_not_met",
+        };
+        Self {
+            proposal_id: proposal.id.clone(),
+            title: proposal.title.clone(),
+            status,
+            yes_votes: proposal.yes_votes,
+            no_votes: proposal.no_votes,
+            quorum: proposal.quorum,
+            treasury_recipient: proposal.treasury_recipient.clone(),
+            treasury_amount: proposal.treasury_amount,
+            timelock_blocks: proposal.timelock_blocks,
+        }
+    }
+}
+
+/// A model/provider observation. It is deliberately not a governance action.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdvisorObservation {
+    pub code: String,
+    pub severity: FindingSeverity,
+    pub explanation: String,
+    pub evidence_refs: Vec<String>,
+}
+
+/// Optional off-chain analysis, kept separate from consensus and proposal state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdvisorAnnotation {
+    pub provider: String,
+    pub model: String,
+    pub summary: String,
+    pub observations: Vec<AdvisorObservation>,
+}
+
+impl AdvisorAnnotation {
+    /// Reject oversized or malformed provider output before displaying or storing it.
+    pub fn validate(&self) -> Result<(), String> {
+        if !bounded_text(&self.provider, MAX_ADVISOR_FIELD_BYTES)
+            || !bounded_text(&self.model, MAX_ADVISOR_FIELD_BYTES)
+        {
+            return Err("advisor provider and model identifiers must be non-empty, bounded, and contain no control characters".into());
+        }
+        if !bounded_text(&self.summary, MAX_ADVISOR_SUMMARY_BYTES) {
+            return Err("advisor summary must be non-empty, bounded, and contain no control characters".into());
+        }
+        if self.observations.len() > MAX_ADVISOR_FINDINGS {
+            return Err("advisor returned too many observations".into());
+        }
+        for observation in &self.observations {
+            if !bounded_code(&observation.code)
+                || !bounded_text(&observation.explanation, MAX_ADVISOR_FIELD_BYTES)
+            {
+                return Err("advisor observation contains an invalid code or explanation".into());
+            }
+            if observation.evidence_refs.len() > MAX_ADVISOR_EVIDENCE_REFS
+                || observation.evidence_refs.iter().any(|reference|
+                    !bounded_text(reference, MAX_ADVISOR_FIELD_BYTES))
+            {
+                return Err("advisor observation contains invalid or excessive evidence references".into());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn to_json(&self) -> Result<serde_json::Value, String> {
+        self.validate()?;
+        Ok(serde_json::json!({
+            "provider": self.provider,
+            "model": self.model,
+            "summary": self.summary,
+            "advisory_only": true,
+            "observations": self.observations.iter().map(|observation| serde_json::json!({
+                "code": observation.code,
+                "severity": observation.severity.as_str(),
+                "explanation": observation.explanation,
+                "evidence_refs": observation.evidence_refs
+            })).collect::<Vec<_>>()
+        }))
+    }
+}
+
+/// Implementations receive immutable proposal context and can return annotations only.
+/// The trait exposes no state handle, wallet, signer, vote, or execution method.
+pub trait GovernanceAdvisor: Send + Sync {
+    fn annotate(&self, context: &AdvisorContext) -> Result<AdvisorAnnotation, String>;
+}
+
+fn bounded_text(value: &str, max_bytes: usize) -> bool {
+    !value.trim().is_empty()
+        && value.len() <= max_bytes
+        && !value.chars().any(char::is_control)
+}
+
+fn bounded_code(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|byte|
+            byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
 #[cfg(test)]
 mod tests {
     use super::{assess_proposal, FindingSeverity};
