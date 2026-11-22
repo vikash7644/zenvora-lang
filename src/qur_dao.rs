@@ -637,6 +637,7 @@ token GOLD {
         let receipt = execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
             "GOLD", 105, 50_000).unwrap();
         assert_eq!(receipt.operation, "TreasuryTokenTransferExecuted");
+        assert_eq!(receipt.execution_state_root, Some(super::super::qur_state::execution_state_root(&ledger, &state)));
         assert_eq!(ledger.balance("GOLD", "dao_community"), 60);
         assert_eq!(ledger.balance("GOLD", "contributor"), 40);
         assert_eq!(ledger.total_supply("GOLD"), Some(1000));
