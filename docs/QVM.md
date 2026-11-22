@@ -69,4 +69,4 @@ The deterministic input and resource ceilings now live in `src/qvm/limits.rs`, o
 
 ### Gas-meter boundary
 
-The QVM executor now accepts its own `qvm::gas::GasMeter` trait rather than depending on the concrete contract host meter type. The current contract gas meter implements that trait as an adapter, preserving the existing deterministic charging behavior. Gas schedule constants are still sourced from the host contract-gas module and are the next boundary to extract.
+The QVM executor now accepts its own `qvm::gas::GasMeter` trait rather than depending on the concrete contract host meter type. The current contract gas meter implements that trait as an adapter, preserving the existing deterministic charging behavior. The versioned deterministic gas schedule constants now also live in `src/qvm/gas.rs`; `contract_gas` re-exports them for compatibility. The schedule remains an engineering default, not an activated chain fee schedule.
