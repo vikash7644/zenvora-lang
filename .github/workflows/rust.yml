@@ -47,7 +47,7 @@ jobs:
         run: cargo package --locked
 
       - name: Validate QUR Web3 manifest
-        run: cargo run --locked -- --qur-check examples/qur_web3.qv
+        run: cargo run --locked -- --qur-check examples/qur/manifest.qv
 
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh

@@ -24,7 +24,7 @@ wallet MyWallet {
 }
 ```
 
-Run `qorvynt --qur-check examples/qur_web3.qv`.
+Run `qorvynt --qur-check examples/qur/manifest.qv`.
 
 The validator checks declaration names, duplicates, allowed and required fields, supported consensus/governance/token modes, positive u64 token supply, ticker shape, and wallet-to-chain references. It enforces a 1 MiB source limit and a 256-declaration limit.
 
