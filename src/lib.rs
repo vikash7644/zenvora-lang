@@ -4266,7 +4266,7 @@ mod tests {
         assert!(rendered.starts_with("<svg "));
         assert!(rendered.contains("<title>QORVYNT icon</title>"));
         assert!(rendered.contains("#aab5ff"));
-        assert!(rendered.ends_with("</svg>\\n"));
+        assert!(rendered.ends_with("</svg>\n"));
 
         let _ = std::fs::remove_file(output_path);
     }
