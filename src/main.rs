@@ -3489,10 +3489,10 @@ fn main() {
             println!("gas_used={}", receipt.gas_used);
             println!("state_root={}", hex_encode_bytes(&receipt.state_root));
             println!("event_hash={}", hex_encode_bytes(&receipt.event_hash));
-            println!("voting_token={}", args[6]);
+            println!("voting_token={}", args[7]);
             Ok(())
         })();
-        if let Err(error) in result { eprintln!("QORVYNT weighted DAO vote error: {error}"); process::exit(1); }
+        if let Err(error) = result { eprintln!("QORVYNT weighted DAO vote error: {error}"); process::exit(1); }
         return;
     }
     if args.get(1).is_some_and(|mode| mode == "--qur-dao-treasury-token-execute") {
