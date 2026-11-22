@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#080b12">
+<meta name="description" content="Learn QORVYNT programming language step by step. Beginner .qv examples for variables, conditions, loops, functions and collections, with links to source and releases.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://vikash7644.github.io/zenvora-lang/learn-qorvynt.html">
+<title>Learn QORVYNT — Beginner Programming Guide</title>
+<style>
+:root{color-scheme:dark;--bg:#080b12;--panel:#111927;--line:#29384f;--text:#f3f6fc;--muted:#a8b5c8;--accent:#ffad78}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% 0,#182747,transparent 42%),var(--bg);color:var(--text);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(900px,calc(100% - 32px));margin:auto}header{padding:24px 0;border-bottom:1px solid var(--line)}header a,.links a{color:#c4d2ff;text-decoration:none}h1{font-size:clamp(34px,7vw,56px);line-height:1.1;letter-spacing:-.04em;margin:38px 0 12px}h2{margin-top:38px;font-size:25px}p,li{color:var(--muted)}.lead{font-size:19px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;margin:22px 0}pre{overflow:auto;background:#05080e;border:1px solid #253247;border-radius:12px;padding:17px;color:#d9e4ff;line-height:1.6}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}a{color:#b9cbff}.links{display:flex;gap:12px;flex-wrap:wrap;margin:22px 0}.links a{border:1px solid var(--line);padding:10px 14px;border-radius:10px}.status{border-left:3px solid var(--accent);padding:12px 16px;background:#171720;color:#d4d8e4}footer{border-top:1px solid var(--line);margin-top:50px;padding:25px 0;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<header><div class="wrap"><a href="./">← QORVYNT Home</a> · <a href="https://github.com/vikash7644/zenvora-lang">GitHub source</a></div></header>
+<main class="wrap">
+<h1>Learn QORVYNT</h1>
+<p class="lead">A beginner-friendly introduction to writing programs in QORVYNT. Learn the .qv syntax with small examples you can read, edit and run.</p>
+<div class="links"><a href="playground.html">Open browser playground</a><a href="https://github.com/vikash7644/zenvora-lang/tree/main/examples">Browse .qv examples</a><a href="https://github.com/vikash7644/zenvora-lang/releases">Get CLI releases</a></div>
+<div class="status"><strong>Prototype status:</strong> The current compiler and VM are Rust-hosted. The browser playground is a JavaScript demo runner and does not yet provide full compiler/VM parity. The AI cartoon teacher and voice features are planned, not available yet.</div>
+<h2>1. Your first program</h2><p>Create <code>hello.qv</code>:</p>
+<pre><code>define name := "QORVYNT"
+show "Hello, " + name
+
+define a := 10
+define b := 20
+show a + b</code></pre>
+<p>Expected output: <code>Hello, QORVYNT</code> and <code>30</code>.</p>
+<h2>2. Variables</h2><pre><code>define score := 10
+score := score + 5
+show score</code></pre><p><code>define</code> creates a variable; <code>:=</code> updates an existing variable.</p>
+<h2>3. Conditions</h2><pre><code>define age := 20
+if age >= 18 {
+    show "Adult"
+} otherwise {
+    show "Under 18"
+}</code></pre>
+<h2>4. Loops</h2><pre><code>define count := 1
+repeat count <= 3 {
+    show count
+    count := count + 1
+}</code></pre>
+<h2>5. Functions</h2><pre><code>fn multiply(left, right) {
+    return left * right
+}
+show multiply(6, 7)</code></pre><p>Output: <code>42</code>.</p>
+<h2>6. Arrays and maps</h2><pre><code>define numbers := array(10, 20, 30)
+show numbers[1]
+show len(numbers)
+
+define person := map("city", "Patna")
+show get(person, "city")</code></pre>
+<h2>Run a program</h2><p>Download a prebuilt CLI from the <a href="https://github.com/vikash7644/zenvora-lang/releases">GitHub releases page</a>. Newer CLI builds use:</p><pre><code>qorvynt run hello.qv
+qorvynt check hello.qv</code></pre><p>The older v0.8.0 Prototype 1 release uses <code>qorvynt hello.qv</code> and <code>qorvynt --check hello.qv</code>. You do not need Android Termux to read this guide or browse the source.</p>
+<h2>What can QORVYNT do?</h2><p>The current prototype demonstrates variables, expressions, conditions, loops, functions, strings, collections, modules and experimental contract syntax. Games, 2D/3D graphics, AI engines, web APIs, Web3 governance, GPU and USB integrations are part of the longer-term roadmap—not current built-in capabilities.</p>
+<h2>More learning resources</h2><ul><li><a href="https://github.com/vikash7644/zenvora-lang/blob/main/docs/getting-started.md">Developer getting-started guide</a></li><li><a href="https://github.com/vikash7644/zenvora-lang/tree/main/examples">Runnable examples on GitHub</a></li><li><a href="https://github.com/vikash7644/zenvora-lang/blob/main/docs/PROJECT_STATUS.md">Implementation status and limitations</a></li></ul>
+<h2>QORVYNT AI Academy</h2><p>An animated AI cartoon teacher, spoken lessons, voice interaction and guided projects are planned for a future learning experience. They are not being presented as available until implemented and tested.</p>
+</main>
+<footer><div class="wrap">QORVYNT · Open development · <a href="https://github.com/vikash7644/zenvora-lang">Source on GitHub</a></div></footer>
+</body></html>
