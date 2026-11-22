@@ -16,4 +16,4 @@ Configure the Vercel project root directory as `website`. The site is static HTM
 The page intentionally labels chain and language features by their current maturity. Do not change roadmap labels to “live” until the relevant implementation has been tested and verified. Never place private keys, API secrets or wallet seed phrases in this directory.
 
 ## Source
-https://github.com/vikash7644/qorvynt-lang/tree/main/website
+https://github.com/vikash7644/zenvora-lang/tree/main/website

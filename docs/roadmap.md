@@ -6,7 +6,7 @@
 
 ## The long-term vision
 
-Zenvora aims to grow into an independent technology stack: a programming language, a bytecode runtime, developer tools, a native-code path, and eventually an experimental Zenvora instruction set and hardware prototype. Blockchain, wallets, smart contracts, and the wider ecosystem are related long-term projects, but they should not be treated as finished or mixed into the language before its execution foundation is reliable.
+QORVYNT aims to grow into an independent technology stack: a programming language, a bytecode runtime, developer tools, a native-code path, and eventually an experimental QORVYNT instruction set and hardware prototype. Blockchain, wallets, smart contracts, and the wider ecosystem are related long-term projects, but they should not be treated as finished or mixed into the language before its execution foundation is reliable.
 
 ## Where we are now
 
@@ -82,13 +82,13 @@ This section records checks observed on the current main branch. It does not cer
 
 - [ ] Choose a realistic backend strategy: first use a mature backend/toolchain (for example LLVM or an existing target assembler) rather than trying to invent every CPU encoding at once.
 - [ ] Define a target and ABI; an initial target may be AArch64/ARM64, with x86-64 later if feasible.
-- [ ] Lower a small, well-defined subset of Zenvora to native code.
+- [ ] Lower a small, well-defined subset of QORVYNT to native code.
 - [ ] Compare native results against VM results with the same test suite.
 - [ ] Add debugging, linking, and platform-specific build documentation.
 
 **Exit criteria:** Selected QORVYNT programs produce executable native machine code for a declared target and pass differential tests. This does not require manufacturing a semiconductor.
 
-### Phase 6 — Experimental Zenvora ISA and emulator
+### Phase 6 — Experimental QORVYNT ISA and emulator
 
 - [ ] Write an architecture proposal: registers, instruction formats, memory model, privilege assumptions, exceptions, and calling convention.
 - [ ] Build an instruction-set simulator/emulator in software.

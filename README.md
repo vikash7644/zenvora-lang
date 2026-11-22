@@ -33,7 +33,7 @@ The live implementation checklist, known limitations, and CI completion gates ar
 - `src/chain_*.rs`, `src/block_store.rs`, and `src/tx_pool.rs` — legacy chain integration files temporarily retained until the separate BHYVORIX Chain repository and its tests are verified; not part of the QORVYNT Lang release scope.
 - `examples/hello.qv` — arithmetic and variable example.
 - `examples/qorvynt-icon.qv` — QORVYNT source that emits a scalable SVG icon using the language's string and output features.
-- `examples/zenvora-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
+- `examples/qorvynt-language-tour.qv` — an executable tour of variables, strings, arrays, conditionals, loops, and functions.
 - `examples/loops.qv` — loop condition, `break`, and `continue` example.
 - `examples/functions.qv` — function parameters, local variables, return values, and loops.
 - `examples/booleans.qv` — native booleans and logical operators.
@@ -54,7 +54,7 @@ The live implementation checklist, known limitations, and CI completion gates ar
 
 ## See QORVYNT code in action
 
-The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/zenvora-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
+The `.qv` files in [`examples/`](examples/) are programs written in **QORVYNT**. Start with the [executable language tour](examples/qorvynt-language-tour.qv): it covers variables, strings, arrays, conditionals, loops, and functions in one small program. The CI workflow runs this file with the Rust compiler/VM on every push and pull request, so the showcase is checked as executable code rather than being a screenshot or mockup.
 
 ```qorvynt
 define name := "QORVYNT"
