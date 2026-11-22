@@ -3743,52 +3743,12 @@ fn main() {
         if let Err(error) = result { eprintln!("QORVYNT weighted DAO vote error: {error}"); process::exit(1); }
         return;
     }
-    if args.get(1).is_some_and(|mode| mode == "--qur-dao-treasury-token-execute") {
-        if args.len() != 9 {
-            eprintln!("Usage: qorvynt --qur-dao-treasury-token-execute <ledger.json> <state.bin> <dao-id> <proposal-id> <token> <current-height> <gas-limit>");
-            process::exit(2);
-        }
-        let result = (|| -> Result<(), String> {
-            recover_dao_token_transaction(Path::new(&args[2]), Path::new(&args[3]))?;
-            let raw = fs::read_to_string(&args[2]).map_err(|e| format!("cannot read QUR token ledger: {e}"))?;
-            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("invalid QUR token ledger JSON: {e}"))?;
-            let mut ledger = qur_runtime::QurLedger::from_json(&value)?;
-            let snapshot = Path::new(&args[3]);
-            let mut state = if snapshot.exists() {
-                contract_state::ContractState::load_snapshot(snapshot)?
-            } else { contract_state::ContractState::new() };
-            let height = args[7].parse::<u64>().map_err(|_| "current height must be an unsigned integer".to_string())?;
-            let gas = args[8].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
-            let receipt = qur_dao::execute_treasury_token_proposal(
-                &mut state, &mut ledger, &args[4], &args[5], &args[6], height, gas)?;
-            let encoded_ledger = serde_json::to_string_pretty(&ledger.to_json()).map_err(|e| e.to_string())?;
-            let encoded_state = state.encode_snapshot()?;
-            persist_dao_token_transaction(Path::new(&args[2]), snapshot,
-                encoded_ledger.as_bytes(), &encoded_state)?;
-            println!("operation={}", receipt.operation);
-            println!("dao_id={}", receipt.dao_id);
-            println!("proposal_id={}", receipt.proposal_id);
-            println!("gas_used={}", receipt.gas_used);
-            println!("dao_state_root={}", hex_encode_bytes(&receipt.state_root));
-            println!("event_hash={}", hex_encode_bytes(&receipt.event_hash));
-            println!("token_state_root={}", hex_encode_bytes(&ledger.state_root()));
-            let execution_root = receipt.execution_state_root.ok_or("DAO token execution receipt is missing unified execution root")?;
-            println!("execution_state_root={}", hex_encode_bytes(&execution_root));
-            println!("treasury_account=dao_{}", args[4]);
-            println!("recipient={}", args[6]);
-            Ok(())
-        })();
-        if let Err(error) = result { eprintln!("QORVYNT DAO token execution error: {error}"); process::exit(1); }
-        return;
-    }
     if args.get(1).is_some_and(|mode| mode.starts_with("--qur-dao-")) {
         let mode = args[1].as_str();
         let expected = match mode {
             "--qur-dao-propose" => 9,
             "--qur-dao-propose-treasury" => 12,
             "--qur-dao-treasury-fund" => 6,
-            "--qur-dao-finalize-height" => 7,
-            "--qur-dao-treasury-execute" => 7,
             "--qur-dao-treasury-balance" => 4,
             "--qur-dao-vote" => 8,
             "--qur-dao-vote-signed" => 8,
@@ -3838,16 +3798,6 @@ fn main() {
                     let amount = args[4].parse::<u64>().map_err(|_| "treasury amount must be an unsigned integer".to_string())?;
                     let gas = args[5].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
                     qur_dao::fund_treasury(&mut state, &args[3], amount, gas)?
-                }
-                "--qur-dao-finalize-height" => {
-                    let height = args[5].parse::<u64>().map_err(|_| "current height must be an unsigned integer".to_string())?;
-                    let gas = args[6].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
-                    qur_dao::finalize_proposal_at_height(&mut state, &args[3], &args[4], height, gas)?
-                }
-                "--qur-dao-treasury-execute" => {
-                    let height = args[5].parse::<u64>().map_err(|_| "current height must be an unsigned integer".to_string())?;
-                    let gas = args[6].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
-                    qur_dao::execute_treasury_proposal(&mut state, &args[3], &args[4], height, gas)?
                 }
                 "--qur-dao-propose" => {
                     let quorum = args[7].parse::<u64>().map_err(|_| "quorum must be an unsigned integer".to_string())?;
