@@ -17,8 +17,8 @@ Each following non-empty line encodes exactly one instruction. Instructions use 
 Create and execute a bytecode file:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.qvb
-cargo run -- --run-bytecode functions.qvb
+qorvynt --emit-bytecode examples/functions.qv functions.qvb
+qorvynt --run-bytecode functions.qvb
 ```
 
 ## Instruction set
