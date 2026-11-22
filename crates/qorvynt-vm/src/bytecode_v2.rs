@@ -1,4 +1,4 @@
-//! Experimental Zenvora Bytecode v2 framing, metadata, and control-flow verification.
+//! QORVYNT Bytecode v2 framing, metadata, and control-flow verification.
 //!
 //! The v2 parser/verifier is called by the bytecode loader before instructions are passed
 //! to the existing VM. The compiler can emit v2 text on an opt-in CLI path. V1 remains
@@ -225,6 +225,14 @@ pub fn parse_v2_file(input: &str) -> Result<ParsedV2File, String> {
     let layout = ProgramLayout { instruction_count: instructions.len(), main_end, functions };
     validate_layout(&layout)?;
     Ok(ParsedV2File { layout, instructions })
+}
+
+/// Parse and verify a complete Bytecode v2 source in one safe operation.
+/// The returned file has passed metadata, opcode, target, and stack-flow checks.
+pub fn parse_and_verify_v2_file(input: &str) -> Result<ParsedV2File, String> {
+    let file = parse_v2_file(input)?;
+    verify_v2_file(&file)?;
+    Ok(file)
 }
 
 /// Serialize a structurally valid layout and its opaque instruction records.
