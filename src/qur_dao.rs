@@ -166,6 +166,42 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     Ok(receipt("ProposalCreated", dao_id, id, &event_payload, &gas, state))
 }
 
+/// Create a DAO proposal that can execute one treasury transfer after approval and a block-height timelock.
+pub fn create_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &str,
+    proposer: &str, title: &str, recipient: &str, amount: u64, quorum: u64,
+    timelock_blocks: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    if !valid_id(dao_id) || !valid_id(id) || !valid_id(proposer) || !valid_id(recipient) {
+        return Err("invalid DAO, proposal, proposer, or treasury recipient identifier".into());
+    }
+    if title.trim().is_empty() || title.len() > MAX_TITLE_BYTES { return Err("proposal title must contain 1-256 bytes".into()); }
+    if amount == 0 || quorum == 0 || timelock_blocks == 0 {
+        return Err("treasury amount, quorum, and timelock must be greater than zero".into());
+    }
+    let mut gas = GasMeter::new(gas_limit);
+    gas.charge(BASE_EXECUTION_GAS)?;
+    gas.charge(STORAGE_READ_GAS)?;
+    gas.charge(STORAGE_WRITE_GAS)?;
+    let mut overlay = state.begin(dao_id, AccessMode::Action)?;
+    if overlay.get(state, &proposal_key(id))?.is_some() { return Err(format!("DAO proposal '{id}' already exists")); }
+    let proposal = DaoProposal {
+        id: id.into(), proposer: proposer.into(), title: title.into(), quorum,
+        yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
+        treasury_recipient: Some(recipient.into()), treasury_amount: amount,
+        timelock_blocks, approved_at_height: None, executed: false,
+    };
+    overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
+    let mut payload = Vec::new();
+    append_field(&mut payload, proposer.as_bytes());
+    append_field(&mut payload, title.as_bytes());
+    append_field(&mut payload, recipient.as_bytes());
+    payload.extend_from_slice(&amount.to_be_bytes());
+    payload.extend_from_slice(&quorum.to_be_bytes());
+    payload.extend_from_slice(&timelock_blocks.to_be_bytes());
+    gas.charge_event(payload.len())?;
+    state.commit(overlay)?;
+    Ok(receipt("TreasuryProposalCreated", dao_id, id, &payload, &gas, state))
+}
+
 /// Canonical message signed by the wallet for a DAO vote.
 pub fn vote_signing_message(dao_id: &str, proposal_id: &str, choice: VoteChoice) -> Result<Vec<u8>, String> {
     if !valid_id(dao_id) || !valid_id(proposal_id) { return Err("invalid DAO or proposal identifier".into()); }
@@ -215,6 +251,11 @@ pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
 
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     gas_limit: u64) -> Result<DaoReceipt, String> {
+    finalize_proposal_at_height(state, dao_id, id, 0, gas_limit)
+}
+
+pub fn finalize_proposal_at_height(state: &mut ContractState, dao_id: &str, id: &str,
+    current_height: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) { return Err("invalid DAO or proposal identifier".into()); }
     let mut gas = GasMeter::new(gas_limit);
     gas.charge(BASE_EXECUTION_GAS)?;
@@ -226,11 +267,79 @@ pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     proposal.status = if proposal.total_votes() < proposal.quorum as u128 { ProposalStatus::QuorumNotMet }
         else if proposal.yes_votes > proposal.no_votes { ProposalStatus::Approved }
         else { ProposalStatus::Rejected };
+    if proposal.status == ProposalStatus::Approved && proposal.treasury_recipient.is_some() {
+        proposal.approved_at_height = Some(current_height);
+    }
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
-    let event_payload = status_name(proposal.status).as_bytes();
+    let mut event_payload = Vec::new();
+    append_field(&mut event_payload, status_name(proposal.status).as_bytes());
+    event_payload.extend_from_slice(&current_height.to_be_bytes());
     gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
-    Ok(receipt("ProposalFinalized", dao_id, id, event_payload, &gas, state))
+    Ok(receipt("ProposalFinalized", dao_id, id, &event_payload, &gas, state))
+}
+
+/// Fund the local DAO treasury ledger. This is accounting state, not a transfer of real chain assets.
+pub fn fund_treasury(state: &mut ContractState, dao_id: &str, amount: u64,
+    gas_limit: u64) -> Result<DaoReceipt, String> {
+    if !valid_id(dao_id) || amount == 0 { return Err("invalid DAO ID or zero treasury funding amount".into()); }
+    let mut gas = GasMeter::new(gas_limit);
+    gas.charge(BASE_EXECUTION_GAS)?;
+    gas.charge(STORAGE_READ_GAS)?;
+    gas.charge(STORAGE_WRITE_GAS)?;
+    let mut overlay = state.begin(dao_id, AccessMode::Action)?;
+    let current = match overlay.get(state, "treasury/balance")? {
+        Some(bytes) => u64::from_be_bytes(bytes.try_into().map_err(|_| "corrupt DAO treasury balance")?),
+        None => 0,
+    };
+    let next = current.checked_add(amount).ok_or("DAO treasury balance overflow")?;
+    overlay.set("treasury/balance", next.to_be_bytes().to_vec())?;
+    gas.charge_event(8)?;
+    state.commit(overlay)?;
+    Ok(receipt("TreasuryFunded", dao_id, "treasury", &amount.to_be_bytes(), &gas, state))
+}
+
+pub fn treasury_balance(state: &ContractState, dao_id: &str) -> Result<u64, String> {
+    if !valid_id(dao_id) { return Err("invalid DAO ID".into()); }
+    let overlay = state.begin(dao_id, AccessMode::View)?;
+    match overlay.get(state, "treasury/balance")? {
+        Some(bytes) => Ok(u64::from_be_bytes(bytes.try_into().map_err(|_| "corrupt DAO treasury balance")?)),
+        None => Ok(0),
+    }
+}
+
+/// Execute an approved treasury proposal only after its deterministic block-height timelock.
+pub fn execute_treasury_proposal(state: &mut ContractState, dao_id: &str, id: &str,
+    current_height: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    if !valid_id(dao_id) || !valid_id(id) { return Err("invalid DAO or proposal identifier".into()); }
+    let mut gas = GasMeter::new(gas_limit);
+    gas.charge(BASE_EXECUTION_GAS)?;
+    gas.charge(STORAGE_READ_GAS.checked_mul(2).ok_or("gas calculation overflow")?)?;
+    gas.charge(STORAGE_WRITE_GAS.checked_mul(3).ok_or("gas calculation overflow")?)?;
+    let mut overlay = state.begin(dao_id, AccessMode::Action)?;
+    let mut proposal = load_proposal(state, &overlay, id)?;
+    if proposal.status != ProposalStatus::Approved { return Err("treasury proposal is not approved".into()); }
+    if proposal.executed { return Err("treasury proposal has already executed".into()); }
+    let recipient = proposal.treasury_recipient.clone().ok_or("proposal has no treasury transfer action")?;
+    let approved_at = proposal.approved_at_height.ok_or("proposal approval height is missing")?;
+    let execute_after = approved_at.checked_add(proposal.timelock_blocks).ok_or("DAO timelock height overflow")?;
+    if current_height < execute_after { return Err(format!("DAO timelock active until block {execute_after}")); }
+    let current = match overlay.get(state, "treasury/balance")? {
+        Some(bytes) => u64::from_be_bytes(bytes.try_into().map_err(|_| "corrupt DAO treasury balance")?),
+        None => 0,
+    };
+    let remaining = current.checked_sub(proposal.treasury_amount).ok_or("insufficient DAO treasury balance")?;
+    overlay.set("treasury/balance", remaining.to_be_bytes().to_vec())?;
+    let mut transfer = Vec::new();
+    append_field(&mut transfer, recipient.as_bytes());
+    transfer.extend_from_slice(&proposal.treasury_amount.to_be_bytes());
+    transfer.extend_from_slice(&current_height.to_be_bytes());
+    overlay.set(&format!("treasury/transfer/{id}"), transfer.clone())?;
+    proposal.executed = true;
+    overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
+    gas.charge_event(transfer.len())?;
+    state.commit(overlay)?;
+    Ok(receipt("TreasuryTransferExecuted", dao_id, id, &transfer, &gas, state))
 }
 
 pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<DaoProposal, String> {
