@@ -55,6 +55,7 @@ jobs:
           grep -F 'QORVYNT_LEXER_MULTILINE_COMMENT_PASS' parser-output.txt
           grep -F 'QORVYNT_LEXER_STRING_DELIMITERS_PASS' parser-output.txt
           grep -F 'QORVYNT_LEXER_UNTERMINATED_STRING_PASS' parser-output.txt
+          grep -F 'QORVYNT_NESTED_LOOP_CONTROL_FLOW_PASS' parser-output.txt
           grep -F 'QORVYNT_NATIVE_BYTECODE_V2_EMIT_PASS' parser-output.txt
           ! grep -F 'QORVYNT_NATIVE_BYTECODE_V2_EMIT_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_PLAN_VERIFIER_MALFORMED_RECORD_AND_TARGET_FAIL' parser-output.txt
@@ -63,6 +64,7 @@ jobs:
           ! grep -F 'QORVYNT_GENERIC_COMPILER_COLLECTION_LOOP_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_MULTI_CONTROL_FLOW_PLAN_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_GENERIC_COMPILER_FUNCTION_SEMANTICS_FAIL' parser-output.txt
+          ! grep -F 'QORVYNT_NESTED_LOOP_CONTROL_FLOW_FAIL' parser-output.txt
           ! grep -F 'compile_error' parser-output.txt
       - name: Translate QORVYNT plan JSON directly to canonical Bytecode v2
         shell: bash
