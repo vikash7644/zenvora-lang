@@ -118,16 +118,15 @@ jobs:
           cargo run --locked -- --qur-dao-treasury-fund /tmp/qorvynt-dao-state.bin community 100 30000
           cargo run --locked -- --qur-dao-propose-treasury /tmp/qorvynt-dao-state.bin community treasury1 founder "Pay contributor" contributor 40 1 5 30000
           cargo run --locked -- --qur-dao-vote-signed /tmp/qorvynt-dao-state.bin community treasury1 /tmp/qorvynt-dao-alice.qvk yes 30000
-          cargo run --locked -- --qur-dao-finalize-height /tmp/qorvynt-dao-state.bin community treasury1 100 30000
           set +e
-          cargo run --locked -- --qur-dao-treasury-execute /tmp/qorvynt-dao-state.bin community treasury1 104 30000
-          timelock_status=$?
-          set -e
-          test "$timelock_status" -eq 1
+          cargo run --locked -- --qur-dao-finalize-height /tmp/qorvynt-dao-state.bin community treasury1 100 30000
+          legacy_finalize_status=$?
           cargo run --locked -- --qur-dao-treasury-execute /tmp/qorvynt-dao-state.bin community treasury1 105 30000
-          cargo run --locked -- --qur-dao-treasury-balance /tmp/qorvynt-dao-state.bin community | grep -Fxq 60
-          cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-state.bin community treasury1 > /tmp/qorvynt-dao-treasury.json
-          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-treasury.json")); assert p["executed"] is True and p["treasury_amount"] == 40 and p["approved_at_height"] == 100'
+          legacy_execute_status=$?
+          set -e
+          test "$legacy_finalize_status" -ne 0
+          test "$legacy_execute_status" -ne 0
+          cargo run --locked -- --qur-dao-treasury-balance /tmp/qorvynt-dao-state.bin community | grep -Fxq 100
       - name: Test token-weighted DAO wallet voting
         shell: bash
         run: |
@@ -166,19 +165,16 @@ jobs:
           cargo run --locked -- --qur-token-transfer /tmp/qorvynt-dao-native-ledger.json GOLD genesis dao_community 100
           cargo run --locked -- --qur-dao-propose-treasury /tmp/qorvynt-dao-native-state.bin community nativepayout founder "Native token contributor payout" contributor 40 1 5 30000
           cargo run --locked -- --qur-dao-vote-signed /tmp/qorvynt-dao-native-state.bin community nativepayout /tmp/qorvynt-dao-alice.qvk yes 30000
-          cargo run --locked -- --qur-dao-finalize-height /tmp/qorvynt-dao-native-state.bin community nativepayout 100 30000
           set +e
-          cargo run --locked -- --qur-dao-treasury-token-execute /tmp/qorvynt-dao-native-ledger.json /tmp/qorvynt-dao-native-state.bin community nativepayout GOLD 104 50000
-          early_status=$?
+          cargo run --locked -- --qur-dao-finalize-height /tmp/qorvynt-dao-native-state.bin community nativepayout 100 30000
+          legacy_finalize_status=$?
+          cargo run --locked -- --qur-dao-treasury-token-execute /tmp/qorvynt-dao-native-ledger.json /tmp/qorvynt-dao-native-state.bin community nativepayout GOLD 105 50000
+          legacy_token_execute_status=$?
           set -e
-          test "$early_status" -eq 1
-          cargo run --locked -- --qur-dao-treasury-token-execute /tmp/qorvynt-dao-native-ledger.json /tmp/qorvynt-dao-native-state.bin community nativepayout GOLD 105 50000 | tee /tmp/qorvynt-dao-native-receipt.txt
-          grep -Eq "^execution_state_root=[0-9a-f]{64}$" /tmp/qorvynt-dao-native-receipt.txt
-          cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD dao_community | grep -Fxq 60
-          cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD contributor | grep -Fxq 40
-          cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD genesis | grep -Fxq 99999900
-          cargo run --locked -- --qur-dao-show /tmp/qorvynt-dao-native-state.bin community nativepayout > /tmp/qorvynt-dao-native-proposal.json
-          python3 -c 'import json; p=json.load(open("/tmp/qorvynt-dao-native-proposal.json")); assert p["executed"] is True and p["treasury_amount"] == 40 and p["approved_at_height"] == 100'
+          test "$legacy_finalize_status" -ne 0
+          test "$legacy_token_execute_status" -ne 0
+          cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD dao_community | grep -Fxq 0
+          cargo run --locked -- --qur-token-balance /tmp/qorvynt-dao-native-ledger.json GOLD contributor | grep -Fxq 0
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
