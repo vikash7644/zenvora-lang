@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+<title id="title">QORVYNT crowned Q symbol</title>
+<defs>
+  <linearGradient id="metal" x1="24" y1="20" x2="224" y2="236" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#f2f4ff"/><stop offset=".28" stop-color="#a9a0ff"/><stop offset=".62" stop-color="#7c70ec"/><stop offset="1" stop-color="#61e5e0"/>
+  </linearGradient>
+  <linearGradient id="crown" x1="76" y1="24" x2="185" y2="86" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#fff"/><stop offset=".48" stop-color="#b8b0ff"/><stop offset="1" stop-color="#62e8e1"/>
+  </linearGradient>
+  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<path d="M54 102 74 38l47 38 7-58 20 58 44-38 10 64" fill="none" stroke="url(#crown)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+<path d="M62 111h132" stroke="url(#crown)" stroke-width="11" stroke-linecap="round"/>
+<circle cx="128" cy="151" r="69" fill="none" stroke="url(#metal)" stroke-width="22"/>
+<path d="m163 187 42 42" fill="none" stroke="url(#metal)" stroke-width="23" stroke-linecap="round"/>
+<path d="M85 151a43 43 0 0 1 72-31" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="6" stroke-linecap="round"/>
+</svg>
