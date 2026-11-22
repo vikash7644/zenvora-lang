@@ -43,9 +43,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y librsvg2-bin imagemagick
-          rsvg-convert -w 48 -h 48 website/zenvora-favicon.svg -o website/favicon-48.png
+          rsvg-convert -w 48 -h 48 website/qorvynt-mark.svg -o website/favicon-48.png
+          rsvg-convert -w 180 -h 180 website/qorvynt-mark.svg -o website/apple-touch-icon.png
           convert website/favicon-48.png -define icon:auto-resize=16,32,48 website/favicon.ico
           test -s website/favicon-48.png
+          test -s website/apple-touch-icon.png
           test -s website/favicon.ico
 
       - name: Configure GitHub Pages
