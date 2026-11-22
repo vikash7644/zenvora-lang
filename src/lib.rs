@@ -3616,7 +3616,18 @@ fn persist_dao_token_transaction(ledger_path: &Path, state_path: &Path,
 }
 
 pub fn cli_main() {
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+    // Friendly first-class verbs keep normal QORVYNT use independent of Cargo.
+    // Legacy flags remain supported for compatibility with existing scripts.
+    if let Some(command) = args.get(1).map(String::as_str) {
+        match command {
+            "run" => { args.remove(1); }
+            "check" => args[1] = "--check".into(),
+            "new" => args[1] = "--new".into(),
+            "compile" => args[1] = "--emit-bytecode-v2".into(),
+            _ => {}
+        }
+    }
     if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
         println!("QORVYNT v0.8.0");
         return;
@@ -4062,7 +4073,7 @@ pub fn cli_main() {
             compile(&source).and_then(|code| run(&code))
         }
         _ => {
-            eprintln!("Usage: qorvynt <file.qv> | qorvynt --new <project-name> | qorvynt --check <file.qv> | qorvynt --render <file.qv> <output.txt> | qorvynt --emit-bytecode <file.qv> <output.qvb> | qorvynt --emit-bytecode-v2 <file.qv> <output.qv2b> | qorvynt --emit-plan-bytecode-v2 <plan.json> <output.qv2b> | qorvynt --qvm-compile <file.qv> <output.qvmb> | qorvynt --qvm-run <file.qvmb> | qorvynt --contract-artifact <contract.qv> <artifact.json> | qorvynt --run-bytecode <file.qvb> | qorvynt --chain-init <ledger.qvr> <address> <balance> | qorvynt --chain-transfer <ledger.qvr> <from> <to> <amount> | qorvynt --chain-balance <ledger.qvr> <address> | qorvynt --chain-receipts <ledger.qvr> | qorvynt --chain-keygen <keyfile> | qorvynt --chain-store-init <store.qvstore> <chain-id> <keyfile> <balance> | qorvynt --chain-store-transfer <store.qvstore> <chain-id> <keyfile> <recipient> <amount> <max-fee> | qorvynt --chain-store-balance <store.qvstore> <chain-id> <address> | qorvynt --chain-store-info <store.qvstore> <chain-id> | qorvynt --chain-rpc <store.qvstore> <chain-id> [port] | qorvynt --chain-p2p-serve <store.qvstore> <chain-id> <bind-ip> <port> | qorvynt --chain-p2p-sync <store.qvstore> <chain-id> <peer-ip:port> | qorvynt --chain-p2p-serve-pool <store.qvstore> <chain-id> <pool-file> <bind-ip> <port> | qorvynt --chain-p2p-serve-validator <store.qvstore> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | qorvynt --chain-p2p-gossip <store.qvstore> <chain-id> <pool-file> <peer-ip:port> | qorvynt --chain-store-produce <store.qvstore> <chain-id> <pool-file> <validator-key>... | qorvynt --chain-store-produce-peer-quorum <store.qvstore> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | qorvynt --chain-rpc-pool <store.qvstore> <chain-id> <pool-file> [port]");
+            eprintln!("Usage: qorvynt run <file.qv> | qorvynt check <file.qv> | qorvynt new <project-name> | qorvynt compile <file.qv> <output.qv2b> | qorvynt <file.qv> | qorvynt --render <file.qv> <output.txt> | qorvynt --emit-bytecode <file.qv> <output.qvb> | qorvynt --emit-bytecode-v2 <file.qv> <output.qv2b> | qorvynt --emit-plan-bytecode-v2 <plan.json> <output.qv2b> | qorvynt --qvm-compile <file.qv> <output.qvmb> | qorvynt --qvm-run <file.qvmb> | qorvynt --contract-artifact <contract.qv> <artifact.json> | qorvynt --run-bytecode <file.qvb> | qorvynt --chain-init <ledger.qvr> <address> <balance> | qorvynt --chain-transfer <ledger.qvr> <from> <to> <amount> | qorvynt --chain-balance <ledger.qvr> <address> | qorvynt --chain-receipts <ledger.qvr> | qorvynt --chain-keygen <keyfile> | qorvynt --chain-store-init <store.qvstore> <chain-id> <keyfile> <balance> | qorvynt --chain-store-transfer <store.qvstore> <chain-id> <keyfile> <recipient> <amount> <max-fee> | qorvynt --chain-store-balance <store.qvstore> <chain-id> <address> | qorvynt --chain-store-info <store.qvstore> <chain-id> | qorvynt --chain-rpc <store.qvstore> <chain-id> [port] | qorvynt --chain-p2p-serve <store.qvstore> <chain-id> <bind-ip> <port> | qorvynt --chain-p2p-sync <store.qvstore> <chain-id> <peer-ip:port> | qorvynt --chain-p2p-serve-pool <store.qvstore> <chain-id> <pool-file> <bind-ip> <port> | qorvynt --chain-p2p-serve-validator <store.qvstore> <chain-id> <pool-file> <validator-key> <bind-ip> <port> | qorvynt --chain-p2p-gossip <store.qvstore> <chain-id> <pool-file> <peer-ip:port> | qorvynt --chain-store-produce <store.qvstore> <chain-id> <pool-file> <validator-key>... | qorvynt --chain-store-produce-peer-quorum <store.qvstore> <chain-id> <pool-file> <proposer-key> <peer-ip:port>... | qorvynt --chain-rpc-pool <store.qvstore> <chain-id> <pool-file> [port]");
             process::exit(2);
         }
     };
