@@ -2545,14 +2545,37 @@ fn write_contract_artifact(source_path: &str, output_path: &str) -> Result<(), S
     let artifact = contract_abi_and_artifact(&source)?;
     let json = serde_json::to_string_pretty(&artifact)
         .map_err(|error| format!("cannot encode contract artifact: {error}"))?;
-    let temp_path = format!("{output_path}.tmp");
-    fs::write(&temp_path, format!("{json}\n"))
-        .map_err(|error| format!("cannot write temporary artifact: {error}"))?;
-    fs::rename(&temp_path, output_path)
-        .map_err(|error| {
-            let _ = fs::remove_file(&temp_path);
-            format!("cannot install artifact at {output_path}: {error}")
-        })
+    write_contract_artifact_atomically(Path::new(output_path), format!("{json}\n").as_bytes())
+}
+
+fn write_contract_artifact_atomically(output_path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let file_name = output_path.file_name()
+        .ok_or_else(|| "contract artifact output path must name a file".to_string())?;
+    let mut temp_name = file_name.to_os_string();
+    temp_name.push(format!(".qorvynt-artifact-tmp-{}", std::process::id()));
+    let temp_path = output_path.with_file_name(temp_name);
+    let mut created_temp = false;
+    let result = (|| -> Result<(), String> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|error| format!("cannot create exclusive contract artifact temp file: {error}"))?;
+        created_temp = true;
+        file.write_all(bytes)
+            .map_err(|error| format!("cannot write temporary artifact: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("cannot sync temporary artifact: {error}"))?;
+        fs::rename(&temp_path, output_path)
+            .map_err(|error| format!("cannot install contract artifact: {error}"))?;
+        created_temp = false;
+        Ok(())
+    })();
+    if result.is_err() && created_temp {
+        let _ = fs::remove_file(&temp_path);
+    }
+    result
 }
 
 fn plan_required_string<'a>(value: &'a serde_json::Value, key: &str) -> Result<&'a str, String> {
@@ -5609,4 +5632,25 @@ fn factorial(n) {
         let _ = std::fs::remove_file(&state);
     }
 
+
+    #[test]
+    fn contract_artifact_writer_does_not_follow_preexisting_temp_path() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let output = std::env::temp_dir().join(format!(
+            "qorvynt-artifact-safe-{}-{nonce}.json",
+            std::process::id()
+        ));
+        let mut temp_name = output.file_name().unwrap().to_os_string();
+        temp_name.push(format!(".qorvynt-artifact-tmp-{}", std::process::id()));
+        let temp_path = output.with_file_name(temp_name);
+        fs::write(&temp_path, b"do not overwrite").unwrap();
+
+        let error = write_contract_artifact_atomically(&output, b"new artifact").unwrap_err();
+        assert!(error.contains("cannot create exclusive contract artifact temp file"), "{error}");
+        assert_eq!(fs::read(&temp_path).unwrap(), b"do not overwrite");
+        assert!(!output.exists());
+
+        fs::remove_file(temp_path).unwrap();
+    }
 }
