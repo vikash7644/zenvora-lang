@@ -92,54 +92,43 @@ qorvynt --qur-dao-show dao-state.bin community proposal1
 
 Each operation uses the deterministic local gas meter and an atomic contract-state overlay, and emits a state root plus a domain-separated event hash. A voter can vote only once per proposal. Finalization requires the configured vote-count quorum; if quorum is met, yes votes must strictly exceed no votes for approval. A tie is rejected. Proposal status is terminal after finalization.
 
-Important limitations: voter identifiers are currently caller-supplied labels, not authenticated wallet identities; quorum counts votes, not token-weighted voting power; there is no voting deadline, delegation, treasury execution, timelock, chain transaction admission, or consensus replay. An `Approved` status records the result only and does not execute arbitrary actions. Treat this as a local governance-engine prototype, not a production DAO.
+Important limitations: this basic proposal path is a local governance-engine prototype. It does not provide token-weighted voting, delegation, a voting deadline, chain transaction admission, or consensus-backed execution. Treasury actions use a separate anchored proposal path; an `Approved` status alone never authorizes a treasury transfer.
 
 
 ### Wallet-authenticated DAO voting
 
-The signed-vote path uses Ed25519 keys from the existing QORVYNT key-file format. The wallet signs a domain-separated message containing the DAO ID, proposal ID, and vote choice. The runtime verifies the signature before deriving the voter address from the public key and recording the vote. The voter address is the replay-protection key, so one wallet can vote only once per proposal.
+The signed-vote path uses Ed25519 keys from the existing QORVYNT key-file format. Ordinary local proposals use the legacy local-only domain-separated message. Replay-anchored weighted and treasury proposals use the V3 domain, binding the signature to chain ID, snapshot height, block hash, state root, DAO ID, proposal ID, and vote choice. The runtime verifies the signature before deriving the voter address from the public key; one wallet can vote only once per proposal.
 
 ```sh
 qorvynt --chain-keygen alice.qvk
 qorvynt --qur-dao-vote-signed dao-state.bin community proposal1 alice.qvk yes 30000
 ```
 
-The older `--qur-dao-vote` command remains only as a local test/development path and accepts an unauthenticated label; do not use it for real governance. Signed voting authenticates key ownership but does not yet establish token-weighted voting power, membership eligibility, chain-level transaction finality, hardware-wallet signing, or a consensus-enforced DAO.
+The unsigned `--qur-dao-vote` CLI route has been removed. The signed-vote CLI does not turn a local proposal into a consensus transaction: membership eligibility, hardware-wallet signing, transaction admission, and network finality remain separate requirements. Unanchored legacy treasury proposals reject signed voting.
 
 
 ### DAO treasury and block-height timelock (local accounting prototype)
 
-DAO proposals may carry a single treasury-transfer action. The local contract-state ledger supports funding the DAO treasury, creating a transfer proposal with a positive quorum and block delay, finalizing it at an explicit block height, and executing it only after the delay has elapsed. Execution atomically debits the treasury, stores a transfer record, and marks the proposal executed. Re-execution and insufficient funds are rejected without partial state changes.
+Treasury proposals must carry a replay-verified snapshot anchor before they can accept signed votes. The anchored creation API stores the anchor's chain ID, height, block hash, and state root in the proposal. The signed vote is V3 and binds all of those fields. A legacy unanchored treasury proposal can still be loaded for compatibility, but signed voting rejects it without mutating state.
 
-Example CLI flow:
+The block store exposes `verified_anchor_at(height)` for historical blocks accepted by its append/replay validation. The DAO library's verified-tip helpers re-fetch the proposal's stored snapshot height from the supplied store, compare the exact chain ID, block hash, and state root, require the current tip to be on the same chain and at or above the snapshot, and derive the finalization/execution height from that tip. Execution also checks that the recorded approval height lies between the snapshot and current verified tip.
+
+The anchored proposal path is also available through the CLI. It loads and replay-verifies the supplied block store, retrieves the requested historical height, and persists that anchor before any signed treasury vote:
 
 ```sh
-qorvynt --qur-dao-treasury-fund dao-state.bin community 100 30000
-qorvynt --qur-dao-propose-treasury dao-state.bin community payout1 founder "Contributor payout" contributor 40 1 5 30000
+qorvynt --chain-keygen validator.qvk
+qorvynt --chain-store-init dao-chain.qvb 98765 validator.qvk 100
+qorvynt --qur-dao-propose-treasury-anchored dao-state.bin dao-chain.qvb 98765 0 community payout1 founder "Contributor payout" contributor 40 1 5 30000
 qorvynt --qur-dao-vote-signed dao-state.bin community payout1 alice.qvk yes 30000
-qorvynt --qur-dao-finalize-height dao-state.bin community payout1 100 30000
-qorvynt --qur-dao-treasury-execute dao-state.bin community payout1 105 30000
-qorvynt --qur-dao-treasury-balance dao-state.bin community
 ```
 
-This is not yet a transfer of native tokens or chain assets: treasury funding is local accounting state, the recipient is an identifier, and the supplied block height is not authenticated against a canonical chain header. Production use requires chain transaction admission, authenticated block context, token custody/escrow, consensus replay, and an on-chain execution adapter.
-
+These are local replay-verified library/CLI helpers, not distributed finality or consensus execution. The caller must supply the correct canonical block store for the DAO's chain. Treasury finalization/execution CLI commands remain disabled; no caller-supplied height is accepted as authority.
 
 ### DAO treasury payouts using the QUR token ledger
 
-The DAO runtime now has a token-backed treasury execution path. Fund the DAO's token account by transferring tokens to the deterministic account `dao_<dao-id>`, then create and approve a treasury proposal with a signed wallet vote. The local CLI accepts a caller-supplied block height; the transfer is rejected before the timelock expires, but that height is not authenticated against a canonical chain header. On success, the QUR token ledger moves the proposal amount from `dao_<dao-id>` to the proposal recipient, preserves total token supply, stores the DAO execution marker and token balances in the contract-state overlay, and marks the proposal executed.
+The token-backed payout implementation remains covered by DAO module tests, but the legacy CLI payout routes are intentionally disabled. A local token ledger balance or a successful unit test does not prove that the DAO is integrated into chain consensus. The verified-tip library API rechecks the proposal anchor and timelock before staging a local QUR ledger transfer; it is not yet an on-chain custody or execution adapter.
 
-```sh
-qorvynt --qur-token-init examples/qur/manifest.qv token-ledger.json
-qorvynt --qur-token-transfer token-ledger.json GOLD genesis dao_community 100
-qorvynt --qur-dao-propose-treasury dao-state.bin community payout1 founder "Contributor payout" contributor 40 1 5 30000
-qorvynt --qur-dao-vote-signed dao-state.bin community payout1 alice.qvk yes 30000
-qorvynt --qur-dao-finalize-height dao-state.bin community payout1 100 30000
-qorvynt --qur-dao-treasury-token-execute token-ledger.json dao-state.bin community payout1 GOLD 105 50000
-```
-
-The execution API clones the token ledger, validates the transfer, stages DAO proposal and token-balance writes in one contract-state overlay, commits that overlay, and only then publishes the in-memory ledger candidate. Its receipt now includes a versioned unified `execution_state_root` combining the committed QUR ledger root and contract-storage root; the CLI emits this 32-byte commitment and CI checks its 64-character lowercase-hex encoding. The CLI now writes a bounded (64 MiB) write-ahead journal containing both outputs before publishing either file. Each staged file is synced before rename; on Unix, the containing directory is also synced after rename. Staging files are created with exclusive-create semantics (`create_new`) rather than truncating an existing path, and cleanup removes only a staging file created by the current writer; a stale or competing staging file therefore causes a safe failure instead of being overwritten. A new transaction first recovers any earlier journal, and the treasury execution command replays a pending journal before reading either file. Corrupt, truncated, oversized, or path-mismatched journals are rejected without applying their payload. This provides recoverable two-file publication, not simultaneous multi-file visibility or a substitute for a transactional database; filesystem and platform durability semantics still apply, and the journal must be preserved until recovery completes. A state-side recovery index is written before the ledger-side journal. DAO commands that receive only `dao-state.bin` (including weighted voting, proposal inspection, and finalization) consult this index and replay the paired ledger/state payload before loading the snapshot. If a crash occurs after the index but before the journal, the next state-only command safely removes the stale index. The index is path-checked against the journal before replay; older journals created before this index existed still require a command that supplies both ledger and state paths to recover them. This remains a local QUR runtime integration: the CLI-supplied height is not checked against a canonical block header, token balances are not yet part of consensus replay, and wallet signatures authenticate votes but not a network transaction envelope. Do not use it as production chain treasury custody yet.
-
+Production use still requires DAO state and token-ledger state to be part of the same deterministic block transition, canonical chain selection/finality, replay protection across nodes, and an execution receipt committed by consensus. Do not use the local prototype as production treasury custody.
 
 ### Proposal-snapshot token-weighted wallet voting
 
@@ -151,8 +140,6 @@ qorvynt --qur-dao-vote-weighted dao-state.bin community proposal1 alice.qvk GOLD
 ```
 
 A weighted proposal is rejected if its requested quorum exceeds the total eligible wallet voting power captured in that snapshot; this prevents creating a proposal that can never reach quorum. The exact-boundary case (quorum equal to total eligible voting power) is valid. The Rust DAO API now exposes `create_weighted_proposal_at_anchor`, which accepts a `VerifiedBlockAnchor` obtained from the replay-verified block store and persists its chain ID, tip height, header hash, and chain state root alongside the weighted token snapshot. These fields are included in the proposal serialization and DAO storage commitment. The CLI now also exposes `--qur-dao-propose-weighted-anchored <ledger.json> <state.bin> <block-store> <chain-id> <dao-id> <proposal-id> <proposer> <title> <token> <quorum> <gas-limit>`. It loads the block store through replay verification, rejects an empty store, and records the verified tip anchor on the proposal. The existing CLI `--qur-dao-propose-weighted` remains the unanchored local-ledger path; callers must not treat the new metadata as proof that token balances were part of the chain's replayed state. The anchor is contextual provenance only until the token ledger is incorporated into the chain runtime and replay transition. A verified-tip accessor is now available on the local append-only block store: `BlockStore::verified_tip_anchor()` returns the chain ID, tip height, canonical header hash, and committed chain state root only from the store's accepted block prefix. Store loading independently replays every block before exposing that tip. This is an integration primitive, not yet a DAO snapshot binding: the QUR token ledger remains separate from the chain runtime, so the returned chain state root does not prove that the weighted-voting token balances were included in that block. The next integration must carry this anchor into proposal creation and, before production use, make token-ledger state part of the same replayed consensus state transition. The local block-store anchor is not a distributed finality certificate. The snapshot is currently taken from the local QUR token ledger supplied at proposal creation. Only key-derived QORVYNT wallet addresses (`zv` plus 40 lowercase/uppercase hexadecimal characters) are eligible for voting weight; reserved/system accounts such as `genesis` and `dao_<id>` are excluded because they cannot authenticate as wallet signers. The proposal quorum and yes/no totals are measured in token units, not wallet count. It is not yet anchored to a canonical block height or consensus state root, and snapshot entries are not yet generated from chain replay. Production governance must authenticate the snapshot against a finalized chain block, and the wallet signature CLI must be replaced or complemented by externally signed transaction admission.
- `BlockStore::verified_tip_anchor()` returns the chain ID, tip height, canonical header hash, and committed chain state root only from the store's accepted block prefix. Store loading independently replays every block before exposing that tip. This is an integration primitive, not yet a DAO snapshot binding: the QUR token ledger remains separate from the chain runtime, so the returned chain state root does not prove that the weighted-voting token balances were included in that block. The next integration must carry this anchor into proposal creation and, before production use, make token-ledger state part of the same replayed consensus state transition. The local block-store anchor is not a distributed finality certificate. The snapshot is currently taken from the local QUR token ledger supplied at proposal creation. Only key-derived QORVYNT wallet addresses (`zv` plus 40 lowercase/uppercase hexadecimal characters) are eligible for voting weight; reserved/system accounts such as `genesis` and `dao_<id>` are excluded because they cannot authenticate as wallet signers. The proposal quorum and yes/no totals are measured in token units, not wallet count. It is not yet anchored to a canonical block height or consensus state root, and snapshot entries are not yet generated from chain replay. Production governance must authenticate the snapshot against a finalized chain block, and the wallet signature CLI must be replaced or complemented by externally signed transaction admission.
-
 
 ### Root-verified execution snapshots
 
