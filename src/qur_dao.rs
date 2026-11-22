@@ -209,7 +209,7 @@ pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     proposal.status = if proposal.total_votes() < proposal.quorum as u128 { ProposalStatus::QuorumNotMet }
         else if proposal.yes_votes > proposal.no_votes { ProposalStatus::Approved }
         else { ProposalStatus::Rejected };
-    overlay.set(&proposal_key(id), serde_json::to_vec(&proposal).map_err(|e| e.to_string())?)?;
+    overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let event_payload = status_name(proposal.status).as_bytes();
     gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
