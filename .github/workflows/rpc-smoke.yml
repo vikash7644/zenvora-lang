@@ -1,4 +1,4 @@
-name: Zenvora RPC smoke check (manual)
+name: QORVYNT RPC smoke check (manual)
 
 on:
   workflow_dispatch:

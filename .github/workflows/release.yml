@@ -95,7 +95,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/qorvynt" dist/qorvynt
           cp README.md dist/README.md
           cp LICENSE dist/LICENSE
-          tar -czf "dist/zenvora-lang-${{ matrix.name }}.tar.gz" -C dist qorvynt README.md LICENSE
+          tar -czf "dist/qorvynt-lang-${{ matrix.name }}.tar.gz" -C dist qorvynt README.md LICENSE
           rm dist/qorvynt dist/README.md dist/LICENSE
 
       - name: Package Windows binary
@@ -106,14 +106,14 @@ jobs:
           Copy-Item "target/${{ matrix.target }}/release/qorvynt.exe" "dist/qorvynt.exe"
           Copy-Item README.md "dist/README.md"
           Copy-Item LICENSE "dist/LICENSE"
-          Compress-Archive -Path dist/qorvynt.exe,dist/README.md,dist/LICENSE -DestinationPath "dist/zenvora-lang-${{ matrix.name }}.zip" -Force
+          Compress-Archive -Path dist/qorvynt.exe,dist/README.md,dist/LICENSE -DestinationPath "dist/qorvynt-lang-${{ matrix.name }}.zip" -Force
           Remove-Item dist/qorvynt.exe,dist/README.md,dist/LICENSE
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.name }}
-          path: dist/zenvora-lang-*
+          path: dist/qorvynt-lang-*
           if-no-files-found: error
           retention-days: 7
 
