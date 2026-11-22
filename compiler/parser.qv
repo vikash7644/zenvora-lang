@@ -2592,6 +2592,27 @@ if get(generic_driver_multi_control, "ok") and get(generic_driver_multi_run, "ok
 
 
 
+# Nested-loop regressions: break/continue must bind to the nearest loop, including
+# when they appear inside nested if/otherwise blocks. Loop-control outside a loop
+# must fail during semantic validation rather than reaching bytecode emission.
+define generic_driver_nested_break := compile_source("define outer := 0\ndefine hits := 0\nrepeat outer < 3 {\nouter := outer + 1\ndefine inner := 0\nrepeat inner < 3 {\ninner := inner + 1\nif inner == 2 {\nbreak\n} otherwise {\nhits := hits + 1\n}\n}\n}\nshow hits\n")
+define generic_driver_nested_break_run := execute_bytecode_plan(get(generic_driver_nested_break, "plan"))
+define generic_driver_nested_continue := compile_source("define outer := 0\ndefine hits := 0\nrepeat outer < 3 {\nouter := outer + 1\ndefine inner := 0\nrepeat inner < 3 {\ninner := inner + 1\nif inner == 2 {\ncontinue\n} otherwise {\nhits := hits + 1\n}\n}\n}\nshow hits\n")
+define generic_driver_nested_continue_run := execute_bytecode_plan(get(generic_driver_nested_continue, "plan"))
+define generic_driver_invalid_break := compile_source("break\n")
+define generic_driver_invalid_continue := compile_source("continue\n")
+if get(generic_driver_nested_break, "ok") and get(generic_driver_nested_break_run, "ok") and get(get(generic_driver_nested_break_run, "output"), 0) == "3" and get(generic_driver_nested_continue, "ok") and get(generic_driver_nested_continue_run, "ok") and get(get(generic_driver_nested_continue_run, "output"), 0) == "6" and not get(generic_driver_invalid_break, "ok") and get(generic_driver_invalid_break, "stage") == "validate" and get(generic_driver_invalid_break, "error") == "break outside loop" and not get(generic_driver_invalid_continue, "ok") and get(generic_driver_invalid_continue, "stage") == "validate" and get(generic_driver_invalid_continue, "error") == "continue outside loop" {
+  show "QORVYNT_NESTED_LOOP_CONTROL_FLOW_PASS"
+} otherwise {
+  show "QORVYNT_NESTED_LOOP_CONTROL_FLOW_FAIL"
+  show generic_driver_nested_break
+  show generic_driver_nested_break_run
+  show generic_driver_nested_continue
+  show generic_driver_nested_continue_run
+  show generic_driver_invalid_break
+  show generic_driver_invalid_continue
+}
+
 # Compiler-driver semantic regressions: recursive functions, function-local names,
 # duplicate parameters, and call arity must be checked through compile_source().
 define generic_driver_recursive := compile_source("fn sum_to(n) {\nif n <= 0 {\nreturn 0\n} otherwise {\ndefine previous := sum_to(n - 1)\nreturn n + previous\n}\n}\nshow sum_to(5)\n")
