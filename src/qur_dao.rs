@@ -1,6 +1,5 @@
 //! Deterministic local DAO proposal and voting runtime.
 //! This module is a single-process governance prototype, not consensus-backed execution.
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use super::contract_gas::{GasMeter, BASE_EXECUTION_GAS, STORAGE_READ_GAS, STORAGE_WRITE_GAS};
 use super::contract_state::{AccessMode, ContractState};
@@ -8,15 +7,13 @@ use super::contract_state::{AccessMode, ContractState};
 const MAX_ID_BYTES: usize = 64;
 const MAX_TITLE_BYTES: usize = 256;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VoteChoice { Yes, No }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProposalStatus { Open, Approved, Rejected, QuorumNotMet }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DaoProposal {
     pub id: String,
     pub proposer: String,
@@ -46,11 +43,53 @@ fn valid_id(value: &str) -> bool {
 }
 
 fn proposal_key(id: &str) -> String { format!("proposal/{id}") }
+
+fn status_name(status: ProposalStatus) -> &'static str {
+    match status {
+        ProposalStatus::Open => "open",
+        ProposalStatus::Approved => "approved",
+        ProposalStatus::Rejected => "rejected",
+        ProposalStatus::QuorumNotMet => "quorum_not_met",
+    }
+}
+
+fn proposal_bytes(proposal: &DaoProposal) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(&serde_json::json!({
+        "id": proposal.id,
+        "proposer": proposal.proposer,
+        "title": proposal.title,
+        "quorum": proposal.quorum,
+        "yes_votes": proposal.yes_votes,
+        "no_votes": proposal.no_votes,
+        "status": status_name(proposal.status)
+    })).map_err(|e| e.to_string())
+}
+
+fn parse_proposal(bytes: &[u8]) -> Result<DaoProposal, String> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|_| "stored DAO proposal is corrupt".to_string())?;
+    let status = match value.get("status").and_then(|v| v.as_str()) {
+        Some("open") => ProposalStatus::Open,
+        Some("approved") => ProposalStatus::Approved,
+        Some("rejected") => ProposalStatus::Rejected,
+        Some("quorum_not_met") => ProposalStatus::QuorumNotMet,
+        _ => return Err("stored DAO proposal has an invalid status".into()),
+    };
+    Ok(DaoProposal {
+        id: value.get("id").and_then(|v| v.as_str()).ok_or("stored DAO proposal ID is missing")?.to_owned(),
+        proposer: value.get("proposer").and_then(|v| v.as_str()).ok_or("stored DAO proposer is missing")?.to_owned(),
+        title: value.get("title").and_then(|v| v.as_str()).ok_or("stored DAO title is missing")?.to_owned(),
+        quorum: value.get("quorum").and_then(|v| v.as_u64()).ok_or("stored DAO quorum is invalid")?,
+        yes_votes: value.get("yes_votes").and_then(|v| v.as_u64()).ok_or("stored DAO yes vote count is invalid")?,
+        no_votes: value.get("no_votes").and_then(|v| v.as_u64()).ok_or("stored DAO no vote count is invalid")?,
+        status,
+    })
+}
 fn vote_key(id: &str, voter: &str) -> String { format!("vote/{id}/{voter}") }
 
 fn load_proposal(state: &ContractState, overlay: &super::contract_state::StateOverlay, id: &str) -> Result<DaoProposal, String> {
     let bytes = overlay.get(state, &proposal_key(id))?.ok_or_else(|| format!("unknown DAO proposal '{id}'"))?;
-    serde_json::from_slice(bytes).map_err(|_| "stored DAO proposal is corrupt".into())
+    parse_proposal(bytes)
 }
 
 fn receipt(operation: &'static str, proposal_id: &str, gas: &GasMeter, state: &ContractState) -> DaoReceipt {
@@ -76,7 +115,7 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     if overlay.get(state, &proposal_key(id))?.is_some() { return Err(format!("DAO proposal '{id}' already exists")); }
     let proposal = DaoProposal { id: id.into(), proposer: proposer.into(), title: title.into(),
         quorum, yes_votes: 0, no_votes: 0, status: ProposalStatus::Open };
-    overlay.set(&proposal_key(id), serde_json::to_vec(&proposal).map_err(|e| e.to_string())?)?;
+    overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     gas.charge_event(title.len() + id.len())?;
     state.commit(overlay)?;
     Ok(receipt("ProposalCreated", id, &gas, state))
