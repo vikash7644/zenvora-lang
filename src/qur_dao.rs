@@ -40,7 +40,12 @@ impl DaoProposal {
             "quorum": self.quorum,
             "yes_votes": self.yes_votes,
             "no_votes": self.no_votes,
-            "status": status_name(self.status)
+            "status": status_name(self.status),
+            "treasury_recipient": self.treasury_recipient,
+            "treasury_amount": self.treasury_amount,
+            "timelock_blocks": self.timelock_blocks,
+            "approved_at_height": self.approved_at_height,
+            "executed": self.executed
         })
     }
 }
