@@ -2696,3 +2696,20 @@ if get(otherwise_if_program, "ok") and get(otherwise_if_run, "ok") and get(get(o
   show otherwise_if_run
 }
 
+
+
+# Chained conditional regression: nested otherwise-if branches and the final
+# otherwise branch must survive parsing, compilation, and bytecode execution.
+define otherwise_if_chain := compile_source("define branch_value := 3\nif branch_value == 1 {\nshow \"one\"\n} otherwise if branch_value == 2 {\nshow \"two\"\n} otherwise if branch_value == 3 {\nshow \"three\"\n} otherwise {\nshow \"fallback\"\n}\n")
+define otherwise_if_chain_run := execute_bytecode_plan(get(otherwise_if_chain, "plan"))
+define otherwise_if_fallback := compile_source("define branch_value := 9\nif branch_value == 1 {\nshow \"one\"\n} otherwise if branch_value == 2 {\nshow \"two\"\n} otherwise {\nshow \"fallback\"\n}\n")
+define otherwise_if_fallback_run := execute_bytecode_plan(get(otherwise_if_fallback, "plan"))
+if get(otherwise_if_chain, "ok") and get(otherwise_if_chain_run, "ok") and get(get(otherwise_if_chain_run, "output"), 0) == "three" and get(otherwise_if_fallback, "ok") and get(otherwise_if_fallback_run, "ok") and get(get(otherwise_if_fallback_run, "output"), 0) == "fallback" {
+  show "QORVYNT_CHAINED_OTHERWISE_IF_AND_FINAL_ELSE_PASS"
+} otherwise {
+  show "QORVYNT_CHAINED_OTHERWISE_IF_AND_FINAL_ELSE_FAIL"
+  show otherwise_if_chain
+  show otherwise_if_chain_run
+  show otherwise_if_fallback
+  show otherwise_if_fallback_run
+}
