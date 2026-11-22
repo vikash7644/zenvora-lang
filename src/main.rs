@@ -5479,6 +5479,42 @@ fn factorial(n) {
     }
 
     #[test]
+    fn state_only_dao_command_recovers_pending_token_transaction() {
+        let base = std::env::temp_dir();
+        let ledger = base.join(format!("qorvynt-dao-state-recovery-ledger-{}.json", std::process::id()));
+        let state = base.join(format!("qorvynt-dao-state-recovery-state-{}.bin", std::process::id()));
+        let journal_path = super::dao_tx_journal_path(&ledger);
+        let index_path = super::dao_tx_recovery_index_path(&state);
+        for path in [&ledger, &state, &journal_path, &index_path] { let _ = std::fs::remove_file(path); }
+
+        let ledger_bytes = br#"{"schema":"state-only-recovery"}"#;
+        let state_bytes = b"recovered-dao-state";
+        let mut journal = b"QORVYNT_DAO_TX_V1\\0".to_vec();
+        super::dao_tx_put_bytes(&mut journal, ledger.to_str().unwrap().as_bytes()).unwrap();
+        super::dao_tx_put_bytes(&mut journal, state.to_str().unwrap().as_bytes()).unwrap();
+        journal.extend_from_slice(&(ledger_bytes.len() as u64).to_be_bytes());
+        journal.extend_from_slice(ledger_bytes);
+        journal.extend_from_slice(&(state_bytes.len() as u64).to_be_bytes());
+        journal.extend_from_slice(state_bytes);
+        std::fs::write(&index_path, ledger.to_str().unwrap()).unwrap();
+        std::fs::write(&journal_path, journal).unwrap();
+        std::fs::write(&ledger, b"partially-published").unwrap();
+
+        super::recover_dao_token_transaction_for_state(&state).unwrap();
+        assert_eq!(std::fs::read(&ledger).unwrap(), ledger_bytes);
+        assert_eq!(std::fs::read(&state).unwrap(), state_bytes);
+        assert!(!journal_path.exists());
+        assert!(!index_path.exists());
+
+        // An index published just before a crash, without its journal, is safe to discard.
+        std::fs::write(&index_path, ledger.to_str().unwrap()).unwrap();
+        super::recover_dao_token_transaction_for_state(&state).unwrap();
+        assert!(!index_path.exists());
+
+        for path in [&ledger, &state, &journal_path, &index_path] { let _ = std::fs::remove_file(path); }
+    }
+
+    #[test]
     fn dao_token_journal_recovers_interrupted_two_file_publish() {
         let base = std::env::temp_dir();
         let ledger = base.join(format!("qorvynt-dao-journal-ledger-{}.json", std::process::id()));
