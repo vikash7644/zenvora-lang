@@ -38,6 +38,7 @@ impl QurLedger {
         validate_account(from)?;
         validate_account(to)?;
         if amount == 0 { return Err("token transfer amount must be greater than zero".into()); }
+        if from == to { return Err("token transfer sender and recipient must differ".into()); }
         let supply = self.supplies.get(token).copied().ok_or_else(|| format!("unknown token '{token}'"))?;
         let from_balance = self.balance(token, from);
         let remaining = from_balance.checked_sub(amount).ok_or_else(|| "insufficient token balance".to_string())?;
