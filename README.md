@@ -77,6 +77,10 @@ A starter VS Code language extension is available in [`editors/vscode/`](editors
 
 This is syntax highlighting only—not a language server, compiler, debugger, or VS Code Marketplace release. See the [editor support guide](editors/vscode/README.md) for setup. GitHub's language bar still requires upstream Linguist recognition; adding an editor grammar does not change that.
 
+## QORVYNT Studio for Windows
+
+An early-access Tauri desktop IDE is being developed in [`studio/`](studio/). It includes a `.qv` editor, native Open/Save, and Compile/Run actions connected to the shared QORVYNT compiler and VM. The Windows workflow now builds MSI and NSIS installers and uploads them as CI artifacts; this is not yet a signed public release. See the [Studio guide](studio/README.md) and [latest Windows build](https://github.com/vikash7644/zenvora-lang/actions/workflows/studio-windows.yml).
+
 ## Latest prototype release
 
 The latest cross-platform CLI build is published as a **pre-release**: [QORVYNT Lang v0.8.0 Prototype 1](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1).
