@@ -363,7 +363,7 @@ fn bounded_code(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{assess_proposal, FindingSeverity};
+    use super::{assess_proposal, AdvisorAnnotation, AdvisorContext, AdvisorObservation, FindingSeverity};
     use crate::qur_dao::{DaoProposal, ProposalStatus};
 
     fn proposal() -> DaoProposal {
@@ -455,5 +455,65 @@ mod tests {
         assert_eq!(json["advisory_only"], true);
         assert_eq!(json["proposal_id"], "p1");
         assert!(json["findings"].is_array());
+    }
+
+    #[test]
+    fn advisor_context_contains_only_read_only_proposal_facts() {
+        let source = proposal();
+        let before = source.clone();
+        let context = AdvisorContext::from_proposal(&source);
+        assert_eq!(context.proposal_id, "p1");
+        assert_eq!(context.status, "approved");
+        assert_eq!(context.yes_votes, 2);
+        assert_eq!(source, before);
+    }
+
+    #[test]
+    fn bounded_advisor_annotation_serializes_as_advisory_only() {
+        let annotation = AdvisorAnnotation {
+            provider: "local-test".into(),
+            model: "fixture-v1".into(),
+            summary: "Review the treasury evidence.".into(),
+            observations: vec![AdvisorObservation {
+                code: "CHECK_TREASURY".into(),
+                severity: FindingSeverity::Review,
+                explanation: "Verify the recipient against the approved proposal.".into(),
+                evidence_refs: vec!["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()],
+            }],
+        };
+        let json = annotation.to_json().unwrap();
+        assert_eq!(json["advisory_only"], true);
+        assert_eq!(json["observations"][0]["code"], "CHECK_TREASURY");
+    }
+
+    #[test]
+    fn advisor_annotation_rejects_control_characters_and_oversized_output() {
+        let mut annotation = AdvisorAnnotation {
+            provider: "provider".into(),
+            model: "model".into(),
+            summary: "safe".into(),
+            observations: Vec::new(),
+        };
+        annotation.summary = "unsafe\nsummary".into();
+        assert!(annotation.validate().is_err());
+
+        annotation.summary = "x".repeat(super::MAX_ADVISOR_SUMMARY_BYTES + 1);
+        assert!(annotation.validate().is_err());
+    }
+
+    #[test]
+    fn advisor_annotation_rejects_too_many_observations() {
+        let annotation = AdvisorAnnotation {
+            provider: "provider".into(),
+            model: "model".into(),
+            summary: "bounded".into(),
+            observations: (0..=super::MAX_ADVISOR_FINDINGS).map(|_| AdvisorObservation {
+                code: "CHECK".into(),
+                severity: FindingSeverity::Info,
+                explanation: "Observation".into(),
+                evidence_refs: Vec::new(),
+            }).collect(),
+        };
+        assert!(annotation.validate().is_err());
     }
 }
