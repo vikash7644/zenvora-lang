@@ -262,6 +262,18 @@ The current prototype supports an experimental single-contract-per-file DSL (`co
 
 This is an early work in progress. The `contract/state/action/view` syntax is an experimental source-lowering prototype: state exists only for one program run, and authorization, persistent storage, indirect view-purity enforcement, and blockchain execution are not implemented. Direct assignments to declared contract state inside a `view` body are rejected by the source-lowering check. Advanced static type checking, native machine-code generation, a production blockchain, a wallet, a DEX and mainnet are **not implemented by this compiler yet**. Do not use it for funds or production contracts.
 
+## Support QORVYNT
+
+QORVYNT is developed in the open. If the language, compiler, VM, documentation, or examples are useful to you, you can help sustain the work:
+
+- **GitHub Sponsors:** [View sponsorship options](https://github.com/sponsors/vikash7644). The Sponsor page and its available payment methods depend on GitHub account eligibility and the creator's configured tiers.
+- **Contribute code:** see [CONTRIBUTING.md](CONTRIBUTING.md) for tests and review expectations.
+- **Report a reproducible issue:** use [GitHub Issues](https://github.com/vikash7644/zenvora-lang/issues).
+
+Suggested voluntary support levels, if enabled on the GitHub Sponsors profile, are **$1, $5, $10, $25, or $100**. These are suggestions only—not configured or guaranteed payment tiers. A small contribution is appreciated, but never required.
+
+Sponsorship supports ongoing language engineering, compiler/VM testing, documentation, examples, and release infrastructure. It does not buy equity, ownership, tokens, investment returns, or guaranteed features. No tax-deductible or charitable status is claimed. See [SUPPORT.md](docs/SUPPORT.md) for details and transparency principles.
+
 ## License
 
 MIT.
