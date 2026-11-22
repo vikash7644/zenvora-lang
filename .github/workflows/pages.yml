@@ -56,7 +56,7 @@ jobs:
           ):
               source = Path(filename).read_text(encoding="utf-8")
               visible = re.sub(
-                  r"<(script|style)\\b[^>]*>.*?</\\1>",
+                  r"<(script|style)\b[^>]*>.*?</\1>",
                   " ",
                   source,
                   flags=re.IGNORECASE | re.DOTALL,
