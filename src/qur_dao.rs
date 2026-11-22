@@ -230,7 +230,14 @@ pub fn cast_vote_signed(state: &mut ContractState, dao_id: &str, id: &str,
 
 pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
+    cast_vote_with_weight(state, dao_id, id, voter, choice, 1, gas_limit)
+}
+
+/// Record a vote with a positive, caller-validated voting weight.
+pub fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
+    choice: VoteChoice, weight: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     if !valid_id(dao_id) || !valid_id(id) || !valid_id(voter) { return Err("invalid DAO, proposal, or voter identifier".into()); }
+    if weight == 0 { return Err("voting weight must be greater than zero".into()); }
     let mut gas = GasMeter::new(gas_limit);
     gas.charge(BASE_EXECUTION_GAS)?;
     gas.charge(STORAGE_READ_GAS.checked_mul(2).ok_or("gas calculation overflow")?)?;
@@ -241,18 +248,36 @@ pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     let key = vote_key(id, voter);
     if overlay.get(state, &key)?.is_some() { return Err("voter has already voted on this proposal".into()); }
     match choice {
-        VoteChoice::Yes => proposal.yes_votes = proposal.yes_votes.checked_add(1).ok_or("yes vote counter overflow")?,
-        VoteChoice::No => proposal.no_votes = proposal.no_votes.checked_add(1).ok_or("no vote counter overflow")?,
+        VoteChoice::Yes => proposal.yes_votes = proposal.yes_votes.checked_add(weight).ok_or("yes vote counter overflow")?,
+        VoteChoice::No => proposal.no_votes = proposal.no_votes.checked_add(weight).ok_or("no vote counter overflow")?,
     }
-    overlay.set(&key, match choice { VoteChoice::Yes => b"yes".to_vec(), VoteChoice::No => b"no".to_vec() })?;
+    let mut vote_record = Vec::with_capacity(9);
+    vote_record.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
+    vote_record.extend_from_slice(&weight.to_be_bytes());
+    overlay.set(&key, vote_record)?;
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut event_payload = Vec::new();
     append_field(&mut event_payload, voter.as_bytes());
     event_payload.push(match choice { VoteChoice::Yes => 1, VoteChoice::No => 0 });
+    event_payload.extend_from_slice(&weight.to_be_bytes());
     gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
     Ok(receipt("VoteCast", dao_id, id, &event_payload, &gas, state))
 }
+
+/// Verify a wallet signature and weight its vote by the wallet's current QUR token balance.
+pub fn cast_vote_weighted_signed(state: &mut ContractState, ledger: &super::qur_runtime::QurLedger,
+    dao_id: &str, id: &str, token: &str, public_key: &VerifyingKey, signature: &Signature,
+    choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
+    let message = vote_signing_message(dao_id, id, choice)?;
+    public_key.verify_strict(&message, signature)
+        .map_err(|_| "invalid DAO vote signature".to_string())?;
+    let voter = crate::chain_protocol::address_from_public_key(&public_key.to_bytes())?;
+    let weight = ledger.balance(token, &voter);
+    if weight == 0 { return Err("wallet has no voting balance for the selected token".into()); }
+    cast_vote_with_weight(state, dao_id, id, &voter, choice, weight, gas_limit)
+}
+
 
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     gas_limit: u64) -> Result<DaoReceipt, String> {
@@ -404,7 +429,7 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, cast_vote_signed, create_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, create_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
     use ed25519_dalek::{Signer, SigningKey, Signature};
 
@@ -524,6 +549,41 @@ token GOLD {
             "GOLD", 106, 50_000).is_err());
         assert_eq!(state.state_root(), committed_state);
         assert_eq!(ledger.state_root(), committed_ledger);
+    }
+
+    #[test]
+    fn signed_dao_votes_use_qur_token_balance_as_weight() {
+        let manifest = super::super::qur::parse(r#"
+chain MyChain {
+ consensus = "proof_of_stake"
+ native_token = "GOLD"
+}
+token GOLD {
+ standard = "fungible"
+ supply = 1000
+}
+"#).unwrap();
+        let mut ledger = super::super::qur_runtime::QurLedger::from_manifest(&manifest).unwrap();
+        let yes_key = SigningKey::from_bytes(&[31u8; 32]);
+        let no_key = SigningKey::from_bytes(&[32u8; 32]);
+        let yes_address = super::super::chain_protocol::address_from_public_key(&yes_key.verifying_key().to_bytes()).unwrap();
+        let no_address = super::super::chain_protocol::address_from_public_key(&no_key.verifying_key().to_bytes()).unwrap();
+        ledger.transfer("GOLD", "genesis", &yes_address, 70).unwrap();
+        ledger.transfer("GOLD", "genesis", &no_address, 30).unwrap();
+        let mut state = ContractState::new();
+        create_proposal(&mut state, "community", "weighted1", "founder", "Weighted vote", 100, 30_000).unwrap();
+        let yes_message = vote_signing_message("community", "weighted1", VoteChoice::Yes).unwrap();
+        let yes_signature = yes_key.sign(&yes_message);
+        cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+            &yes_key.verifying_key(), &yes_signature, VoteChoice::Yes, 30_000).unwrap();
+        let no_message = vote_signing_message("community", "weighted1", VoteChoice::No).unwrap();
+        let no_signature = no_key.sign(&no_message);
+        cast_vote_weighted_signed(&mut state, &ledger, "community", "weighted1", "GOLD",
+            &no_key.verifying_key(), &no_signature, VoteChoice::No, 30_000).unwrap();
+        let proposal = get_proposal(&state, "community", "weighted1").unwrap();
+        assert_eq!(proposal.yes_votes, 70);
+        assert_eq!(proposal.no_votes, 30);
+        assert_eq!(proposal.total_votes(), 100);
     }
 
     #[test]
