@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn treasury_proposal_without_timelock_is_high_risk() {
+    fn treasury_proposal_without_timelock_requires_review() {
         let mut proposal = proposal();
         proposal.treasury_recipient = Some("bob".into());
         proposal.treasury_amount = 100;
