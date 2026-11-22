@@ -9,21 +9,21 @@ pub(super) fn run(code: &[Op]) -> Result<(), String> {
     run_with_output(code, &mut |line| println!("{line}"))
 }
 
-fn run_with_output<F>(code: &[Op], output: &mut F) -> Result<(), String>
+pub(super) fn run_with_output<F>(code: &[Op], output: &mut F) -> Result<(), String>
 where
     F: FnMut(String),
 {
     run_with_output_metered(code, output, None)
 }
 
-fn run_with_gas<F>(code: &[Op], output: &mut F, meter: &mut contract_gas::GasMeter) -> Result<(), String>
+pub(super) fn run_with_gas<F>(code: &[Op], output: &mut F, meter: &mut contract_gas::GasMeter) -> Result<(), String>
 where
     F: FnMut(String),
 {
     run_with_output_metered(code, output, Some(meter))
 }
 
-fn run_with_output_metered<F>(
+pub(super) fn run_with_output_metered<F>(
     code: &[Op],
     output: &mut F,
     mut gas_meter: Option<&mut contract_gas::GasMeter>,
