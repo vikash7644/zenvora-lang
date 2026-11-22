@@ -399,7 +399,7 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, cast_vote_signed, create_proposal, create_treasury_proposal, execute_treasury_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, create_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
     use ed25519_dalek::{Signer, SigningKey, Signature};
 
@@ -476,6 +476,49 @@ mod tests {
         assert!(execute_treasury_proposal(&mut state, "community", "pay2", 6, 30_000).is_err());
         assert_eq!(state.state_root(), root);
         assert_eq!(treasury_balance(&state, "community").unwrap(), 0);
+    }
+
+    #[test]
+    fn dao_treasury_payout_moves_real_qur_token_balances_after_timelock() {
+        let manifest = super::super::qur::parse(r#"
+chain MyChain {
+ consensus = "proof_of_stake"
+ native_token = "GOLD"
+}
+token GOLD {
+ standard = "fungible"
+ supply = 1000
+}
+"#).unwrap();
+        let mut ledger = super::super::qur_runtime::QurLedger::from_manifest(&manifest).unwrap();
+        ledger.transfer("GOLD", "genesis", "dao_community", 100).unwrap();
+        let mut state = ContractState::new();
+        create_treasury_proposal(&mut state, "community", "tokenpay1", "founder",
+            "Contributor payout", "contributor", 40, 1, 5, 30_000).unwrap();
+        let key = SigningKey::from_bytes(&[21u8; 32]);
+        let message = vote_signing_message("community", "tokenpay1", VoteChoice::Yes).unwrap();
+        let signature = key.sign(&message);
+        cast_vote_signed(&mut state, "community", "tokenpay1", &key.verifying_key(), &signature,
+            VoteChoice::Yes, 30_000).unwrap();
+        finalize_proposal_at_height(&mut state, "community", "tokenpay1", 100, 30_000).unwrap();
+        let before_state = state.state_root();
+        let before_ledger = ledger.state_root();
+        assert!(execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
+            "GOLD", 104, 50_000).is_err());
+        assert_eq!(state.state_root(), before_state);
+        assert_eq!(ledger.state_root(), before_ledger);
+        let receipt = execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
+            "GOLD", 105, 50_000).unwrap();
+        assert_eq!(receipt.operation, "TreasuryTokenTransferExecuted");
+        assert_eq!(ledger.balance("GOLD", "dao_community"), 60);
+        assert_eq!(ledger.balance("GOLD", "contributor"), 40);
+        assert_eq!(ledger.total_supply("GOLD"), Some(1000));
+        let committed_state = state.state_root();
+        let committed_ledger = ledger.state_root();
+        assert!(execute_treasury_token_proposal(&mut state, &mut ledger, "community", "tokenpay1",
+            "GOLD", 106, 50_000).is_err());
+        assert_eq!(state.state_root(), committed_state);
+        assert_eq!(ledger.state_root(), committed_ledger);
     }
 
     #[test]
