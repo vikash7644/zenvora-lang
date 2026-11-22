@@ -3633,6 +3633,44 @@ fn main() {
         }
         return;
     }
+    if args.get(1).is_some_and(|mode| mode == "--qur-dao-propose-weighted-anchored") {
+        if args.len() != 13 {
+            eprintln!("Usage: qorvynt --qur-dao-propose-weighted-anchored <ledger.json> <state.bin> <block-store> <chain-id> <dao-id> <proposal-id> <proposer> <title> <token> <quorum> <gas-limit>");
+            process::exit(2);
+        }
+        let result = (|| -> Result<(), String> {
+            recover_dao_token_transaction(Path::new(&args[2]), Path::new(&args[3]))?;
+            let raw = fs::read_to_string(&args[2]).map_err(|e| format!("cannot read QUR token ledger: {e}"))?;
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("invalid QUR token ledger JSON: {e}"))?;
+            let ledger = qur_runtime::QurLedger::from_json(&value)?;
+            let chain_id = args[5].parse::<u64>().map_err(|_| "chain ID must be an unsigned integer".to_string())?;
+            let (block_store, _runtime) = crate::block_store::BlockStore::load_from_file(Path::new(&args[4]), chain_id)?;
+            let anchor = block_store.verified_tip_anchor()?
+                .ok_or_else(|| "cannot anchor DAO snapshot to an empty block store".to_string())?;
+            let snapshot = Path::new(&args[3]);
+            let mut state = if snapshot.exists() {
+                contract_state::ContractState::load_snapshot(snapshot)?
+            } else { contract_state::ContractState::new() };
+            let quorum = args[11].parse::<u64>().map_err(|_| "quorum must be an unsigned integer".to_string())?;
+            let gas = args[12].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
+            let receipt = qur_dao::create_weighted_proposal_at_anchor(&mut state, &ledger, anchor,
+                &args[6], &args[7], &args[8], &args[9], &args[10], quorum, gas)?;
+            state.save_snapshot(snapshot)?;
+            println!("operation={}", receipt.operation);
+            println!("dao_id={}", receipt.dao_id);
+            println!("proposal_id={}", receipt.proposal_id);
+            println!("gas_used={}", receipt.gas_used);
+            println!("state_root={}", hex_encode_bytes(&receipt.state_root));
+            println!("event_hash={}", hex_encode_bytes(&receipt.event_hash));
+            println!("snapshot_chain_id={}", anchor.chain_id());
+            println!("snapshot_block_height={}", anchor.height());
+            println!("snapshot_block_hash={}", hex_encode_bytes(anchor.block_hash()));
+            println!("snapshot_chain_state_root={}", hex_encode_bytes(anchor.state_root()));
+            Ok(())
+        })();
+        if let Err(error) = result { eprintln!("QORVYNT anchored weighted proposal error: {error}"); process::exit(1); }
+        return;
+    }
     if args.get(1).is_some_and(|mode| mode == "--qur-dao-propose-weighted") {
         if args.len() != 11 {
             eprintln!("Usage: qorvynt --qur-dao-propose-weighted <ledger.json> <state.bin> <dao-id> <proposal-id> <proposer> <title> <token> <quorum> <gas-limit>");
