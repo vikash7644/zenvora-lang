@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Standalone QORVYNT virtual-machine runtime crate.
 //! This crate contains VM instructions, values, safety limits, built-ins,
 //! gas accounting interfaces, the execution engine, and Bytecode v2 parsing
