@@ -61,6 +61,20 @@ jobs:
           test "$invalid_status" -eq 1
           python3 -c 'import json; d=json.load(open("/tmp/qorvynt-qur-invalid.json")); assert d["schema"] == "qorvynt.qur.manifest.v1" and d["valid"] is False; assert "unknown chain" in d["error"]'
 
+      - name: Exercise QUR token genesis, transfer, and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -- --qur-token-init examples/qur/manifest.qv /tmp/qorvynt-token-ledger.json
+          cargo run --locked -- --qur-token-transfer /tmp/qorvynt-token-ledger.json GOLD genesis alice 25
+          cargo run --locked -- --qur-token-balance /tmp/qorvynt-token-ledger.json GOLD alice | grep -Fxq 25
+          set +e
+          cargo run --locked -- --qur-token-transfer /tmp/qorvynt-token-ledger.json GOLD alice bob 26
+          transfer_status=$?
+          set -e
+          test "$transfer_status" -eq 1
+          cargo run --locked -- --qur-token-balance /tmp/qorvynt-token-ledger.json GOLD alice | grep -Fxq 25
+
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
