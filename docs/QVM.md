@@ -47,16 +47,16 @@ The generic `--run-bytecode` command continues to support legacy v1 and v2 artif
 
 - The compiler, serializer, verifier, and runtime are still hosted in the Rust `qorvynt` executable.
 - The self-hosted `compiler/parser.qv` is an evolving frontend foundation; it is not yet the complete compiler or a self-hosting bootstrap.
-- QVM currently reuses the existing VM execution engine; the interpreter has not yet been extracted into an independently buildable QVM package.
+- The instruction loop now lives in `src/qvm/runtime.rs` and the CLI delegates execution through that module. The runtime still imports compiler-host helpers and crate-level safety limits, so it is an internal module extraction—not yet an independently buildable QVM package.
 - Bytecode v2 remains experimental and must not be described as stable or production-safe before format review and independent security testing.
 
 ## Next engineering gates
 
 1. Keep compile → serialize → verify → execute parity covered by tests for functions, collections, control flow, builtins, and runtime errors.
-2. Extract the runtime value model, opcode definitions, and execution loop from `src/main.rs` into a dedicated `src/qvm/` module without changing behavior.
+2. Finish isolating the runtime from compiler-host helpers and crate-wide imports; keep the current execution parity suite green.
 3. Define a versioned, deterministic binary artifact encoding only after the v2 instruction and metadata contract is frozen.
 4. Add a standalone QVM library/runner and prove it can load artifacts without invoking the source compiler.
 5. Port the compiler backend incrementally into QORVYNT and prove clean-environment bootstrap parity before claiming Rust independence.
 
 
-The VM instruction enum and runtime value type have since moved to `src/qvm/bytecode.rs` and `src/qvm/value.rs`; execution and variable-environment handling remain in the Rust host pending the next extraction.
+The VM instruction enum, runtime value type, and instruction execution loop now live in `src/qvm/bytecode.rs`, `src/qvm/value.rs`, and `src/qvm/runtime.rs`. The CLI retains a thin compatibility wrapper. The extracted runtime still depends on host-crate helpers and is not yet standalone.
