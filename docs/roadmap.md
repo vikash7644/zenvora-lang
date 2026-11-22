@@ -1,7 +1,7 @@
-# Zenvora Master Roadmap
+# QORVYNT Master Roadmap
 
 **Status date:** 2026-10-19  
-**Current milestone:** Zenvora Lang v0.8.0 prototype (experimental; not production-ready)  
+**Current milestone:** QORVYNT Lang v0.8.0 prototype (experimental; not production-ready)  
 **Principle:** Build, test, and document each layer before depending on it. This roadmap is a plan, not a claim that future milestones are already complete.
 
 ## The long-term vision
@@ -31,7 +31,7 @@ This section records checks observed on the current main branch. It does not cer
 1. Finish the stable language reference and semantics for values, errors, functions, and control flow.
 2. Obtain independent security review before freezing bytecode v2.
 3. Keep contract persistence, authorization, gas, and replay claims gated on implementation and tests.
-4. Complete the Zenvora Lang / BHYVORIX Chain repository boundary migration with both repositories green.
+4. Complete the QORVYNT Lang / BHYVORIX Chain repository boundary migration with both repositories green.
 
 ## Roadmap phases
 
@@ -86,7 +86,7 @@ This section records checks observed on the current main branch. It does not cer
 - [ ] Compare native results against VM results with the same test suite.
 - [ ] Add debugging, linking, and platform-specific build documentation.
 
-**Exit criteria:** Selected Zenvora programs produce executable native machine code for a declared target and pass differential tests. This does not require manufacturing a semiconductor.
+**Exit criteria:** Selected QORVYNT programs produce executable native machine code for a declared target and pass differential tests. This does not require manufacturing a semiconductor.
 
 ### Phase 6 — Experimental Zenvora ISA and emulator
 
@@ -111,7 +111,7 @@ This section records checks observed on the current main branch. It does not cer
 
 Only after the language/runtime has a stable, reviewed execution model:
 
-- [ ] Define whether and how Zenvora contracts should be sandboxed and metered.
+- [ ] Define whether and how QORVYNT contracts should be sandboxed and metered.
 - [ ] Design deterministic execution, resource/gas accounting, cryptographic boundaries, and a threat model before connecting to a chain.
 - [ ] Keep wallet keys, node networking, consensus, and contract execution as separately reviewed components.
 - [ ] Prototype locally before considering public networks or real assets.

@@ -1,9 +1,9 @@
 # String literals, escapes, concatenation, equality, and string function arguments.
 define greeting := "Hello, "
-define project := "QORVYNT Lang"
+define project := "Zenvora Lang"
 show greeting + project
 show "First line\nSecond line"
-show same("QORVYNT", "QORVYNT")
+show same("Zenvora", "Zenvora")
 
 fn same(left, right) {
     return left == right

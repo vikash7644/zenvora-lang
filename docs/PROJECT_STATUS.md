@@ -12,7 +12,7 @@ Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; thi
 
 ## QORVYNT identity and independence milestone (2026-11-21)
 
-- [x] Rename the root Rust package and canonical executable from the former Zenvora identity to `qorvynt`.
+- [x] Rename the root Rust package and canonical executable from the former legacy identity to `qorvynt`.
 - [x] Update CLI tests, release/build workflows, integration smoke workflows, and docs to invoke `qorvynt`.
 - [x] Make `QORVYNT_BYTECODE 1/2` the canonical emitted format headers.
 - [x] Keep old `ZENVORA_BYTECODE 1/2` files readable as a migration-only compatibility path; the compiler emits only QORVYNT headers.
