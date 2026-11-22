@@ -4238,14 +4238,14 @@ mod tests {
         let output_path = base.join(format!("qorvynt-render-{suffix}.svg"));
         let _ = std::fs::remove_file(&source_path);
         let _ = std::fs::remove_file(&output_path);
-        std::fs::write(&source_path, "define title := \"QORVYNT\"\\nshow \"<svg>\"\\nshow title\\nshow \"</svg>\"\\n").unwrap();
+        std::fs::write(&source_path, "define title := \"QORVYNT\"\nshow \"<svg>\"\nshow title\nshow \"</svg>\"\n").unwrap();
         let source_text = source_path.to_string_lossy().to_string();
         let output_text = output_path.to_string_lossy().to_string();
 
         super::render_source_to_file(&source_text, &output_text).unwrap();
         assert_eq!(
             std::fs::read_to_string(&output_path).unwrap(),
-            "<svg>\\nQORVYNT\\n</svg>\\n"
+            "<svg>\nQORVYNT\n</svg>\n"
         );
         assert!(super::render_source_to_file(&source_text, &source_text).is_err());
 
