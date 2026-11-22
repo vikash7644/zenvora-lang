@@ -143,7 +143,7 @@ The execution API clones the token ledger, validates the transfer, stages DAO pr
 
 ### Proposal-snapshot token-weighted wallet voting
 
-Weighted proposals now capture the selected token's holder balances when the proposal is created. The snapshot is stored in DAO contract state with a 2,048-holder limit; later token transfers do not change that proposal's voting power. Signed votes derive the voter address from the verified Ed25519 key and read the fixed snapshot weight. Zero-snapshot-balance wallets and duplicate votes are rejected.
+Weighted proposals now capture the selected token's holder balances when the proposal is created. The snapshot is stored in DAO contract state with a 2,048-holder limit; later token transfers do not change that proposal's voting power. Signed votes derive the voter address from the verified Ed25519 key and read the fixed snapshot weight. Zero-snapshot-balance wallets and duplicate votes are rejected. Each weighted proposal also stores the source ledger's canonical state root and a versioned SHA-256 commitment over the token identifier and the sorted `(wallet, balance)` snapshot entries. These commitments are included in the serialized proposal and therefore in DAO contract storage state roots; legacy proposals without these optional fields remain readable.
 
 ```sh
 qorvynt --qur-dao-propose-weighted token-ledger.json dao-state.bin community proposal1 founder "Weighted governance vote" GOLD 100 50000
