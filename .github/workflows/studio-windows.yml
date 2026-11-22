@@ -1,0 +1,40 @@
+name: QORVYNT Studio (Windows)
+
+on:
+  pull_request:
+    paths:
+      - "studio/**"
+      - ".github/workflows/studio-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-shell:
+    name: Build Studio shell on Windows
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        working-directory: studio
+        run: npm install
+
+      - name: Build Studio frontend
+        working-directory: studio
+        run: npm run build
+
+      - name: Check native Tauri host
+        run: cargo check --manifest-path studio/src-tauri/Cargo.toml
