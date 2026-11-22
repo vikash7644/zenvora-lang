@@ -14,7 +14,7 @@ mod value;
 pub(crate) use bytecode::Op;
 pub(crate) use value::Value;
 
-use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2};
+use super::{deserialize_bytecode_v2, read_bytecode_source, write_bytecode_v2};
 
 /// Compile QORVYNT source into a verified Bytecode v2 QVM artifact.
 pub(super) fn compile(source_path: &str, output_path: &str) -> Result<(), String> {
@@ -59,8 +59,17 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
     Ok(load_verified(path)?.into_instructions())
 }
 
-/// Execute a previously verified QVM artifact using the current host executor.
-pub(super) fn execute(path: &str) -> Result<(), String> {
+/// Execute a verified QVM artifact through the QVM runtime API.
+/// Output is supplied by the host, so the VM core does not own terminal I/O.
+pub(crate) fn execute_with_output<F>(path: &str, mut output: F) -> Result<(), String>
+where
+    F: FnMut(String),
+{
     let program = load_verified(path)?;
-    run(program.instructions())
+    runtime::run_with_output_metered(program.instructions(), &mut output, None)
+}
+
+/// CLI convenience wrapper; the execution engine itself remains output-sink based.
+pub(super) fn execute(path: &str) -> Result<(), String> {
+    execute_with_output(path, |line| println!("{line}"))
 }
