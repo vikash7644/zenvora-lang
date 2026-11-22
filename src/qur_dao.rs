@@ -7,6 +7,7 @@ use super::contract_state::{AccessMode, ContractState};
 
 const MAX_ID_BYTES: usize = 64;
 const MAX_TITLE_BYTES: usize = 256;
+const MAX_DAO_SNAPSHOT_VOTERS: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VoteChoice { Yes, No }
@@ -28,6 +29,8 @@ pub struct DaoProposal {
     pub timelock_blocks: u64,
     pub approved_at_height: Option<u64>,
     pub executed: bool,
+    pub voting_token: Option<String>,
+    pub snapshot_total_weight: u64,
 }
 
 impl DaoProposal {
@@ -45,7 +48,9 @@ impl DaoProposal {
             "treasury_amount": self.treasury_amount,
             "timelock_blocks": self.timelock_blocks,
             "approved_at_height": self.approved_at_height,
-            "executed": self.executed
+            "executed": self.executed,
+            "voting_token": self.voting_token,
+            "snapshot_total_weight": self.snapshot_total_weight
         })
     }
 }
@@ -89,7 +94,9 @@ fn proposal_bytes(proposal: &DaoProposal) -> Result<Vec<u8>, String> {
         "treasury_amount": proposal.treasury_amount,
         "timelock_blocks": proposal.timelock_blocks,
         "approved_at_height": proposal.approved_at_height,
-        "executed": proposal.executed
+        "executed": proposal.executed,
+        "voting_token": proposal.voting_token,
+        "snapshot_total_weight": proposal.snapshot_total_weight
     })).map_err(|e| e.to_string())
 }
 
@@ -116,6 +123,8 @@ fn parse_proposal(bytes: &[u8]) -> Result<DaoProposal, String> {
         timelock_blocks: value.get("timelock_blocks").and_then(|v| v.as_u64()).unwrap_or(0),
         approved_at_height: value.get("approved_at_height").and_then(|v| v.as_u64()),
         executed: value.get("executed").and_then(|v| v.as_bool()).unwrap_or(false),
+        voting_token: value.get("voting_token").and_then(|v| v.as_str()).map(str::to_owned),
+        snapshot_total_weight: value.get("snapshot_total_weight").and_then(|v| v.as_u64()).unwrap_or(0),
     })
 }
 fn vote_key(id: &str, voter: &str) -> String { format!("vote/{id}/{voter}") }
@@ -160,7 +169,7 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     let proposal = DaoProposal { id: id.into(), proposer: proposer.into(), title: title.into(),
         quorum, yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
         treasury_recipient: None, treasury_amount: 0, timelock_blocks: 0,
-        approved_at_height: None, executed: false };
+        approved_at_height: None, executed: false, voting_token: None, snapshot_total_weight: 0 };
     overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
     let mut event_payload = Vec::new();
     append_field(&mut event_payload, proposer.as_bytes());
@@ -169,6 +178,57 @@ pub fn create_proposal(state: &mut ContractState, dao_id: &str, id: &str, propos
     gas.charge_event(event_payload.len())?;
     state.commit(overlay)?;
     Ok(receipt("ProposalCreated", dao_id, id, &event_payload, &gas, state))
+}
+
+/// Create a proposal with a fixed token-holder snapshot captured at proposal creation.
+pub fn create_weighted_proposal(state: &mut ContractState, ledger: &super::qur_runtime::QurLedger,
+    dao_id: &str, id: &str, proposer: &str, title: &str, token: &str,
+    quorum: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
+    if !valid_id(dao_id) || !valid_id(id) || !valid_id(proposer) || !valid_id(token) {
+        return Err("invalid DAO, proposal, proposer, or voting token identifier".into());
+    }
+    if title.trim().is_empty() || title.len() > MAX_TITLE_BYTES {
+        return Err("proposal title must contain 1-256 bytes".into());
+    }
+    if quorum == 0 { return Err("proposal quorum must be greater than zero".into()); }
+    let holders = ledger.token_holders(token)?;
+    if holders.is_empty() { return Err("voting token has no holders".into()); }
+    if holders.len() > MAX_DAO_SNAPSHOT_VOTERS {
+        return Err(format!("voting snapshot exceeds holder limit ({MAX_DAO_SNAPSHOT_VOTERS})"));
+    }
+    let total_weight = holders.iter().try_fold(0u64, |sum, (_, balance)| {
+        sum.checked_add(*balance).ok_or_else(|| "voting snapshot total overflow".to_string())
+    })?;
+    let mut gas = GasMeter::new(gas_limit);
+    gas.charge(BASE_EXECUTION_GAS)?;
+    let writes = u64::try_from(holders.len()).map_err(|_| "too many token holders")?
+        .checked_add(1).ok_or("gas calculation overflow")?;
+    gas.charge(STORAGE_WRITE_GAS.checked_mul(writes).ok_or("gas calculation overflow")?)?;
+    let mut overlay = state.begin(dao_id, AccessMode::Action)?;
+    if overlay.get(state, &proposal_key(id))?.is_some() {
+        return Err(format!("DAO proposal '{id}' already exists"));
+    }
+    let proposal = DaoProposal {
+        id: id.into(), proposer: proposer.into(), title: title.into(), quorum,
+        yes_votes: 0, no_votes: 0, status: ProposalStatus::Open,
+        treasury_recipient: None, treasury_amount: 0, timelock_blocks: 0,
+        approved_at_height: None, executed: false,
+        voting_token: Some(token.into()), snapshot_total_weight: total_weight,
+    };
+    for (account, balance) in &holders {
+        overlay.set(&format!("voting_power/{id}/{account}"), balance.to_be_bytes().to_vec())?;
+    }
+    overlay.set(&proposal_key(id), proposal_bytes(&proposal)?)?;
+    let mut event_payload = Vec::new();
+    append_field(&mut event_payload, proposer.as_bytes());
+    append_field(&mut event_payload, title.as_bytes());
+    append_field(&mut event_payload, token.as_bytes());
+    event_payload.extend_from_slice(&quorum.to_be_bytes());
+    event_payload.extend_from_slice(&total_weight.to_be_bytes());
+    event_payload.extend_from_slice(&(holders.len() as u64).to_be_bytes());
+    gas.charge_event(event_payload.len())?;
+    state.commit(overlay)?;
+    Ok(receipt("WeightedProposalCreated", dao_id, id, &event_payload, &gas, state))
 }
 
 /// Create a DAO proposal that can execute one treasury transfer after approval and a block-height timelock.
@@ -266,18 +326,24 @@ pub fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, 
 }
 
 /// Verify a wallet signature and weight its vote by the wallet's current QUR token balance.
-pub fn cast_vote_weighted_signed(state: &mut ContractState, ledger: &super::qur_runtime::QurLedger,
-    dao_id: &str, id: &str, token: &str, public_key: &VerifyingKey, signature: &Signature,
+pub fn cast_vote_weighted_signed(state: &mut ContractState, dao_id: &str, id: &str,
+    token: &str, public_key: &VerifyingKey, signature: &Signature,
     choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
     let message = vote_signing_message(dao_id, id, choice)?;
     public_key.verify_strict(&message, signature)
         .map_err(|_| "invalid DAO vote signature".to_string())?;
     let voter = crate::chain_protocol::address_from_public_key(&public_key.to_bytes())?;
-    let weight = ledger.balance(token, &voter);
-    if weight == 0 { return Err("wallet has no voting balance for the selected token".into()); }
+    let proposal = get_proposal(state, dao_id, id)?;
+    if proposal.voting_token.as_deref() != Some(token) {
+        return Err("proposal voting token does not match the selected token".into());
+    }
+    let overlay = state.begin(dao_id, AccessMode::View)?;
+    let key = format!("voting_power/{id}/{voter}");
+    let bytes = overlay.get(state, &key)?.ok_or("wallet had no voting power at proposal snapshot")?;
+    let weight = u64::from_be_bytes(bytes.try_into().map_err(|_| "corrupt DAO voting snapshot")?);
+    if weight == 0 { return Err("wallet has zero voting power in the proposal snapshot".into()); }
     cast_vote_with_weight(state, dao_id, id, &voter, choice, weight, gas_limit)
 }
-
 
 pub fn finalize_proposal(state: &mut ContractState, dao_id: &str, id: &str,
     gas_limit: u64) -> Result<DaoReceipt, String> {
@@ -429,7 +495,7 @@ pub fn get_proposal(state: &ContractState, dao_id: &str, id: &str) -> Result<Dao
 
 #[cfg(test)]
 mod tests {
-    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, create_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
+    use super::{cast_vote, cast_vote_signed, cast_vote_weighted_signed, create_proposal, create_weighted_proposal, create_treasury_proposal, execute_treasury_proposal, execute_treasury_token_proposal, finalize_proposal, finalize_proposal_at_height, fund_treasury, get_proposal, treasury_balance, vote_signing_message, ProposalStatus, VoteChoice};
     use super::super::contract_state::ContractState;
     use ed25519_dalek::{Signer, SigningKey, Signature};
 
