@@ -130,7 +130,7 @@ supply = 100000000
         assert!(decode_execution_snapshot(&bad_hex).unwrap_err().contains("hex"));
 
         let mut bad_ledger = snapshot;
-        bad_ledger["ledger"]["balances"][0]["amount"] = serde_json::Value::Number(999999999u64.into());
+        bad_ledger["ledger"]["balances"][0]["balance"] = serde_json::Value::Number(999999999u64.into());
         assert!(decode_execution_snapshot(&bad_ledger).is_err());
     }
 
