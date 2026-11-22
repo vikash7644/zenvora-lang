@@ -3508,6 +3508,7 @@ fn main() {
             };
             state.save_snapshot(snapshot)?;
             println!("operation={}", receipt.operation);
+            println!("dao_id={}", receipt.dao_id);
             println!("proposal_id={}", receipt.proposal_id);
             println!("gas_used={}", receipt.gas_used);
             println!("state_root={}", hex_encode_bytes(&receipt.state_root));
