@@ -99,7 +99,7 @@ Each archive includes the `qorvynt` CLI, README, and MIT license. These binaries
 The CLI can start a loopback-only HTTP service that uses the actual Rust compiler and VM (not the browser demo interpreter):
 
 ```sh
-cargo run -- --compiler-api
+qorvynt --compiler-api
 # listens on http://127.0.0.1:8787
 ```
 
@@ -118,16 +118,16 @@ curl -sS http://127.0.0.1:8787/compile-run \
 
 ## Build and run
 
-Requires Rust and Cargo (including on Android through Termux if the Rust toolchain is installed).
+End users do **not** need Rust, Cargo, or Termux. Download the prebuilt CLI for your operating system from the [QORVYNT pre-release](https://github.com/vikash7644/zenvora-lang/releases/tag/v0.8.0-prototype.1), extract it, and place the `qorvynt` executable on your `PATH`. Open a terminal and verify it with `qorvynt --version`. The commands below assume that the executable is on your `PATH`.
 
 ```sh
 cargo check
 cargo test
-cargo run -- --new my-first-project
-cargo run -- my-first-project/main.qv
-cargo run -- --check my-first-project/main.qv
+qorvynt new my-first-project
+qorvynt run my-first-project/main.qv
+qorvynt check my-first-project/main.qv
 cargo run -- --render examples/qorvynt-icon.qv qorvynt-icon.svg
-cargo run -- examples/hello.qv
+qorvynt run examples/hello.qv
 cargo run -- examples/loops.qv
 cargo run -- examples/functions.qv
 cargo run -- examples/booleans.qv
@@ -139,11 +139,11 @@ cargo run -- examples/science.qv
 cargo run -- examples/stdlib-strings.qv
 cargo run -- examples/contracts.qv
 cargo run -- examples/modules.qv
-cargo run -- --check examples/functions.qv
-cargo run -- --emit-bytecode examples/functions.qv functions.qvb
-cargo run -- --run-bytecode functions.qvb
-cargo run -- --version
-cargo run -- --help
+qorvynt check examples/functions.qv
+qorvynt --emit-bytecode examples/functions.qv functions.qvb
+qorvynt --run-bytecode functions.qvb
+qorvynt --version
+qorvynt --help
 ```
 
 Expected example output:
@@ -169,13 +169,13 @@ The generated program demonstrates variables, strings, arithmetic, arrays, and `
 
 ## Beginner workflow: from idea to runnable project
 
-1. Create a project: `qorvynt --new my-project`.
+1. Create a project: `qorvynt new my-project`.
 2. Open `my-project/main.qv` in any text editor and change the example.
-3. Compile-check it: `qorvynt --check my-project/main.qv`.
-4. Run it: `qorvynt my-project/main.qv`.
+3. Compile-check it: `qorvynt check my-project/main.qv`.
+4. Run it: `qorvynt run my-project/main.qv`.
 5. Keep a small runnable example for each new feature and add a regression test when changing the compiler or VM.
 
-During development from this repository, prefix each command with `cargo run --`. For example, `cargo run -- --new my-project`. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The CLI is not yet a full package manager. QORVYNT Studio is an early Windows IDE preview; project workspaces, debugger support, and a signed public installer are still pending.
+When developing from source, build once with `cargo build --release --bin qorvynt`, then use `./target/release/qorvynt` (or `target\\release\\qorvynt.exe` on Windows). Cargo is only the Rust-hosted development/build tool; it is not part of the QORVYNT user command. A successful `--check` means the current compiler accepted the syntax; it does not guarantee that runtime operations will succeed. The CLI is not yet a full package manager. QORVYNT Studio is an early Windows IDE preview; project workspaces, debugger support, and a signed public installer are still pending.
 
 ## Automated regression tests
 
