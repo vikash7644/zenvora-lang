@@ -1,4 +1,4 @@
-# Zenvora Lang Bytecode Format v1
+# QORVYNT Bytecode Format v1
 
 **Status:** early, versioned prototype. The format is readable text, not a frozen long-term compatibility promise. Do not treat bytecode from an untrusted source as safe for production.
 
@@ -15,7 +15,7 @@ Each following non-empty line encodes exactly one instruction. Instructions use 
 Create and execute a bytecode file:
 
 ```sh
-cargo run -- --emit-bytecode examples/functions.qv functions.zvb
+cargo run -- --emit-bytecode examples/functions.qv functions.qvb
 cargo run -- --run-bytecode functions.zvb
 ```
 
