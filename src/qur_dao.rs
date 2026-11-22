@@ -385,13 +385,13 @@ pub fn cast_vote_signed(state: &mut ContractState, dao_id: &str, id: &str,
     cast_vote(state, dao_id, id, &voter, choice, gas_limit)
 }
 
-pub fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
+fn cast_vote(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     choice: VoteChoice, gas_limit: u64) -> Result<DaoReceipt, String> {
     cast_vote_with_weight(state, dao_id, id, voter, choice, 1, gas_limit)
 }
 
 /// Record a vote with a positive, caller-validated voting weight.
-pub fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
+fn cast_vote_with_weight(state: &mut ContractState, dao_id: &str, id: &str, voter: &str,
     choice: VoteChoice, weight: u64, gas_limit: u64) -> Result<DaoReceipt, String> {
     cast_vote_with_weight_inner(state, dao_id, id, voter, choice, weight, gas_limit, false)
 }
