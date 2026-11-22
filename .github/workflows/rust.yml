@@ -75,6 +75,20 @@ jobs:
           test "$transfer_status" -eq 1
           cargo run --locked -- --qur-token-balance /tmp/qorvynt-token-ledger.json GOLD alice | grep -Fxq 25
 
+      - name: Exercise QUR QVM-metered token transfer and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -- --qur-token-init examples/qur/manifest.qv /tmp/qorvynt-qvm-ledger.json
+          cargo run --locked -- --qur-token-transfer-qvm /tmp/qorvynt-qvm-ledger.json /tmp/qorvynt-qvm-state.bin qur_tokens GOLD genesis alice 25 30000
+          cargo run --locked -- --qur-token-balance /tmp/qorvynt-qvm-ledger.json GOLD alice | grep -Fxq 25
+          set +e
+          cargo run --locked -- --qur-token-transfer-qvm /tmp/qorvynt-qvm-ledger.json /tmp/qorvynt-qvm-state.bin qur_tokens GOLD alice bob 1 21001
+          transfer_status=$?
+          set -e
+          test "$transfer_status" -eq 1
+          cargo run --locked -- --qur-token-balance /tmp/qorvynt-qvm-ledger.json GOLD alice | grep -Fxq 25
+
       - name: Execute every QORVYNT example
         run: bash scripts/check_examples.sh
 
