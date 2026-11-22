@@ -3,12 +3,18 @@
 ## Official website
 
 - **QORVYNT website:** https://vikash7644.github.io/zenvora-lang/
+- **Beginner learning guide:** https://vikash7644.github.io/zenvora-lang/learn-qorvynt.html
 - **Browser playground:** https://vikash7644.github.io/zenvora-lang/playground.html
 - **Source repository:** https://github.com/vikash7644/zenvora-lang
 
 The static site is in `website/` and is deployed by the GitHub Pages workflow when website files change on `main`. If the links do not open yet, check the latest [Pages deployment workflow](https://github.com/vikash7644/zenvora-lang/actions/workflows/pages.yml).
 
 QORVYNT is an actively developed programming language. The canonical and only supported source-file extension is `.qv`. This repository contains a working Rust compiler/interpreter, a stack-based bytecode virtual machine, a command-line tool, executable language examples, regression tests, and CI workflows. The underlying Rust-hosted implementation is still in its v0.8.0-era state; the QORVYNT rename and Rust-independent bootstrap are not yet complete. It is real runnable software—not only a blueprint—but it is not yet a stable v1.0 language or a production smart-contract toolchain. Experimental areas and remaining release gates are listed in [the project status checklist](docs/PROJECT_STATUS.md).
+
+## Learn QORVYNT
+
+- [Public beginner guide](website/learn-qorvynt.html) — learn `.qv` syntax with short examples.
+- [Detailed Markdown tutorial](docs/learn-qorvynt.md) — variables, conditions, loops, functions, collections and current limitations.
 
 ## Legacy blockchain material — migration pending
 
