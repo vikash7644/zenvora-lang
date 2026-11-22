@@ -55,7 +55,7 @@ Future AI adapters should implement a narrow read-only interface. Inputs should 
 
 ## 5. Required security controls
 
-- Wallet signatures bind the chain/network, DAO, proposal, action, and voting choice; replay across networks or proposals must fail.
+- Wallet signatures for replay-anchored weighted proposals use the `QORVYNT_DAO_VOTE_V2` domain and bind the chain ID, DAO ID, proposal ID, and voting choice; a signature from one chain ID must fail on another. Legacy unanchored/local voting remains a prototype path and must not be treated as cross-network replay-safe.
 - Weighted voting uses a fixed, verifiable snapshot and rejects duplicate voters and weight beyond committed power.
 - Proposal execution is deterministic and revalidates eligibility at execution time.
 - Treasury actions have explicit recipients, nonzero bounded amounts, quorum, timelocks, and replay protection.
@@ -75,4 +75,4 @@ Future AI adapters should implement a narrow read-only interface. Inputs should 
 
 ## 7. Current limitations
 
-The existing DAO runtime is a local single-process prototype. The new assessment module does not connect to an AI model, does not independently verify live chain state, and does not authorize execution. A successful unit test or CI run does not establish production readiness or decentralization. Those claims require network-level integration, independent review, and reproducible security testing.
+Replay-anchored weighted votes now use a chain-ID-separated signing message; unanchored/local proposals retain the legacy local signing format and are not claimed to have cross-network replay protection. The existing DAO runtime is a local single-process prototype. The new assessment module does not connect to an AI model, does not independently verify live chain state, and does not authorize execution. A successful unit test or CI run does not establish production readiness or decentralization. Those claims require network-level integration, independent review, and reproducible security testing.
