@@ -59,4 +59,4 @@ The generic `--run-bytecode` command continues to support legacy v1 and v2 artif
 5. Port the compiler backend incrementally into QORVYNT and prove clean-environment bootstrap parity before claiming Rust independence.
 
 
-The VM instruction enum, runtime value type, and instruction execution loop now live in `src/qvm/bytecode.rs`, `src/qvm/value.rs`, and `src/qvm/runtime.rs`. The CLI retains a thin compatibility wrapper. The extracted runtime still depends on host-crate helpers and is not yet standalone.
+The VM instruction enum, runtime value type, and instruction execution loop now live in `src/qvm/bytecode.rs`, `src/qvm/value.rs`, and `src/qvm/runtime.rs`. The CLI retains a thin compatibility wrapper. The extracted runner is crate-visible only so the host wrapper can pass the optional contract gas meter; it is not a public library API yet. The extracted runtime still depends on host-crate helpers and is not yet standalone.
