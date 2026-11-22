@@ -47,24 +47,24 @@ The generic `--run-bytecode` command continues to support legacy v1 and v2 artif
 
 - The compiler, serializer, verifier, and runtime are still hosted in the Rust `qorvynt` executable.
 - The self-hosted `compiler/parser.qv` is an evolving frontend foundation; it is not yet the complete compiler or a self-hosting bootstrap.
-- The instruction loop now lives in `src/qvm/runtime.rs`; built-in implementations live in `src/qvm/builtins.rs`; and shared value, collection, and resource-accounting helpers live in `src/qvm/runtime_support.rs`. The CLI retains compatibility exports for existing compiler/tests. The built-in implementation is now owned by the QVM module, but the runner still uses the host contract-gas type and crate-level safety-limit constants. This is a stronger internal boundary, not yet an independently buildable QVM package.
+- The instruction loop now lives in `src/qvm/runtime.rs`; built-in implementations live in `src/qvm/builtins.rs`; and shared value, collection, and resource-accounting helpers live in `src/qvm/runtime_support.rs`. The CLI retains compatibility exports for existing compiler/tests. The runtime now reads its gas schedule and charging trait from `src/qvm/gas.rs`, and resolves built-ins through QVM-owned runtime support. The contract gas meter is only an adapter at the host boundary. This is a stronger internal boundary, not yet an independently buildable QVM package.
 - Bytecode v2 remains experimental and must not be described as stable or production-safe before format review and independent security testing.
 
 ## Next engineering gates
 
 1. Keep compile → serialize → verify → execute parity covered by tests for functions, collections, control flow, builtins, and runtime errors.
-2. Move gas-meter interfaces and safety-limit ownership behind a runtime-owned API; remove the remaining compiler-host coupling while keeping execution parity green.
+2. Move the remaining compiler-host types and helper APIs behind a runtime-owned API while keeping execution parity green.
 3. Define a versioned, deterministic binary artifact encoding only after the v2 instruction and metadata contract is frozen.
 4. Add a standalone QVM library/runner and prove it can load artifacts without invoking the source compiler.
 5. Port the compiler backend incrementally into QORVYNT and prove clean-environment bootstrap parity before claiming Rust independence.
 
 
-The VM instruction enum, runtime value type, and instruction execution loop now live in `src/qvm/bytecode.rs`, `src/qvm/value.rs`, and `src/qvm/runtime.rs`. The CLI retains a thin compatibility wrapper. The extracted runner is crate-visible only so the host wrapper can pass the optional contract gas meter; it is not a public library API yet. The extracted runtime still depends on host-crate helpers and is not yet standalone.
+The VM instruction enum, runtime value type, and instruction execution loop now live in `src/qvm/bytecode.rs`, `src/qvm/value.rs`, and `src/qvm/runtime.rs`. The CLI retains a thin compatibility wrapper. The extracted runner is crate-visible only; it is not a public library API yet. The extracted runtime still shares the host crate's build and compiler-side types, so it is not yet a standalone package.
 
 
 ### VM-owned resource limits
 
-The deterministic input and resource ceilings now live in `src/qvm/limits.rs`, owned by the QVM module and shared by bytecode verification/loading and runtime execution. The root crate keeps compatibility re-exports for existing compiler and regression-test callers. The runtime gas-meter interface is still coupled to the host contract-gas module and remains a separate extraction step.
+The deterministic input and resource ceilings now live in `src/qvm/limits.rs`, owned by the QVM module and shared by bytecode verification/loading and runtime execution. The root crate keeps compatibility re-exports for existing compiler and regression-test callers. The runtime gas-meter interface and schedule are now QVM-owned; the contract host adapts its meter to that trait. The remaining extraction work is the compiler-host types and helper APIs.
 
 
 ### Gas-meter boundary
