@@ -1,7 +1,7 @@
 # QORVYNT Lang — Mission Status and Completion Gate
 
-Last audited: 2026-11-21  
-Scope: QORVYNT compiler work on the `qorvynt/qvm-compiler-cli` pull request; this ledger is a working checklist, not a claim that the project is complete.
+Last audited: 2026-11-23  
+Scope: current `main` compiler, VM, self-hosted frontend workflow, and release gates; this ledger is a working checklist, not a claim that the project is complete.
 
 ## Status meanings
 
@@ -123,3 +123,12 @@ Main CI passed on commit `b818e1dabd7b1ebfb2e0be4fcc8900fd5077e939` (run [393688
 ## Continuity note
 
 At each work session, read this file and inspect the latest Actions runs before choosing the next unfinished task. Update this ledger only when there is concrete evidence of progress. A queued run is not a passing run, and a code commit is not the same as a verified feature.
+
+
+## Latest verification (2026-11-23)
+
+- Main QORVYNT CI passed on commit `f1fb1af264692facf94303fa2744d4e9dab8ac06` (run [45114984482](https://github.com/vikash7644/zenvora-lang/actions/runs/45114984482)). The three reported jobs—interpreter MVP regression suite, main compiler and bytecode VM, and editor support—completed successfully.
+- The main compiler/VM job installed stable Rust, ran the Rust compiler and VM checks/tests, built the optimized release CLI, exercised the QUR and DAO command paths, ran all checked-in QORVYNT examples, and tested Bytecode v1/v2 and the Rust-hosted compiler HTTP API. This is green CI evidence for the Rust-hosted implementation, not evidence of a Rust-free build.
+- The QORVYNT-written frontend is present in `compiler/parser.qv` and its dedicated workflow checks parser/compiler stages, plan generation, Bytecode v2 emission, deterministic output, and execution parity. However, that workflow invokes `cargo run`, translates the plan with the Rust CLI, and executes artifacts with the Rust-hosted VM. Therefore it validates a QORVYNT-written frontend under a Rust reference host; it does **not** yet prove a self-hosting compiler bootstrap.
+- Source inspection confirms `src/main.rs` still contains the Rust lexer/parser and VM implementation, `Cargo.toml` still defines the Rust executable and dependencies, and `src/compiler_api.rs` identifies its backend as Rust. The clean-environment Rust-free bootstrap gate remains **pending**.
+- Next engineering gate: produce a standalone Stage-1 compiler artifact from the QORVYNT frontend, use it to compile the same compiler source into Stage 2, compare outputs deterministically, and run the resulting compiler/VM on a clean runner without installing Rust or Cargo. Do not remove the Rust reference host until this gate and regression parity pass.
