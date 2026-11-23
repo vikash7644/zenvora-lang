@@ -1011,59 +1011,10 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
 
 fn is_builtin(name: &str) -> bool { bytecode_v2::is_supported_builtin(name) }
 
-fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
-    if !items.contains_key(key) && items.len() >= MAX_COLLECTION_ITEMS {
-        return Err(format!("map exceeds safety limit ({MAX_COLLECTION_ITEMS} items)"));
-    }
-    Ok(())
-}
-
-fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Result<(), String> {
-    match (collection, index) {
-        (Value::Array(items), Value::Int(index)) if index >= 0 => {
-            let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
-            *slot = value;
-            Ok(())
-        }
-        (Value::Array(_), Value::Int(index)) => Err(format!("array index {index} out of bounds")),
-        (Value::Array(_), _) => Err("type error: array index must be an integer".into()),
-        (Value::Map(items), Value::Str(key)) => {
-            check_map_capacity(items, &key)?;
-            items.insert(key, value);
-            Ok(())
-        }
-        (Value::Map(_), _) => Err("type error: map index must be a string".into()),
-        _ => Err("type error: indexed assignment expects an array or map".into()),
-    }
-}
-
-
 fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let value = builtin_unchecked(name, args)?;
     ensure_value_depth(&value)?;
     Ok(value)
-}
-
-fn binding_size(name: &str, value: &Value) -> usize {
-    name.len().saturating_add(64).saturating_add(value_size(value))
-}
-
-fn binding_map_size(bindings: &HashMap<String, Value>) -> usize {
-    bindings.iter().map(|(name, value)| binding_size(name, value))
-        .fold(0usize, |total, size| total.saturating_add(size))
-}
-
-fn runtime_state_bytes_after_sizes(current: usize, old_size: usize, new_size: usize) -> Result<usize, String> {
-    let next = current.saturating_sub(old_size).saturating_add(new_size);
-    if next > MAX_RUNTIME_STATE_BYTES {
-        return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
-    }
-    Ok(next)
-}
-
-fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
-    let old_size = old.map(|value| binding_size(name, value)).unwrap_or(0);
-    runtime_state_bytes_after_sizes(current, old_size, binding_size(name, new))
 }
 
 fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
@@ -1831,8 +1782,6 @@ const LEGACY_BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
-const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
-const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
 const MAX_BYTECODE_STRING_BYTES: usize = 1024 * 1024;
