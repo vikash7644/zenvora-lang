@@ -362,6 +362,47 @@ fn strip_line_comment(line: &str) -> &str {
     line
 }
 
+fn extract_index_path(left: &str) -> Result<(&str, Vec<&str>), String> {
+    let open = left.find('[').ok_or_else(|| "indexed assignment is missing '['".to_string())?;
+    let name = left[..open].trim();
+    let bytes = left.as_bytes();
+    let mut cursor = open;
+    let mut expressions = Vec::new();
+    while cursor < bytes.len() {
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() { cursor += 1; }
+        if cursor == bytes.len() { break; }
+        if bytes[cursor] != b'[' { return Err("unexpected text after indexed assignment".into()); }
+        cursor += 1;
+        let start = cursor;
+        let mut depth = 1usize;
+        let mut in_string = false;
+        let mut escaped = false;
+        while cursor < bytes.len() {
+            let byte = bytes[cursor];
+            if in_string {
+                if escaped { escaped = false; }
+                else if byte == b'\\' { escaped = true; }
+                else if byte == b'"' { in_string = false; }
+            } else {
+                match byte {
+                    b'"' => in_string = true,
+                    b'[' => depth += 1,
+                    b']' => { depth -= 1; if depth == 0 { break; } }
+                    _ => {}
+                }
+            }
+            cursor += 1;
+        }
+        if depth != 0 { return Err("expected ']' in indexed assignment".into()); }
+        let expression = left.get(start..cursor).ok_or_else(|| "invalid index boundaries".to_string())?.trim();
+        if expression.is_empty() { return Err("empty index expression".into()); }
+        expressions.push(expression);
+        cursor += 1;
+    }
+    if expressions.is_empty() { return Err("indexed assignment requires at least one index".into()); }
+    Ok((name, expressions))
+}
+
 fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_SOURCE_BYTES {
         return Err(format!("source exceeds safety limit ({MAX_SOURCE_BYTES} bytes)"));
@@ -513,29 +554,24 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             if let Some((left, right)) = line.split_once(":=") {
                 let left = left.trim();
                 if left.contains('[') {
-                    let (name, index_part) = left.split_once('[').ok_or_else(|| format!("line {}: invalid indexed assignment", line_no + 1))?;
-                    let index_expr = index_part.strip_suffix(']').ok_or_else(|| format!("line {}: expected ']' in indexed assignment", line_no + 1))?;
-                    if !valid_identifier(name.trim()) {
-                        return Err(format!("line {}: indexed assignment requires a variable name before the index", line_no + 1));
+                    let (name, indexes) = extract_index_path(left).map_err(|e| format!("line {}: {e}", line_no + 1))?;
+                    if !valid_identifier(name) { return Err(format!("line {}: indexed assignment requires a variable name before the index", line_no + 1)); }
+                    if indexes.len() > MAX_CALL_ARGUMENTS { return Err(format!("line {}: indexed assignment path exceeds safety limit ({MAX_CALL_ARGUMENTS})", line_no + 1)); }
+                    if right.trim().is_empty() { return Err(format!("line {}: missing value in indexed assignment", line_no + 1)); }
+                    for index_expr in &indexes {
+                        let (tokens, columns) = lex_with_columns(index_expr).map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr, e)))?;
+                        let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
+                        parser.expression().map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr, format!("column {}: {e}", parser.error_column()))))?;
+                        if parser.peek() != &Token::End { return Err(format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr, format!("column {}: unexpected token in index {:?}", parser.current_column(), parser.peek())))); }
+                        append_code(&mut code, parser.code)?;
                     }
-                    if right.trim().is_empty() {
-                        return Err(format!("line {}: missing value in indexed assignment", line_no + 1));
-                    }
-                    let (index_tokens, index_columns) = lex_with_columns(index_expr.trim()).map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), e)))?;
-                    let mut index_parser = Parser { tokens: index_tokens, columns: index_columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
-                    index_parser.expression().map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), format!("column {}: {e}", index_parser.error_column()))))?;
-                    if index_parser.peek() != &Token::End {
-                        return Err(format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), format!("column {}: unexpected token in index {:?}", index_parser.current_column(), index_parser.peek()))));
-                    }
-                    append_code(&mut code, index_parser.code)?;
-                    let (value_tokens, value_columns) = lex_with_columns(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
-                    let mut value_parser = Parser { tokens: value_tokens, columns: value_columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
-                    value_parser.expression().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: {e}", value_parser.error_column()))))?;
-                    if value_parser.peek() != &Token::End {
-                        return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: unexpected token in indexed assignment {:?}", value_parser.current_column(), value_parser.peek()))));
-                    }
-                    append_code(&mut code, value_parser.code)?;
-                    code.push(Op::SetIndex(name.trim().to_string()));
+                    let (tokens, columns) = lex_with_columns(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
+                    let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
+                    parser.expression().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: {e}", parser.error_column()))))?;
+                    if parser.peek() != &Token::End { return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: unexpected token in indexed assignment {:?}", parser.current_column(), parser.peek())))); }
+                    append_code(&mut code, parser.code)?;
+                    if indexes.len() == 1 { code.push(Op::SetIndex(name.to_string())); }
+                    else { code.push(Op::SetIndexPath(name.to_string(), indexes.len())); }
                     continue;
                 }
             }
@@ -1607,6 +1643,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
             Op::Eq => "EQ".into(),
             Op::Index => "INDEX".into(),
             Op::SetIndex(name) => format!("SET_INDEX {name}"),
+            Op::SetIndexPath(name, count) => format!("SET_INDEX_PATH {name} {count}"),
             Op::Ne => "NE".into(),
             Op::Lt => "LT".into(),
             Op::Le => "LE".into(),
@@ -1766,6 +1803,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                 Op::Push(_) | Op::PushString(_) | Op::PushBool(_) | Op::Load(_) => (0, 1),
                 Op::Store(_) | Op::Declare(_) | Op::Print | Op::Neg | Op::Not | Op::ReturnValue | Op::JumpIfFalse(_) => (1, -1),
                 Op::SetIndex(_) => (2, -2),
+                Op::SetIndexPath(_, count) => (count.saturating_add(1), -((count.saturating_add(1)) as isize)),
                 Op::Index => (2, -1),
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::And | Op::Or | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => (2, -1),
                 Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_) => (1, 0),
@@ -1869,6 +1907,7 @@ fn deserialize_bytecode_v2(source: &str) -> Result<Vec<Op>, String> {
             ["GE"] => Op::Ge,
             ["INDEX"] => Op::Index,
             ["SET_INDEX", name] if valid_identifier(name) => Op::SetIndex((*name).into()),
+            ["SET_INDEX_PATH", name, count] if valid_identifier(name) => { let count: usize = count.parse().map_err(|_| invalid())?; if !(2..=MAX_CALL_ARGUMENTS).contains(&count) { return Err(invalid()); } Op::SetIndexPath((*name).into(), count) },
             ["JUMP_IF_FALSE", target] => Op::JumpIfFalse(target.parse().map_err(|_| invalid())?),
             ["JUMP_IF_FALSE_KEEP", target] => Op::JumpIfFalseKeep(target.parse().map_err(|_| invalid())?),
             ["JUMP_IF_TRUE_KEEP", target] => Op::JumpIfTrueKeep(target.parse().map_err(|_| invalid())?),
@@ -1947,6 +1986,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "EQ" if parts.len() == 1 => Op::Eq,
             "INDEX" if parts.len() == 1 => Op::Index,
             "SET_INDEX" if parts.len() == 2 && valid_identifier(parts[1]) => Op::SetIndex(parts[1].into()),
+            "SET_INDEX_PATH" if parts.len() == 3 && valid_identifier(parts[1]) => { let count: usize = parts[2].parse().map_err(|_| invalid())?; if !(2..=MAX_CALL_ARGUMENTS).contains(&count) { return Err(invalid()); } Op::SetIndexPath(parts[1].into(), count) },
             "NE" if parts.len() == 1 => Op::Ne,
             "LT" if parts.len() == 1 => Op::Lt,
             "LE" if parts.len() == 1 => Op::Le,
@@ -2090,6 +2130,7 @@ fn serialize_bytecode_v2(code: &[Op], layout: &bytecode_v2::ProgramLayout) -> Re
             Op::Ge => "GE".into(),
             Op::Index => "INDEX".into(),
             Op::SetIndex(name) if valid_identifier(name) => format!("SET_INDEX {name}"),
+            Op::SetIndexPath(name, count) if valid_identifier(name) && (2..=MAX_CALL_ARGUMENTS).contains(count) => format!("SET_INDEX_PATH {name} {count}"),
             Op::JumpIfFalse(target) => format!("JUMP_IF_FALSE {target}"),
             Op::JumpIfFalseKeep(target) => format!("JUMP_IF_FALSE_KEEP {target}"),
             Op::JumpIfTrueKeep(target) => format!("JUMP_IF_TRUE_KEEP {target}"),
@@ -4033,6 +4074,12 @@ mod tests {
             "define idx := array(1)\ndefine items := array(10, 20)\nitems[idx[0]] := 99\nshow items[1]\n"
         ).unwrap();
         assert_eq!(output, vec!["99"]);
+    }
+
+    #[test]
+    fn indexed_assignment_updates_multiple_nested_array_levels() {
+        let output = execute("define matrix := array(array(1, 2), array(3, 4))\nmatrix[0][1] := 5\nshow matrix[0][1]\n").unwrap();
+        assert_eq!(output, vec!["5"]);
     }
 
     #[test]
