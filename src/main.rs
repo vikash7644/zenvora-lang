@@ -1549,7 +1549,7 @@ fn run_with_output_metered<F>(
 where
     F: FnMut(String),
 {
-    qvm::run_with_output_metered(code, output, gas_meter)
+    qvm::run_with_output_metered(code, output, builtin, gas_meter)
 }
 
 
