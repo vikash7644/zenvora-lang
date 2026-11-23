@@ -1,7 +1,6 @@
 name: Chat with QORVYNT Agent
 description: Ask the QORVYNT AI assistant a question in a public GitHub issue.
 title: "[QORVYNT Agent] "
-labels: ["qorvynt-agent"]
 body:
   - type: markdown
     attributes:
