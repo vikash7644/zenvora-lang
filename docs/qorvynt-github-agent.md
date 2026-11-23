@@ -30,7 +30,7 @@ Issues and agent replies are public. Do not include personal data, passwords, AP
 - [ ] Add **QORVYNT_AGENT_API_KEY** as a repository Actions secret.
 - [ ] Set provider base URL and model variables if not using the defaults.
 - [ ] Ensure Actions are enabled for the repository.
-- [ ] Ensure issue creation is enabled and the **qorvynt-agent** label exists (or remove that label from the issue template).
+- [ ] Ensure issue creation and GitHub Actions are enabled for the repository.
 - [ ] Open a test issue from the README logo and include **@qorvynt**.
 - [ ] Confirm the workflow run succeeds and the bot comment appears.
 
