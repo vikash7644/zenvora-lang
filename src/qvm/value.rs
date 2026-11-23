@@ -49,6 +49,8 @@ pub(crate) const MAX_VALUE_DEPTH: usize = 256;
 pub(crate) const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const MAX_STACK_VALUE_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const MAX_STACK_VALUES: usize = 65_536;
+pub(crate) const MAX_VM_EXECUTION_STEPS: usize = 1_000_000;
+pub(crate) const MAX_VM_CALL_DEPTH: usize = 1_024;
 
 /// Return the maximum collection nesting depth within a runtime value.
 pub(crate) fn value_depth(value: &Value) -> usize {
