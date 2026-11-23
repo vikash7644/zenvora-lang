@@ -17,7 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
-use qvm::{ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Op, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
+use qvm::{ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Op, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -1609,14 +1609,12 @@ where
     let mut pc = 0usize;
     let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
     let mut steps = 0usize;
-    const MAX_STEPS: usize = 1_000_000;
-    const MAX_CALL_DEPTH: usize = 1_024;
     if code.len() > MAX_BYTECODE_INSTRUCTIONS {
         return Err(format!("program instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
     }
     while pc < code.len() {
         steps += 1;
-        if steps > MAX_STEPS {
+        if steps > MAX_VM_EXECUTION_STEPS {
             return Err("execution exceeded safety limit (1,000,000 instructions)".into());
         }
         if let Some(meter) = gas_meter.as_deref_mut() {
@@ -1753,7 +1751,7 @@ where
                 if *arg_count != params.len() {
                     return Err("invalid function call argument count".into());
                 }
-                if call_stack.len() >= MAX_CALL_DEPTH {
+                if call_stack.len() >= MAX_VM_CALL_DEPTH {
                     return Err(format!("maximum function call depth exceeded ({MAX_CALL_DEPTH})"));
                 }
                 let mut values = Vec::with_capacity(*arg_count);
