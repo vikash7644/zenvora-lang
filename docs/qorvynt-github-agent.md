@@ -62,3 +62,16 @@ The default OpenAI endpoint is not free by default and may incur usage charges. 
 - No persistent account/session memory is implemented; each request carries only the recent messages sent by that browser tab.
 - This first backend has request-size and message-count limits, but no durable per-user rate limiter, abuse detection, billing cap or authentication. Do not expose it publicly with a paid key until those protections are added.
 - The model receives a curated project identity prompt, not a live index of the entire repository. Repository-grounded retrieval, verified compiler execution, GitHub read-only tools, approval-gated write tools and voice are later stages.
+
+
+### API validation tests
+
+The serverless endpoint now has Node.js built-in tests in `website/api/chat.test.mjs`. From the `website/` directory, run:
+
+```sh
+npm run test:agent
+```
+
+The tests cover method handling, CORS preflight, missing provider credentials, rejected origins, malformed/oversized message history, and a mocked successful provider response. They do not make paid API calls.
+
+When deploying the website and API together on Vercel, set `QORVYNT_ALLOWED_ORIGIN` to the exact deployed site origin (for example, the Vercel production URL or your verified custom domain). The default value is the existing GitHub Pages origin and will reject browser requests from a different Vercel domain.
