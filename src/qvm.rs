@@ -71,7 +71,7 @@ where
             return Err("execution exceeded safety limit (1,000,000 instructions)".into());
         }
         if let Some(meter) = gas_meter.as_deref_mut() {
-            let cost = qvm::instruction_gas_cost(code.get(pc))?;
+            let cost = gas::instruction_gas_cost(code.get(pc))?;
             meter.charge(cost)?;
         }
         match &code[pc] {
