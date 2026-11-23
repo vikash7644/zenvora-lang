@@ -515,8 +515,8 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
                 if left.contains('[') {
                     let (name, index_part) = left.split_once('[').ok_or_else(|| format!("line {}: invalid indexed assignment", line_no + 1))?;
                     let index_expr = index_part.strip_suffix(']').ok_or_else(|| format!("line {}: expected ']' in indexed assignment", line_no + 1))?;
-                    if index_expr.contains(']') || !valid_identifier(name.trim()) {
-                        return Err(format!("line {}: indexed assignment requires one outer index, such as items[index] := value", line_no + 1));
+                    if !valid_identifier(name.trim()) {
+                        return Err(format!("line {}: indexed assignment requires a variable name before the index", line_no + 1));
                     }
                     if right.trim().is_empty() {
                         return Err(format!("line {}: missing value in indexed assignment", line_no + 1));
@@ -4025,6 +4025,14 @@ mod tests {
             super::split_arguments("arr[1, 2], combine(3, 4), \"a,b\""),
             vec!["arr[1, 2]", "combine(3, 4)", "\"a,b\""]
         );
+    }
+
+    #[test]
+    fn indexed_assignment_accepts_nested_index_expressions() {
+        let output = execute(
+            "define idx := array(1)\ndefine items := array(10, 20)\nitems[idx[0]] := 99\nshow items[1]\n"
+        ).unwrap();
+        assert_eq!(output, vec!["99"]);
     }
 
     #[test]
