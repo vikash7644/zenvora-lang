@@ -67,6 +67,9 @@ test('forwards a valid conversation and returns only the assistant text', async 
   process.env.QORVYNT_AGENT_API_KEY = 'test-only';
   let sent;
   globalThis.fetch = async (url, options) => {
+    if (url.startsWith('https://raw.githubusercontent.com/')) {
+      return { ok: true, text: async () => '# QORVYNT test reference\\nCanonical extension: .qv' };
+    }
     sent = { url, options, body: JSON.parse(options.body) };
     return { ok: true, json: async () => ({ choices: [{ message: { content: 'Namaste from test model' } }] }) };
   };
@@ -77,7 +80,7 @@ test('forwards a valid conversation and returns only the assistant text', async 
     assert.deepEqual(res.body, { reply: 'Namaste from test model' });
     assert.equal(sent.options.headers.Authorization, 'Bearer test-only');
     assert.equal(sent.body.messages[0].role, 'system');
-    assert.equal(sent.body.messages[1].content, 'Namaste');
+    assert.match(sent.body.messages[1].content, /Canonical extension: \.qv/);\n    assert.equal(sent.body.messages[2].content, 'Namaste');
   } finally {
     globalThis.fetch = previousFetch;
     if (previousKey === undefined) delete process.env.QORVYNT_AGENT_API_KEY;
