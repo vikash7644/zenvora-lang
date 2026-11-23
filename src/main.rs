@@ -4012,6 +4012,28 @@ mod tests {
     }
 
     #[test]
+    fn compiler_ignores_trailing_comments_without_stripping_string_contents() {
+        let output = execute(
+            "show \"items[0] := 5\" # assignment-like text is still a string\nif true { # trailing condition comment\nshow 7\n} # trailing block comment\n"
+        ).unwrap();
+        assert_eq!(output, vec!["items[0] := 5", "7"]);
+    }
+
+    #[test]
+    fn function_argument_splitter_tracks_square_bracket_nesting() {
+        assert_eq!(
+            super::split_arguments("arr[1, 2], combine(3, 4), \"a,b\""),
+            vec!["arr[1, 2]", "combine(3, 4)", "\"a,b\""]
+        );
+    }
+
+    #[test]
+    fn rhs_error_column_uses_the_rhs_occurrence_of_repeated_identifier() {
+        let err = compile_core("x := x + @").unwrap_err();
+        assert!(err.contains("line 1: column 10: unexpected character"), "{err}");
+    }
+
+    #[test]
     fn repeat_condition_lexer_columns_include_source_prefix() {
         let err = compile_core("   repeat count < @ {").unwrap_err();
         assert!(err.contains("line 1: column 19: unexpected character"), "{err}");
