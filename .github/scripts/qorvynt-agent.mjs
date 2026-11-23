@@ -32,7 +32,7 @@ async function main() {
     await comment(
       "👋 **QORVYNT Agent is installed, but its AI provider is not connected yet.**\n\n" +
       "The repository owner must add the Actions secret **QORVYNT_AGENT_API_KEY** and, if needed, the repository variables **QORVYNT_AGENT_BASE_URL** and **QORVYNT_AGENT_MODEL**. " +
-      "See [the setup guide](../../blob/main/docs/qorvynt-github-agent.md). Never post API keys in an issue or comment."
+      "See [the setup guide](https://github.com/vikash7644/zenvora-lang/blob/main/docs/qorvynt-github-agent.md). Never post API keys in an issue or comment."
     );
     return;
   }
