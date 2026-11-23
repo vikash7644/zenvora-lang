@@ -1810,7 +1810,12 @@ fn execute_plan_builtin(name, reversed_args) {
     return map("ok", true, "value", contains(get(args, 0), get(args, 1)), "error", "")
   }
   if name == "get" and len(args) == 2 {
-    return map("ok", true, "value", get(get(args, 0), get(args, 1)), "error", "")
+    define collection := get(args, 0)
+    define key := get(args, 1)
+    if type_of(collection) != "array" and type_of(collection) != "map" {
+      return map("ok", false, "value", "", "error", "plan VM get expected array or map; received " + type_of(collection) + " (key type: " + type_of(key) + ")")
+    }
+    return map("ok", true, "value", get(collection, key), "error", "")
   }
   if name == "push" and len(args) == 2 {
     return map("ok", true, "value", push(get(args, 0), get(args, 1)), "error", "")
