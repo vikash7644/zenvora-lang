@@ -9,7 +9,7 @@ mod gas;
 mod value;
 pub(crate) use bytecode::Op;
 pub(crate) use gas::instruction_gas_cost;
-pub(crate) use value::{check_map_capacity, set_indexed_value, binding_size, binding_map_size, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_RUNTIME_STATE_BYTES};
+pub(crate) use value::{check_map_capacity, set_indexed_value, binding_size, binding_map_size, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_RUNTIME_STATE_BYTES, MAX_COLLECTION_ITEMS};
 
 use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2};
 
