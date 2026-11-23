@@ -43,3 +43,66 @@ mod tests {
         assert_eq!(value_to_string(&value), "[{\"answer\": 42, \"items\": [false, ok]}]");
     }
 }
+
+
+pub(crate) const MAX_VALUE_DEPTH: usize = 256;
+pub(crate) const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_STACK_VALUE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Return the maximum collection nesting depth within a runtime value.
+pub(crate) fn value_depth(value: &Value) -> usize {
+    match value {
+        Value::Int(_) | Value::Str(_) | Value::Bool(_) => 0,
+        Value::Array(items) => 1 + items.iter().map(value_depth).max().unwrap_or(0),
+        Value::Map(items) => 1 + items.values().map(value_depth).max().unwrap_or(0),
+    }
+}
+
+/// Estimate the heap payload held by a runtime value.
+pub(crate) fn value_size(value: &Value) -> usize {
+    match value {
+        Value::Int(_) => std::mem::size_of::<i64>(),
+        Value::Bool(_) => std::mem::size_of::<bool>(),
+        Value::Str(text) => text.len(),
+        Value::Array(items) => items.iter().map(value_size).fold(
+            items.len().saturating_mul(std::mem::size_of::<Value>()),
+            |total, size| total.saturating_add(size),
+        ),
+        Value::Map(items) => items.iter().map(|(key, value)| key.len().saturating_add(value_size(value))).fold(
+            items.len().saturating_mul(64),
+            |total, size| total.saturating_add(size),
+        ),
+    }
+}
+
+/// Enforce nesting and estimated-size budgets before a value enters the VM.
+pub(crate) fn ensure_value_depth(value: &Value) -> Result<(), String> {
+    let depth = value_depth(value);
+    if depth > MAX_VALUE_DEPTH {
+        return Err(format!("value nesting exceeds safety limit ({MAX_VALUE_DEPTH} levels)"));
+    }
+    let size = value_size(value);
+    if size > MAX_VALUE_BYTES {
+        return Err(format!("value exceeds estimated memory safety budget ({MAX_VALUE_BYTES} bytes)"));
+    }
+    Ok(())
+}
+
+/// Push a value while accounting for the VM operand-stack memory budget.
+pub(crate) fn push_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, value: Value) -> Result<(), String> {
+    let size = value_size(&value);
+    let next_size = stack_bytes.saturating_add(size);
+    if next_size > MAX_STACK_VALUE_BYTES {
+        return Err(format!("operand stack values exceed safety limit ({MAX_STACK_VALUE_BYTES} bytes)"));
+    }
+    stack.push(value);
+    *stack_bytes = next_size;
+    Ok(())
+}
+
+/// Pop a value and release its accounted operand-stack bytes.
+pub(crate) fn pop_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, underflow: &str) -> Result<Value, String> {
+    let value = stack.pop().ok_or_else(|| underflow.to_string())?;
+    *stack_bytes = stack_bytes.saturating_sub(value_size(&value));
+    Ok(value)
+}
