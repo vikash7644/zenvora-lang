@@ -5,8 +5,10 @@
 //! boundary out first gives the runtime a stable seam for later extraction.
 
 mod bytecode;
+mod gas;
 mod value;
 pub(crate) use bytecode::Op;
+pub(crate) use gas::instruction_gas_cost;
 pub(crate) use value::{ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
 
 use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2};
