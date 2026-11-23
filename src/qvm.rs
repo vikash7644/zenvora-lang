@@ -278,3 +278,31 @@ where
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod host_boundary_tests {
+    use super::{run_with_output_metered, Op, Value};
+
+    fn test_builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
+        match (name, args.as_slice()) {
+            ("sum", [Value::Int(left), Value::Int(right)]) => {
+                Ok(Value::Int(left + right))
+            }
+            _ => Err(format!("unsupported test builtin '{name}'")),
+        }
+    }
+
+    #[test]
+    fn executor_uses_injected_builtin_host() {
+        let code = vec![
+            Op::Push(20),
+            Op::Push(22),
+            Op::Builtin("sum".into(), 2),
+            Op::Print,
+        ];
+        let mut output = Vec::new();
+        run_with_output_metered(&code, &mut |line| output.push(line), test_builtin, None)
+            .unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
+}
