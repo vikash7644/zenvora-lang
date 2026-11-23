@@ -111,19 +111,19 @@ pub(crate) fn pop_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, u
 }
 
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
-const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
-const MAX_COLLECTION_ITEMS: usize = 100_000;
+pub(crate) const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_COLLECTION_ITEMS: usize = 100_000;
 
-fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
+pub(crate) fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
     if !items.contains_key(key) && items.len() >= MAX_COLLECTION_ITEMS {
         return Err(format!("map exceeds safety limit ({MAX_COLLECTION_ITEMS} items)"));
     }
     Ok(())
 }
 
-fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Result<(), String> {
+pub(crate) fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Result<(), String> {
     match (collection, index) {
         (Value::Array(items), Value::Int(index)) if index >= 0 => {
             let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
@@ -143,16 +143,16 @@ fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Resu
 }
 
 
-fn binding_size(name: &str, value: &Value) -> usize {
+pub(crate) fn binding_size(name: &str, value: &Value) -> usize {
     name.len().saturating_add(64).saturating_add(value_size(value))
 }
 
-fn binding_map_size(bindings: &HashMap<String, Value>) -> usize {
+pub(crate) fn binding_map_size(bindings: &HashMap<String, Value>) -> usize {
     bindings.iter().map(|(name, value)| binding_size(name, value))
         .fold(0usize, |total, size| total.saturating_add(size))
 }
 
-fn runtime_state_bytes_after_sizes(current: usize, old_size: usize, new_size: usize) -> Result<usize, String> {
+pub(crate) fn runtime_state_bytes_after_sizes(current: usize, old_size: usize, new_size: usize) -> Result<usize, String> {
     let next = current.saturating_sub(old_size).saturating_add(new_size);
     if next > MAX_RUNTIME_STATE_BYTES {
         return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
@@ -160,7 +160,7 @@ fn runtime_state_bytes_after_sizes(current: usize, old_size: usize, new_size: us
     Ok(next)
 }
 
-fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
+pub(crate) fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
     let old_size = old.map(|value| binding_size(name, value)).unwrap_or(0);
     runtime_state_bytes_after_sizes(current, old_size, binding_size(name, new))
 }
