@@ -13,7 +13,7 @@ pub(crate) use value::{check_map_capacity, set_indexed_value, binding_size, bind
 use std::collections::HashMap;
 
 use super::{
-    builtin, contract_gas, deserialize_bytecode_v2, read_bytecode_source,
+    contract_gas, deserialize_bytecode_v2, read_bytecode_source,
     write_bytecode_v2, MAX_BYTECODE_INSTRUCTIONS, MAX_BYTECODE_STRING_BYTES,
     MAX_CALL_ARGUMENTS,
 };
@@ -38,7 +38,7 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
 /// Execute a previously verified QVM artifact through the QVM executor.
 pub(super) fn execute(path: &str) -> Result<(), String> {
     let code = load(path)?;
-    run_with_output_metered(&code, &mut |line| println!("{line}"), None)
+    run_with_output_metered(&code, &mut |line| println!("{line}"), super::builtin, None)
 }
 
 
@@ -46,6 +46,7 @@ pub(super) fn execute(path: &str) -> Result<(), String> {
 pub(super) fn run_with_output_metered<F>(
     code: &[Op],
     output: &mut F,
+    builtin_fn: fn(&str, Vec<Value>) -> Result<Value, String>,
     mut gas_meter: Option<&mut contract_gas::GasMeter>,
 ) -> Result<(), String>
 where
@@ -186,7 +187,7 @@ where
                 let mut values = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count { values.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading builtin arguments")?); }
                 values.reverse();
-                push_stack_value(&mut stack, &mut stack_value_bytes, builtin(name, values)?)?;
+                push_stack_value(&mut stack, &mut stack_value_bytes, builtin_fn(name, values)?)?;
             }
             Op::CallTarget { target, params, arg_count } => {
                 if *arg_count > MAX_CALL_ARGUMENTS || params.len() > MAX_CALL_ARGUMENTS {
