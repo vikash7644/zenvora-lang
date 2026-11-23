@@ -1743,7 +1743,7 @@ where
                     return Err("invalid function call argument count".into());
                 }
                 if call_stack.len() >= MAX_VM_CALL_DEPTH {
-                    return Err(format!("maximum function call depth exceeded ({MAX_CALL_DEPTH})"));
+                    return Err(format!("maximum function call depth exceeded ({MAX_VM_CALL_DEPTH})"));
                 }
                 let mut values = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count { values.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading function arguments")?); }
