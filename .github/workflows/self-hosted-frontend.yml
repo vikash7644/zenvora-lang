@@ -45,7 +45,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./target/release/qorvynt compiler/parser.qv > parser-output.txt
+          if ! ./target/release/qorvynt compiler/parser.qv > parser-output.txt; then
+            echo "::group::QORVYNT frontend output before failure"
+            if [ -f parser-output.txt ]; then cat parser-output.txt; else echo "parser-output.txt was not created"; fi
+            echo "::endgroup::"
+            exit 1
+          fi
           grep -F 'QORVYNT_GENERIC_COMPILER_DRIVER_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_STAGES_PASS' parser-output.txt
           grep -F 'QORVYNT_GENERIC_COMPILER_COLLECTION_LOOP_PASS' parser-output.txt
@@ -66,6 +71,14 @@ jobs:
           ! grep -F 'QORVYNT_GENERIC_COMPILER_FUNCTION_SEMANTICS_FAIL' parser-output.txt
           ! grep -F 'QORVYNT_NESTED_LOOP_CONTROL_FLOW_FAIL' parser-output.txt
           ! grep -F 'compile_error' parser-output.txt
+      - name: Upload frontend diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qorvynt-frontend-failure-diagnostics
+          path: parser-output.txt
+          if-no-files-found: warn
+          retention-days: 7
       - name: Translate QORVYNT plan JSON directly to canonical Bytecode v2
         shell: bash
         run: |
