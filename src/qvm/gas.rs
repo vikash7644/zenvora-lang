@@ -30,6 +30,30 @@ mod tests {
     }
 
     #[test]
+    fn covers_all_metered_opcode_groups() {
+        let read = contract_gas::LOCAL_READ_GAS;
+        let write = contract_gas::LOCAL_WRITE_GAS;
+        let branch = contract_gas::CONDITIONAL_BRANCH_GAS;
+        let call = contract_gas::FUNCTION_CALL_GAS;
+        let arithmetic = contract_gas::INTEGER_OPERATION_GAS;
+
+        for op in [Op::Store("x".into()), Op::Declare("x".into()), Op::SetIndex("x".into())] {
+            assert_eq!(instruction_gas_cost(Some(&op)).unwrap(), write);
+        }
+        for op in [Op::JumpIfFalse(0), Op::JumpIfFalseKeep(0), Op::JumpIfTrueKeep(0)] {
+            assert_eq!(instruction_gas_cost(Some(&op)).unwrap(), branch);
+        }
+        for op in [Op::Call("f".into(), 0), Op::CallTarget { target: 0, params: vec![], arg_count: 0 }] {
+            assert_eq!(instruction_gas_cost(Some(&op)).unwrap(), call);
+        }
+        for op in [Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Neg, Op::Not, Op::And, Op::Or, Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge] {
+            assert_eq!(instruction_gas_cost(Some(&op)).unwrap(), arithmetic);
+        }
+        assert_eq!(instruction_gas_cost(Some(&Op::Load("x".into()))).unwrap(), read);
+        assert_eq!(instruction_gas_cost(Some(&Op::Push(1))).unwrap(), 1);
+    }
+
+    #[test]
     fn rejects_missing_instruction() {
         assert_eq!(instruction_gas_cost(None), Err("instruction pointer out of range".into()));
     }
