@@ -1,0 +1,41 @@
+name: QORVYNT Agent Validation
+
+on:
+  pull_request:
+    paths:
+      - "website/agent.html"
+      - "website/api/**"
+      - "docs/qorvynt-github-agent.md"
+      - ".github/workflows/qorvynt-agent-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "website/agent.html"
+      - "website/api/**"
+      - "docs/qorvynt-github-agent.md"
+      - ".github/workflows/qorvynt-agent-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Validate serverless API JavaScript syntax
+        run: node --check website/api/chat.js
+      - name: Validate chat page and API contract
+        run: |
+          test -s website/agent.html
+          grep -q 'id="messages"' website/agent.html
+          grep -q "fetch('/api/chat'" website/agent.html
+          grep -q 'QORVYNT_AGENT_API_KEY' website/api/chat.js
+          grep -q 'Access-Control-Allow-Origin' website/api/chat.js
+          grep -q 'AbortSignal.timeout' website/api/chat.js
+      - name: Validate QORVYNT file extension policy in examples
+        run: |
+          grep -q 'canonical source extension is .qv' website/api/chat.js
+          ! grep -Eq 'examples/[^ ]+\.zv' website/agent.html
