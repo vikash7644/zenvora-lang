@@ -123,6 +123,20 @@ pub(crate) fn check_map_capacity(items: &std::collections::BTreeMap<String, Valu
     Ok(())
 }
 
+pub(crate) fn set_indexed_path(collection: &mut Value, indices: &[Value], value: Value) -> Result<(), String> {
+    let (index, remaining) = indices.split_first().ok_or_else(|| "indexed assignment requires at least one index".to_string())?;
+    if remaining.is_empty() { return set_indexed_value(collection, index.clone(), value); }
+    let child = match (collection, index) {
+        (Value::Array(items), Value::Int(index)) if *index >= 0 => items.get_mut(*index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?,
+        (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
+        (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
+        (Value::Map(items), Value::Str(key)) => items.get_mut(key).ok_or_else(|| format!("map key '{key}' not found"))?,
+        (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
+        _ => return Err("type error: indexed assignment expects an array or map".into()),
+    };
+    set_indexed_path(child, remaining, value)
+}
+
 pub(crate) fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Result<(), String> {
     match (collection, index) {
         (Value::Array(items), Value::Int(index)) if index >= 0 => {
@@ -171,7 +185,7 @@ pub(crate) fn runtime_state_bytes_after_update(current: usize, name: &str, old: 
 mod state_tests {
     use super::{
         binding_map_size, binding_size, runtime_state_bytes_after_sizes,
-        runtime_state_bytes_after_update, set_indexed_value, Value,
+        runtime_state_bytes_after_update, set_indexed_value, set_indexed_path, Value,
         MAX_RUNTIME_STATE_BYTES,
     };
     use std::collections::{BTreeMap, HashMap};
@@ -190,6 +204,13 @@ mod state_tests {
             ("old".to_string(), Value::Bool(false)),
             ("new".to_string(), Value::Bool(true)),
         ])));
+    }
+
+    #[test]
+    fn indexed_path_updates_nested_array_leaf() {
+        let mut matrix = Value::Array(vec![Value::Array(vec![Value::Int(1), Value::Int(2)]), Value::Array(vec![Value::Int(3), Value::Int(4)])]);
+        set_indexed_path(&mut matrix, &[Value::Int(0), Value::Int(1)], Value::Int(5)).unwrap();
+        assert_eq!(matrix, Value::Array(vec![Value::Array(vec![Value::Int(1), Value::Int(5)]), Value::Array(vec![Value::Int(3), Value::Int(4)])]));
     }
 
     #[test]
