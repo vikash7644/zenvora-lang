@@ -39,7 +39,7 @@ jobs:
         run: |
           test -s website/playground.html
           grep -q 'QORVYNT Studio' website/playground.html
-          grep -q 'not the canonical QORVYNT compiler/QVM' website/playground.html
+          grep -q 'not the canonical Rust compiler or QVM' website/playground.html
 
       - name: Test browser runner behavior
         run: node scripts/test_playground.cjs
