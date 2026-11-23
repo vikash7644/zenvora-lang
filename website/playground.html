@@ -80,7 +80,9 @@ code.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const a
 document.getElementById('format').addEventListener('click',()=>{let depth=0;const lines=code.value.split('\n').map(line=>{const s=line.trim();if(!s)return '';if(s.startsWith('}'))depth=Math.max(0,depth-1);const formatted='  '.repeat(depth)+s;if(s.endsWith('{'))depth++;return formatted});code.value=lines.join('\n');updateEditorChrome();status.textContent='FORMATTED'});
 document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));const tab=b.dataset.tab;document.getElementById('resultlabel').textContent=tab==='output'?'Program output':tab==='problems'?'Diagnostics':'Playground information';output.hidden=tab!=='output';document.getElementById('emptyproblems').hidden=tab!=='problems';document.getElementById('helpbody').hidden=tab!=='help'}));
 document.querySelectorAll('[data-example]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-example]').forEach(x=>x.classList.toggle('active',x===b))}));
-const executeRun=run;\nrun=function(){executeRun();document.getElementById('problemcount').textContent=status.textContent==='ERROR'?'1':'0';document.getElementById('resultstate').textContent=status.textContent==='ERROR'?'Execution stopped':'Execution finished';document.querySelector('[data-tab="output"]').click()};\ndocument.getElementById('run').addEventListener('click',run);
+const executeRun=run;
+run=function(){executeRun();document.getElementById('problemcount').textContent=status.textContent==='ERROR'?'1':'0';document.getElementById('resultstate').textContent=status.textContent==='ERROR'?'Execution stopped':'Execution finished';document.querySelector('[data-tab="output"]').click()};
+document.getElementById('run').addEventListener('click',run);
 updateEditorChrome();
 </script>
 </body>
