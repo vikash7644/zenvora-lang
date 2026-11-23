@@ -1160,7 +1160,16 @@ fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
                 (Value::Map(mut items), Value::Str(key)) => items.remove(&key).ok_or_else(|| format!("map key '{key}' not found")),
                 (Value::Array(_), _) => Err("type error: array index must be an integer".into()),
                 (Value::Map(_), _) => Err("type error: map key must be a string".into()),
-                _ => Err("type error: get expects an array or map as its first argument".into()),
+                (other, _) => {
+                    let actual = match other {
+                        Value::Int(_) => "integer",
+                        Value::Str(_) => "string",
+                        Value::Bool(_) => "boolean",
+                        Value::Array(_) => "array",
+                        Value::Map(_) => "map",
+                    };
+                    Err(format!("type error: get expects an array or map as its first argument, got {actual}"))
+                },
             }
         }
         "contains" => {
