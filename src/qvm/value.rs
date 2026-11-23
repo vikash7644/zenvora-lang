@@ -165,3 +165,48 @@ pub(crate) fn runtime_state_bytes_after_update(current: usize, name: &str, old: 
     runtime_state_bytes_after_sizes(current, old_size, binding_size(name, new))
 }
 
+
+
+#[cfg(test)]
+mod state_tests {
+    use super::{
+        binding_map_size, binding_size, runtime_state_bytes_after_sizes,
+        runtime_state_bytes_after_update, set_indexed_value, Value,
+        MAX_RUNTIME_STATE_BYTES,
+    };
+    use std::collections::{BTreeMap, HashMap};
+
+    #[test]
+    fn indexed_array_and_map_updates_preserve_value_types() {
+        let mut array = Value::Array(vec![Value::Int(1), Value::Int(2)]);
+        set_indexed_value(&mut array, Value::Int(1), Value::Int(9)).unwrap();
+        assert_eq!(array, Value::Array(vec![Value::Int(1), Value::Int(9)]));
+
+        let mut entries = BTreeMap::new();
+        entries.insert("old".to_string(), Value::Bool(false));
+        let mut map = Value::Map(entries);
+        set_indexed_value(&mut map, Value::Str("new".into()), Value::Bool(true)).unwrap();
+        assert_eq!(map, Value::Map(BTreeMap::from([
+            ("old".to_string(), Value::Bool(false)),
+            ("new".to_string(), Value::Bool(true)),
+        ])));
+    }
+
+    #[test]
+    fn state_accounting_replaces_old_binding_size() {
+        let old = Value::Str("x".into());
+        let new = Value::Str("longer".into());
+        let current = binding_size("item", &old);
+        let expected = binding_size("item", &new);
+        assert_eq!(runtime_state_bytes_after_update(current, "item", Some(&old), &new).unwrap(), expected);
+
+        let mut vars = HashMap::new();
+        vars.insert("item".to_string(), new);
+        assert_eq!(binding_map_size(&vars), expected);
+    }
+
+    #[test]
+    fn state_accounting_rejects_budget_overflow() {
+        assert!(runtime_state_bytes_after_sizes(MAX_RUNTIME_STATE_BYTES, 0, 1).is_err());
+    }
+}
