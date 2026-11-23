@@ -210,3 +210,41 @@ mod state_tests {
         assert!(runtime_state_bytes_after_sizes(MAX_RUNTIME_STATE_BYTES, 0, 1).is_err());
     }
 }
+
+
+#[cfg(test)]
+mod safety_tests {
+    use super::{
+        ensure_value_depth, pop_stack_value, push_stack_value, Value,
+        MAX_VALUE_DEPTH,
+    };
+
+    #[test]
+    fn rejects_values_nested_beyond_the_depth_limit() {
+        let mut value = Value::Int(1);
+        for _ in 0..=MAX_VALUE_DEPTH {
+            value = Value::Array(vec![value]);
+        }
+        let error = ensure_value_depth(&value).unwrap_err();
+        assert!(error.contains("value nesting exceeds safety limit"));
+    }
+
+    #[test]
+    fn stack_push_and_pop_keep_memory_accounting_balanced() {
+        let mut stack = Vec::new();
+        let mut bytes = 0;
+        push_stack_value(&mut stack, &mut bytes, Value::Str("qorvynt".into())).unwrap();
+        assert_eq!(bytes, "qorvynt".len());
+        assert_eq!(pop_stack_value(&mut stack, &mut bytes, "underflow").unwrap(), Value::Str("qorvynt".into()));
+        assert_eq!(bytes, 0);
+        assert!(stack.is_empty());
+    }
+
+    #[test]
+    fn stack_pop_reports_underflow_without_corrupting_accounting() {
+        let mut stack = Vec::new();
+        let mut bytes = 7;
+        assert_eq!(pop_stack_value(&mut stack, &mut bytes, "VM stack underflow").unwrap_err(), "VM stack underflow");
+        assert_eq!(bytes, 7);
+    }
+}
