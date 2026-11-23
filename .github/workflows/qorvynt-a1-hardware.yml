@@ -1,0 +1,30 @@
+name: QORVYNT A1 Hardware Simulation
+
+on:
+  push:
+    paths:
+      - "hardware/qorvynt-a1/**"
+      - ".github/workflows/qorvynt-a1-hardware.yml"
+  pull_request:
+    paths:
+      - "hardware/qorvynt-a1/**"
+      - ".github/workflows/qorvynt-a1-hardware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  int8-mac-simulation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+      - name: Compile testbench
+        run: |
+          iverilog -g2012 -s tb_qorvynt_a1_int8_mac             -o /tmp/qorvynt_a1_sim             hardware/qorvynt-a1/rtl/qorvynt_a1_int8_mac.sv             hardware/qorvynt-a1/tb/tb_qorvynt_a1_int8_mac.sv
+      - name: Run simulation
+        run: vvp /tmp/qorvynt_a1_sim
