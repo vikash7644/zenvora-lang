@@ -18,17 +18,22 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
-  const origin = req.headers.origin;
+  const origin = req.headers?.origin;
   if (origin && origin !== allowedOrigin) return res.status(403).json({ error: 'Origin not allowed.' });
   const apiKey = process.env.QORVYNT_AGENT_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'AI service is not connected yet. The site chat is ready, but its server-side AI key has not been configured.' });
   const input = req.body && Array.isArray(req.body.messages) ? req.body.messages : null;
   if (!input || input.length < 1 || input.length > 12) return res.status(400).json({ error: 'Send between 1 and 12 messages.' });
   const messages = [];
-  for (const item of input) {
+  let totalChars = 0;
+  for (let index = 0; index < input.length; index++) {
+    const item = input[index];
     if (!item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || !item.content.trim() || item.content.length > 4000) {
       return res.status(400).json({ error: 'A message is invalid or too long.' });
     }
+    if (item.role !== (index % 2 === 0 ? 'user' : 'assistant')) return res.status(400).json({ error: 'Messages must alternate between user and assistant.' });
+    totalChars += item.content.length;
+    if (totalChars > 16000) return res.status(413).json({ error: 'The conversation is too large. Start a new chat.' });
     messages.push({ role: item.role, content: item.content.trim() });
   }
   if (messages[messages.length - 1].role !== 'user') return res.status(400).json({ error: 'The latest message must be from the user.' });
@@ -45,10 +50,7 @@ export default async function handler(req, res) {
       }),
       signal: AbortSignal.timeout(25000)
     });
-    if (!upstream.ok) {
-      // Do not forward provider response bodies: they can contain account or diagnostic details.
-      return res.status(502).json({ error: 'The AI provider could not complete the request. Please try again later.' });
-    }
+    if (!upstream.ok) return res.status(502).json({ error: 'The AI provider could not complete the request. Please try again later.' });
     const data = await upstream.json();
     const reply = data?.choices?.[0]?.message?.content;
     if (typeof reply !== 'string' || !reply.trim()) return res.status(502).json({ error: 'The AI provider returned no usable answer.' });
