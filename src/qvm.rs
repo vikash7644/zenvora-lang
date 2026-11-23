@@ -8,7 +8,7 @@ mod gas;
 mod value;
 pub(crate) use bytecode::Op;
 pub(crate) use gas::instruction_gas_cost;
-pub(crate) use value::{check_map_capacity, set_indexed_value, binding_size, binding_map_size, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_RUNTIME_STATE_BYTES, MAX_COLLECTION_ITEMS};
+pub(crate) use value::{check_map_capacity, set_indexed_value, set_indexed_path, binding_size, binding_map_size, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_RUNTIME_STATE_BYTES, MAX_COLLECTION_ITEMS};
 
 use std::collections::HashMap;
 
@@ -130,6 +130,25 @@ where
                 ensure_value_depth(updated)?;
                 let next = runtime_state_bytes_after_sizes(runtime_state_bytes, old_binding_size, binding_size(name, updated))?;
                 runtime_state_bytes = next;
+            }
+            Op::SetIndexPath(name, count) => {
+                if *count < 2 || *count > MAX_CALL_ARGUMENTS { return Err("invalid indexed assignment path length".into()); }
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading indexed value")?;
+                let mut indices = Vec::with_capacity(*count);
+                for _ in 0..*count { indices.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?); }
+                indices.reverse();
+                let old_binding = vars.get(name).or_else(|| globals.get(name)).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                let old_binding_size = binding_size(name, old_binding);
+                if vars.contains_key(name) {
+                    let collection = vars.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_path(collection, &indices, value)?;
+                } else {
+                    let collection = globals.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_path(collection, &indices, value)?;
+                }
+                let updated = vars.get(name).or_else(|| globals.get(name)).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                ensure_value_depth(updated)?;
+                runtime_state_bytes = runtime_state_bytes_after_sizes(runtime_state_bytes, old_binding_size, binding_size(name, updated))?;
             }
             Op::Index => {
                 let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
