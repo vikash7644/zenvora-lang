@@ -17,7 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
-use qvm::{binding_map_size, binding_size, check_map_capacity, ensure_value_depth, pop_stack_value, push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, set_indexed_value, value_size, value_to_string, Op, Value, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
+use qvm::{binding_map_size, binding_size, check_map_capacity, ensure_value_depth, pop_stack_value, push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, set_indexed_value, value_to_string, Op, Value, MAX_COLLECTION_ITEMS, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
