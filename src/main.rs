@@ -281,6 +281,7 @@ enum BlockFrame {
 fn split_arguments(input: &str) -> Vec<&str> {
     let mut args = Vec::new();
     let mut depth = 0i32;
+    let mut bracket_depth = 0i32;
     let mut start = 0usize;
     let mut in_string = false;
     let mut escaped = false;
@@ -299,7 +300,9 @@ fn split_arguments(input: &str) -> Vec<&str> {
             '"' => in_string = true,
             '(' => depth += 1,
             ')' => depth -= 1,
-            ',' if depth == 0 => { args.push(input[start..i].trim()); start = i + ch.len_utf8(); }
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
+            ',' if depth == 0 && bracket_depth == 0 => { args.push(input[start..i].trim()); start = i + ch.len_utf8(); }
             _ => {}
         }
     }
@@ -328,7 +331,9 @@ fn append_code(code: &mut Vec<Op>, mut appended: Vec<Op>) -> Result<(), String> 
 
 fn with_source_column(raw_line: &str, trimmed_line: &str, expression: &str, error: String) -> String {
     let indentation = raw_line.chars().take_while(|c| c.is_whitespace()).count();
-    let expression_offset = trimmed_line.find(expression)
+    // Prefer the final occurrence: diagnostics are most often attached to an RHS
+    // that repeats an identifier already present on the LHS.
+    let expression_offset = trimmed_line.rfind(expression)
         .map(|prefix| trimmed_line[..prefix].chars().count())
         .unwrap_or(0);
     if let Some(rest) = error.strip_prefix("column ") {
@@ -341,6 +346,22 @@ fn with_source_column(raw_line: &str, trimmed_line: &str, expression: &str, erro
     error
 }
 
+fn strip_line_comment(line: &str) -> &str {
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if in_string {
+            if escaped { escaped = false; }
+            else if ch == '\\' { escaped = true; }
+            else if ch == '"' { in_string = false; }
+            continue;
+        }
+        if ch == '"' { in_string = true; }
+        else if ch == '#' { return &line[..index]; }
+    }
+    line
+}
+
 fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_SOURCE_BYTES {
         return Err(format!("source exceeds safety limit ({MAX_SOURCE_BYTES} bytes)"));
@@ -349,7 +370,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     let mut blocks: Vec<BlockFrame> = Vec::new();
 
     for (line_no, raw) in source.lines().enumerate() {
-        let line = raw.trim().trim_end_matches(';').trim();
+        let line = strip_line_comment(raw).trim().trim_end_matches(';').trim();
         if line.is_empty() || line.starts_with('#') { continue; }
         if code.len() >= MAX_BYTECODE_INSTRUCTIONS {
             return Err(format!("line {}: compiled instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})", line_no + 1));
@@ -488,14 +509,14 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             continue;
         }
 
-        if !line.starts_with("define ") {
+        if !line.starts_with("define ") && !line.starts_with("show ") && !line.starts_with("print(") {
             if let Some((left, right)) = line.split_once(":=") {
                 let left = left.trim();
                 if left.contains('[') {
                     let (name, index_part) = left.split_once('[').ok_or_else(|| format!("line {}: invalid indexed assignment", line_no + 1))?;
                     let index_expr = index_part.strip_suffix(']').ok_or_else(|| format!("line {}: expected ']' in indexed assignment", line_no + 1))?;
-                    if index_expr.contains('[') || index_expr.contains(']') || !valid_identifier(name.trim()) {
-                        return Err(format!("line {}: indexed assignment currently requires a variable and one index, such as items[0] := value", line_no + 1));
+                    if index_expr.contains(']') || !valid_identifier(name.trim()) {
+                        return Err(format!("line {}: indexed assignment requires one outer index, such as items[index] := value", line_no + 1));
                     }
                     if right.trim().is_empty() {
                         return Err(format!("line {}: missing value in indexed assignment", line_no + 1));
