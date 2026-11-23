@@ -7,7 +7,7 @@
 mod bytecode;
 mod value;
 pub(crate) use bytecode::Op;
-pub(crate) use value::Value;
+pub(crate) use value::{value_to_string, Value};
 
 use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2};
 
