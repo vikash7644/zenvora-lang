@@ -35,7 +35,7 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
 /// Execute a previously verified QVM artifact through the QVM executor.
 pub(super) fn execute(path: &str) -> Result<(), String> {
     let code = load(path)?;
-    run_with_output_metered(&code, &mut |line| println!(\"{line}\"), None)
+    run_with_output_metered(&code, &mut |line| println!("{line}"), None)
 }
 
 
