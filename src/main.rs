@@ -17,7 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
-use qvm::{value_to_string, Op, Value};
+use qvm::{ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Op, Value, MAX_STACK_VALUE_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -1044,59 +1044,6 @@ fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
     Ok(value)
 }
 
-fn value_depth(value: &Value) -> usize {
-    match value {
-        Value::Int(_) | Value::Str(_) | Value::Bool(_) => 0,
-        Value::Array(items) => 1 + items.iter().map(value_depth).max().unwrap_or(0),
-        Value::Map(items) => 1 + items.values().map(value_depth).max().unwrap_or(0),
-    }
-}
-
-fn value_size(value: &Value) -> usize {
-    match value {
-        Value::Int(_) => std::mem::size_of::<i64>(),
-        Value::Bool(_) => std::mem::size_of::<bool>(),
-        Value::Str(text) => text.len(),
-        Value::Array(items) => items.iter().map(value_size).fold(
-            items.len().saturating_mul(std::mem::size_of::<Value>()),
-            |total, size| total.saturating_add(size),
-        ),
-        Value::Map(items) => items.iter().map(|(key, value)| key.len().saturating_add(value_size(value))).fold(
-            items.len().saturating_mul(64),
-            |total, size| total.saturating_add(size),
-        ),
-    }
-}
-
-fn ensure_value_depth(value: &Value) -> Result<(), String> {
-    let depth = value_depth(value);
-    if depth > MAX_VALUE_DEPTH {
-        return Err(format!("value nesting exceeds safety limit ({MAX_VALUE_DEPTH} levels)"));
-    }
-    let size = value_size(value);
-    if size > MAX_VALUE_BYTES {
-        return Err(format!("value exceeds estimated memory safety budget ({MAX_VALUE_BYTES} bytes)"));
-    }
-    Ok(())
-}
-
-fn push_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, value: Value) -> Result<(), String> {
-    let size = value_size(&value);
-    let next_size = stack_bytes.saturating_add(size);
-    if next_size > MAX_STACK_VALUE_BYTES {
-        return Err(format!("operand stack values exceed safety limit ({MAX_STACK_VALUE_BYTES} bytes)"));
-    }
-    stack.push(value);
-    *stack_bytes = next_size;
-    Ok(())
-}
-
-fn pop_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, underflow: &str) -> Result<Value, String> {
-    let value = stack.pop().ok_or_else(|| underflow.to_string())?;
-    *stack_bytes = stack_bytes.saturating_sub(value_size(&value));
-    Ok(value)
-}
-
 fn binding_size(name: &str, value: &Value) -> usize {
     name.len().saturating_add(64).saturating_add(value_size(value))
 }
@@ -1895,9 +1842,6 @@ const LEGACY_BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
-const MAX_VALUE_DEPTH: usize = 256;
-const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
-const MAX_STACK_VALUE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
