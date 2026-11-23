@@ -6,7 +6,7 @@ use super::Op;
 pub(crate) fn instruction_gas_cost(op: Option<&Op>) -> Result<u64, String> {
     match op {
         Some(Op::Load(_)) => Ok(super::super::contract_gas::LOCAL_READ_GAS),
-        Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => Ok(super::super::contract_gas::LOCAL_WRITE_GAS),
+        Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_) | Op::SetIndexPath(_, _)) => Ok(super::super::contract_gas::LOCAL_WRITE_GAS),
         Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => Ok(super::super::contract_gas::CONDITIONAL_BRANCH_GAS),
         Some(Op::Call(_, _) | Op::CallTarget { .. }) => Ok(super::super::contract_gas::FUNCTION_CALL_GAS),
         Some(Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Neg | Op::Not | Op::And | Op::Or
@@ -37,7 +37,7 @@ mod tests {
         let call = contract_gas::FUNCTION_CALL_GAS;
         let arithmetic = contract_gas::INTEGER_OPERATION_GAS;
 
-        for op in [Op::Store("x".into()), Op::Declare("x".into()), Op::SetIndex("x".into())] {
+        for op in [Op::Store("x".into()), Op::Declare("x".into()), Op::SetIndex("x".into()), Op::SetIndexPath("x".into(), 2)] {
             assert_eq!(instruction_gas_cost(Some(&op)).unwrap(), write);
         }
         for op in [Op::JumpIfFalse(0), Op::JumpIfFalseKeep(0), Op::JumpIfTrueKeep(0)] {
