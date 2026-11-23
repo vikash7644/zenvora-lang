@@ -38,7 +38,7 @@ jobs:
       - name: Validate playground page
         run: |
           test -s website/playground.html
-          grep -q 'BROWSER DEMO' website/playground.html
+          grep -q 'QORVYNT Studio' website/playground.html
           grep -q 'not the canonical QORVYNT compiler/QVM' website/playground.html
 
       - name: Test browser runner behavior
