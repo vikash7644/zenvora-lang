@@ -17,7 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
-use qvm::{Op, Value};
+use qvm::{value_to_string, Op, Value};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -1037,15 +1037,6 @@ fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Resu
     }
 }
 
-fn value_to_string(value: &Value) -> String {
-    match value {
-        Value::Int(n) => n.to_string(),
-        Value::Str(s) => s.clone(),
-        Value::Bool(b) => b.to_string(),
-        Value::Array(items) => format!("[{}]", items.iter().map(value_to_string).collect::<Vec<_>>().join(", ")),
-        Value::Map(items) => format!("{{{}}}", items.iter().map(|(k, v)| format!("\"{}\": {}", k, value_to_string(v))).collect::<Vec<_>>().join(", ")),
-    }
-}
 
 fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let value = builtin_unchecked(name, args)?;
