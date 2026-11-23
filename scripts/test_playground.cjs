@@ -53,7 +53,7 @@ function run(source, expected, label) {
   assert.equal(elements.output.textContent, expected, label);
 }
 
-run(elements.code.value, "30\n20", "default arithmetic example");
+run(elements.code.value, "Hello, QORVYNT\n3", "default welcome example");
 run('define count := 2\ncount := count + 3\nshow count', "5", "variable assignment");
 run('define name := "QORVYNT"\nshow "Hello, " + name', "Hello, QORVYNT", "strings and concatenation");
 run('if true {\n  show "yes"\n} otherwise {\n  show "no"\n}', "yes", "if branch");
