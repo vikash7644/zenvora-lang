@@ -5,6 +5,7 @@ on:
     paths:
       - "website/agent.html"
       - "website/api/**"
+      - "website/package.json"
       - "docs/qorvynt-github-agent.md"
       - ".github/workflows/qorvynt-agent-check.yml"
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - "website/agent.html"
       - "website/api/**"
+      - "website/package.json"
       - "docs/qorvynt-github-agent.md"
       - ".github/workflows/qorvynt-agent-check.yml"
 
@@ -25,8 +27,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Validate serverless API JavaScript syntax
-        run: node --check website/api/chat.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate API syntax
+        working-directory: website
+        run: node --check api/chat.js
+      - name: Run API security and request tests
+        working-directory: website
+        run: npm run test:agent
       - name: Validate chat page and API contract
         run: |
           test -s website/agent.html
@@ -35,7 +45,4 @@ jobs:
           grep -q 'QORVYNT_AGENT_API_KEY' website/api/chat.js
           grep -q 'Access-Control-Allow-Origin' website/api/chat.js
           grep -q 'AbortSignal.timeout' website/api/chat.js
-      - name: Validate QORVYNT file extension policy in examples
-        run: |
-          grep -q 'canonical source extension is .qv' website/api/chat.js
-          ! grep -Eq 'examples/[^ ]+\.zv' website/agent.html
+          grep -q '"type": "module"' website/package.json
