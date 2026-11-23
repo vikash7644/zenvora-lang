@@ -39,6 +39,8 @@ async function main() {
 
   const issue = await github(`/issues/${issueNumber}`);
   const comments = await github(`/issues/${issueNumber}/comments?per_page=30`);
+  const readmeFile = await github("/contents/README.md");
+  const repositoryGuide = Buffer.from(readmeFile.content, "base64").toString("utf8").slice(0, 9000);
   const recent = comments.slice(-12).map((item) => ({
     role: item.user?.type === "Bot" || item.user?.login === "github-actions[bot]" ? "assistant" : "user",
     content: `@${item.user?.login || "contributor"}: ${String(item.body || "").slice(0, 5000)}`,
@@ -59,7 +61,7 @@ async function main() {
     },
     {
       role: "user",
-      content: `Repository: https://github.com/${owner}/${repo}\nIssue title: ${issue.title}\nIssue description: ${initialBody}`
+      content: `Repository: https://github.com/${owner}/${repo}\n\nRepository README context:\n${repositoryGuide}\n\nIssue title: ${issue.title}\nIssue description: ${initialBody}`
     },
     ...recent,
   ];
