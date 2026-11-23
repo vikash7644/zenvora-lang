@@ -1618,16 +1618,7 @@ where
             return Err("execution exceeded safety limit (1,000,000 instructions)".into());
         }
         if let Some(meter) = gas_meter.as_deref_mut() {
-            let cost = match code.get(pc) {
-                Some(Op::Load(_)) => contract_gas::LOCAL_READ_GAS,
-                Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => contract_gas::LOCAL_WRITE_GAS,
-                Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => contract_gas::CONDITIONAL_BRANCH_GAS,
-                Some(Op::Call(_, _) | Op::CallTarget { .. }) => contract_gas::FUNCTION_CALL_GAS,
-                Some(Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Neg | Op::Not | Op::And | Op::Or
-                    | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge) => contract_gas::INTEGER_OPERATION_GAS,
-                Some(_) => 1,
-                None => return Err("instruction pointer out of range".into()),
-            };
+            let cost = qvm::instruction_gas_cost(code.get(pc))?;
             meter.charge(cost)?;
         }
         match &code[pc] {
