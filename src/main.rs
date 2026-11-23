@@ -17,7 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
-use qvm::{ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Op, Value, MAX_STACK_VALUE_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
+use qvm::{ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Op, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -1848,7 +1848,6 @@ const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
 const MAX_BYTECODE_STRING_BYTES: usize = 1024 * 1024;
 const MAX_CALL_ARGUMENTS: usize = 1024;
-const MAX_STACK_VALUES: usize = 65_536;
 
 fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
     let mut output = String::from(BYTECODE_HEADER);
