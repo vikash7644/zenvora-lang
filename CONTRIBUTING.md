@@ -1,6 +1,6 @@
-# Contributing to Zenvora Lang
+# Contributing to QORVYNT
 
-Thanks for helping improve Zenvora Lang. The project is an early programming-language prototype; small, tested, clearly scoped changes are preferred over large unverified rewrites.
+Thanks for helping improve QORVYNT. QORVYNT is an early-stage programming-language project; contributors are welcome to participate voluntarily, in small reviewable tasks. The project is an early programming-language prototype; small, tested, clearly scoped changes are preferred over large unverified rewrites.
 
 ## Before opening a change
 
@@ -59,3 +59,45 @@ Please include:
 - Commands/checks run and their actual results.
 - Compatibility or security implications.
 - Any known limitations or follow-up work.
+
+
+## Join the volunteer contributor team
+
+QORVYNT welcomes voluntary, community contributions. There is no salary or guaranteed paid work attached to these tasks. Contributors choose what they work on, can stop at any time, and should not share private credentials or personal information in issues.
+
+### Current contribution tracks
+
+| Track | Useful experience | Good first contribution |
+|---|---|---|
+| Compiler & language | Rust, parsing, interpreters, language design | Add a focused parser/runtime regression test |
+| VM & runtime | Virtual machines, bytecode, memory safety | Document or test one verifier invariant |
+| GPU & graphics | Vulkan, WebGPU, shaders, 2D/3D | Research a small, measurable integration prototype |
+| Game tools | Rendering, animation, asset pipelines | Propose a minimal example and acceptance criteria |
+| AI & speech | ML, inference, speech, evaluation | Compare open models and document device requirements |
+| IDE & developer tools | TypeScript, web, desktop UI, debugging | Improve a playground or editor workflow |
+| Web3 & governance | Solidity, EVM, cryptography, governance | Review an isolated design or add test fixtures |
+| Security & QA | Fuzzing, threat modelling, testing | Reproduce a bug safely and add a regression test |
+| Docs & localization | Technical writing, Hindi/English | Improve one tutorial with verified runnable examples |
+
+Some tracks are research or roadmap areas, not implemented QORVYNT features. Confirm the current status in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) before choosing a task.
+
+### How to start
+
+1. Read the [project README](README.md) and [project status](docs/PROJECT_STATUS.md).
+2. Browse [good first issues](https://github.com/vikash7644/zenvora-lang/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+3. If no issue fits, open a [contribution discussion/issue](https://github.com/vikash7644/zenvora-lang/issues/new/choose) describing your skills and the small task you want to take.
+4. Wait for maintainer clarification before starting a large or breaking change.
+5. Submit a focused pull request and report exactly which checks you ran.
+
+### Contributor recognition and project governance
+
+- Contributors will be credited through GitHub contribution history and, where appropriate, release notes or project documentation.
+- Do not promise payment, tokens, equity, employment, or future rewards unless a separate written agreement is made by the project owner.
+- Maintainers may request changes, decline work that does not fit the roadmap, or close inactive tasks.
+- Never commit secrets, private keys, API tokens, generated binaries, or another person's code without permission.
+- A contribution does not grant repository ownership, admin access, or control over project funds.
+- Please be respectful, explain technical decisions, and review code for correctness and security rather than accepting changes only because they are large.
+
+### Licensing
+
+The repository currently includes an MIT license. By submitting a contribution, you agree that your contribution may be distributed under the repository's applicable license. If you are unsure about ownership, employer policies, or third-party dependencies, ask before submitting.
