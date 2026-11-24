@@ -1,0 +1,39 @@
+name: Archive GitHub clone traffic
+
+on:
+  schedule:
+    - cron: "17 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: archive-clone-traffic
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Fetch and archive clone statistics
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: python scripts/archive-github-clones.py
+      - name: Commit archive
+        run: |
+          if git diff --quiet -- traffic/clones.csv; then
+            echo "No clone traffic changes to archive."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add traffic/clones.csv
+          git commit -m "chore: archive daily GitHub clone traffic"
+          git push
