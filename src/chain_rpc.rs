@@ -52,12 +52,16 @@ fn serve_inner(
                 let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
                 match read_http_body(&mut stream) {
                     Ok(body) => {
+                        let notification = is_json_rpc_notification(&body);
                         let response = handle_json_rpc_with_pool(
                             &body, &store_path, chain_id, pool_path.as_deref(),
                         ).to_string();
-                        if let Err(error) = write_http_response(&mut stream, "200 OK", &response) {
-                            // A client that disconnects while reading must not stop the RPC listener.
-                            eprintln!("RPC response write failed: {error}");
+                        // JSON-RPC 2.0 notifications are executed but MUST NOT receive a response.
+                        if !notification {
+                            if let Err(error) = write_http_response(&mut stream, "200 OK", &response) {
+                                // A client that disconnects while reading must not stop the RPC listener.
+                                eprintln!("RPC response write failed: {error}");
+                            }
                         }
                     }
                     Err(error) => {
@@ -76,6 +80,15 @@ fn serve_inner(
         }
     }
     Ok(())
+}
+
+/// Returns true for a JSON object request with no id member (a JSON-RPC notification).
+/// Invalid JSON and non-object payloads are not classified as notifications.
+fn is_json_rpc_notification(body: &[u8]) -> bool {
+    serde_json::from_slice::<Value>(body)
+        .ok()
+        .and_then(|request| request.as_object().map(|object| !object.contains_key("id")))
+        .unwrap_or(false)
 }
 
 fn read_http_body(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
@@ -442,6 +455,20 @@ mod tests {
         assert_eq!(runtime.balance("bob"), 0);
         std::fs::remove_file(store_path).unwrap();
         std::fs::remove_file(pool_path).unwrap();
+    }
+
+    #[test]
+    fn json_rpc_notifications_are_identified_without_an_id_only() {
+        use super::is_json_rpc_notification;
+
+        assert!(is_json_rpc_notification(
+            br#"{"jsonrpc":"2.0","method":"chain_getInfo","params":[]}"#
+        ));
+        assert!(!is_json_rpc_notification(
+            br#"{"jsonrpc":"2.0","id":null,"method":"chain_getInfo"}"#
+        ));
+        assert!(!is_json_rpc_notification(b"{"));
+        assert!(!is_json_rpc_notification(b"[]"));
     }
 
     #[test]
