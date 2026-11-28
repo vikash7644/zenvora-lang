@@ -341,6 +341,27 @@ fn with_source_column(raw_line: &str, trimmed_line: &str, expression: &str, erro
     error
 }
 
+fn strip_trailing_comment(line: &str) -> &str {
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+        } else if ch == '"' {
+            in_string = true;
+        } else if ch == '#' {
+            return &line[..index];
+        }
+    }
+    line
+}
+
 fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_SOURCE_BYTES {
         return Err(format!("source exceeds safety limit ({MAX_SOURCE_BYTES} bytes)"));
@@ -349,7 +370,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     let mut blocks: Vec<BlockFrame> = Vec::new();
 
     for (line_no, raw) in source.lines().enumerate() {
-        let line = raw.trim().trim_end_matches(';').trim();
+        let line = strip_trailing_comment(raw).trim().trim_end_matches(';').trim();
         if line.is_empty() || line.starts_with('#') { continue; }
         if code.len() >= MAX_BYTECODE_INSTRUCTIONS {
             return Err(format!("line {}: compiled instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})", line_no + 1));
@@ -4318,6 +4339,21 @@ mod tests {
     fn short_circuit_jumps_work_in_repeat_conditions() {
         let output = execute("define count := 0\nrepeat count < 3 and (count != 1 or true) {\ncount := count + 1\nshow count\n}\n").unwrap();
         assert_eq!(output, vec!["1", "2", "3"]);
+    }
+
+    #[test]
+    fn trailing_comments_are_ignored_outside_string_literals() {
+        let source = r#"define message := "inside # string := [literal]" # trailing definition comment
+show message # trailing output comment
+fn echo(value) {
+show value # trailing function comment
+}
+call echo("call # text") # trailing call comment
+"#;
+        assert_eq!(
+            execute(source).unwrap(),
+            vec!["inside # string := [literal]", "call # text"],
+        );
     }
 
     #[test]
