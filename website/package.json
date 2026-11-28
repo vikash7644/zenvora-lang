@@ -1,0 +1,8 @@
+{
+  "name": "qorvynt-agent-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:agent": "node --test api/chat.test.mjs"
+  }
+}

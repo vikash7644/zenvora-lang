@@ -1,5 +1,14 @@
 # QORVYNT
 
+<p align="center">
+  <a href="https://github.com/vikash7644/zenvora-lang/issues/new?template=qorvynt-agent.yml">
+    <img src=".github/branding/qorvynt-agent.svg" alt="Talk to QORVYNT Agent" width="560">
+  </a>
+</p>
+
+**Talk to the QORVYNT AI Agent:** click the logo above, open a public GitHub issue, and begin your question with `@qorvynt`. The agent replies in that issue after its model-provider secret is configured. See [setup and safety notes](docs/qorvynt-github-agent.md).
+
+
 ## Official website
 
 - **QORVYNT website:** https://vikash7644.github.io/zenvora-lang/

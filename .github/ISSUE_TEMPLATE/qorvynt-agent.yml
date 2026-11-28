@@ -1,0 +1,16 @@
+name: Chat with QORVYNT Agent
+description: Ask the QORVYNT AI assistant a question in a public GitHub issue.
+title: "[QORVYNT Agent] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask about QORVYNT, the .qv language, compiler, AI runtime, or QORVYNT A1 hardware work. This conversation is public.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: Start your message with @qorvynt to invite the agent to answer.
+      placeholder: "@qorvynt Explain how I can write my first .qv program."
+    validations:
+      required: true
