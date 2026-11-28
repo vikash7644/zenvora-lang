@@ -136,16 +136,18 @@ impl ContractState {
         let mut temp_name = file_name.to_os_string();
         temp_name.push(format!(".tmp-{}", std::process::id()));
         let temp_path = path.with_file_name(temp_name);
+        let mut created_temp = false;
         let result = (|| {
             let mut file = std::fs::OpenOptions::new()
                 .write(true).create_new(true).open(&temp_path)
                 .map_err(|e| format!("cannot create temporary snapshot: {e}"))?;
+            created_temp = true;
             file.write_all(&bytes).map_err(|e| format!("cannot write snapshot: {e}"))?;
             file.sync_all().map_err(|e| format!("cannot sync snapshot: {e}"))?;
             std::fs::rename(&temp_path, path).map_err(|e| format!("cannot atomically install snapshot: {e}"))?;
             Ok(())
         })();
-        if result.is_err() { let _ = std::fs::remove_file(&temp_path); }
+        if result.is_err() && created_temp { let _ = std::fs::remove_file(&temp_path); }
         result
     }
 
@@ -439,5 +441,27 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!(restored.state_root(), state.state_root());
         assert_eq!(restored.get("persisted", "key").unwrap(), Some(&b"value"[..]));
+    }
+
+    #[test]
+    fn failed_snapshot_save_preserves_preexisting_temp_file() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "qorvynt-snapshot-temp-safe-{}-{nonce}.bin",
+            std::process::id()
+        ));
+        let mut temp_name = path.file_name().unwrap().to_os_string();
+        temp_name.push(format!(".tmp-{}", std::process::id()));
+        let temp_path = path.with_file_name(temp_name);
+        std::fs::write(&temp_path, b"keep this file").unwrap();
+
+        let state = ContractState::new();
+        let error = state.save_snapshot(&path).unwrap_err();
+        assert!(error.contains("cannot create temporary snapshot"), "{error}");
+        assert_eq!(std::fs::read(&temp_path).unwrap(), b"keep this file");
+        assert!(!path.exists());
+
+        std::fs::remove_file(temp_path).unwrap();
     }
 }
