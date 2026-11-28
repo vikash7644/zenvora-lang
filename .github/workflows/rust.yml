@@ -43,8 +43,16 @@ jobs:
       - name: Build optimized release CLI
         run: cargo build --locked --release --bin qorvynt
 
-      - name: Validate distributable Rust package
-        run: cargo package --locked
+      - name: Test standalone QORVYNT VM package independently
+        run: cargo test --locked -p qorvynt-vm
+
+      - name: Validate standalone QORVYNT VM distributable package
+        run: cargo package --locked -p qorvynt-vm
+
+      # The root qorvynt CLI depends on qorvynt-vm, which is a local workspace
+      # crate not yet published to crates.io. `cargo package` rewrites path
+      # dependencies to registry dependencies, so root packaging must wait
+      # until the VM crate has a published registry release.
 
       - name: Validate QUR Web3 manifest
         run: cargo run --locked -- --qur-check examples/qur/manifest.qv

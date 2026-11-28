@@ -16,7 +16,13 @@ name = "qorvynt"
 path = "src/main.rs"
 
 [dependencies]
+qorvynt-vm = { path = "crates/qorvynt-vm", version = "0.1.0" }
 sha2 = "0.10"
 ed25519-dalek = "2"
 getrandom = "0.2"
 serde_json = "1"
+
+[workspace]
+members = ["crates/qorvynt-vm"]
+exclude = ["compiler", "fuzz"]
+resolver = "2"

@@ -20,7 +20,7 @@ Bytecode v2 serializer
 Bytecode v2 verifier
    |
    v
-QVM execution (currently hosted in the Rust CLI)
+QVM execution (dedicated runtime module in the Rust host)
 ```
 
 The canonical emitted v1/v2 headers are `QORVYNT_BYTECODE 1` and `QORVYNT_BYTECODE 2`. The loader keeps read-only compatibility for old `ZENVORA_BYTECODE` artifacts during migration; new artifacts are never emitted with the old prefix. The Bytecode v2 format is experimental. The decoder validates framing, instruction records, function regions, control-flow targets, and stack behavior before the instruction stream reaches the shared VM engine. The existing v1 path remains available for compatibility; QVM commands intentionally accept v2 only.
@@ -47,16 +47,26 @@ The generic `--run-bytecode` command continues to support legacy v1 and v2 artif
 
 - The compiler, serializer, verifier, and runtime are still hosted in the Rust `qorvynt` executable.
 - The self-hosted `compiler/parser.qv` is an evolving frontend foundation; it is not yet the complete compiler or a self-hosting bootstrap.
-- QVM currently reuses the existing VM execution engine; the interpreter has not yet been extracted into an independently buildable QVM package.
+- The instruction loop now lives in `src/qvm/runtime.rs`; built-in implementations live in `src/qvm/builtins.rs`; and shared value, collection, and resource-accounting helpers live in `src/qvm/runtime_support.rs`. The CLI retains compatibility exports for existing compiler/tests. The runtime now reads its gas schedule and charging trait from `src/qvm/gas.rs`, and resolves built-ins through QVM-owned runtime support. The contract gas meter is only an adapter at the host boundary. This is a stronger internal boundary, not yet an independently buildable QVM package.
 - Bytecode v2 remains experimental and must not be described as stable or production-safe before format review and independent security testing.
 
 ## Next engineering gates
 
 1. Keep compile → serialize → verify → execute parity covered by tests for functions, collections, control flow, builtins, and runtime errors.
-2. Extract the runtime value model, opcode definitions, and execution loop from `src/main.rs` into a dedicated `src/qvm/` module without changing behavior.
+2. Move the remaining compiler-host types and helper APIs behind a runtime-owned API while keeping execution parity green.
 3. Define a versioned, deterministic binary artifact encoding only after the v2 instruction and metadata contract is frozen.
 4. Add a standalone QVM library/runner and prove it can load artifacts without invoking the source compiler.
 5. Port the compiler backend incrementally into QORVYNT and prove clean-environment bootstrap parity before claiming Rust independence.
 
 
-The VM instruction enum and runtime value type have since moved to `src/qvm/bytecode.rs` and `src/qvm/value.rs`; execution and variable-environment handling remain in the Rust host pending the next extraction.
+The VM instruction enum, runtime value type, and instruction execution loop now live in `src/qvm/bytecode.rs`, `src/qvm/value.rs`, and `src/qvm/runtime.rs`. The CLI retains a thin compatibility wrapper. The extracted runner is crate-visible only; it is not a public library API yet. The extracted runtime still shares the host crate's build and compiler-side types, so it is not yet a standalone package.
+
+
+### VM-owned resource limits
+
+The deterministic input and resource ceilings now live in `src/qvm/limits.rs`, owned by the QVM module and shared by bytecode verification/loading and runtime execution. The root crate keeps compatibility re-exports for existing compiler and regression-test callers. The runtime gas-meter interface and schedule are now QVM-owned; the contract host adapts its meter to that trait. The remaining extraction work is the compiler-host types and helper APIs.
+
+
+### Gas-meter boundary
+
+The QVM executor now accepts its own `qvm::gas::GasMeter` trait rather than depending on the concrete contract host meter type. The current contract gas meter implements that trait as an adapter, preserving the existing deterministic charging behavior. The versioned deterministic gas schedule constants now also live in `src/qvm/gas.rs`; `contract_gas` re-exports them for compatibility. The schedule remains an engineering default, not an activated chain fee schedule.
