@@ -54,7 +54,7 @@ fn handle(stream: &mut TcpStream) -> Result<(), String> {
                     return respond(stream, "404 Not Found", &json!({"ok":false,"error":"use GET /health or POST /compile-run"}));
                 }
                 if request_line.starts_with("GET ") {
-                    return respond(stream, "200 OK", &json!({"ok":true,"service":"qorvynt-compiler-api","compiler":"Rust","mode":"development"}));
+                    return respond(stream, "200 OK", &json!({"ok":true,"service":"qorvynt-compiler-api","compiler":"QORVYNT","version":"0.8","mode":"development"}));
                 }
                 let mut length = None;
                 for line in lines {
@@ -141,6 +141,17 @@ mod tests {
         client.read_to_string(&mut response).unwrap();
         worker.join().unwrap().unwrap();
         response
+    }
+
+    #[test]
+    fn health_endpoint_reports_qorvynt_identity() {
+        let response = response_for(
+            b"GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert!(response.contains("QORVYNT"));
+        assert!(response.contains("0.8"));
+        assert!(!response.contains("Rust"));
     }
 
     #[test]
