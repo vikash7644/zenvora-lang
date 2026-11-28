@@ -190,10 +190,20 @@ impl ChainRuntime {
         if self.genesis_balances.len() > MAX_ACCOUNTS || self.receipts.len() > MAX_RECEIPTS {
             return Err("ledger exceeds configured account or receipt limit".into());
         }
-        let temp_path = path.with_extension("zvr.tmp");
+        let file_name = path.file_name()
+            .ok_or_else(|| "ledger path must name a file".to_string())?;
+        let mut temp_name = file_name.to_os_string();
+        temp_name.push(format!(".tmp-{}", std::process::id()));
+        let temp_path = path.with_file_name(temp_name);
+        let mut temp_created = false;
         let write_result = (|| -> Result<(), String> {
-            let mut file = std::fs::File::create(&temp_path)
+            // create_new is exclusive and does not follow a pre-existing symlink.
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp_path)
                 .map_err(|e| format!("cannot create ledger temp file: {e}"))?;
+            temp_created = true;
             writeln!(file, "{LEDGER_VERSION}").map_err(|e| format!("cannot write ledger: {e}"))?;
             for (address, balance) in &self.genesis_balances {
                 writeln!(file, "G\t{address}\t{balance}")
@@ -217,7 +227,7 @@ impl ChainRuntime {
                 .map_err(|e| format!("cannot replace ledger file: {e}"))?;
             Ok(())
         })();
-        if write_result.is_err() {
+        if write_result.is_err() && temp_created {
             let _ = std::fs::remove_file(&temp_path);
         }
         write_result
@@ -792,5 +802,28 @@ mod tests {
         assert_eq!(runtime.balance("alice"), i64::MAX);
         assert_eq!(runtime.balance("bob"), 1);
         assert!(runtime.receipts().is_empty());
+    }
+ 
+    #[test]
+    fn save_does_not_follow_or_remove_preexisting_temp_path() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "zenvora-ledger-temp-safe-{}-{nonce}.zvr",
+            std::process::id()
+        ));
+        let mut temp_name = path.file_name().unwrap().to_os_string();
+        temp_name.push(format!(".tmp-{}", std::process::id()));
+        let temp_path = path.with_file_name(temp_name);
+        std::fs::write(&temp_path, b"do not overwrite").unwrap();
+
+        let mut runtime = ChainRuntime::new();
+        runtime.set_genesis_balance("alice", 10).unwrap();
+        let error = runtime.save_to_file(&path).unwrap_err();
+        assert!(error.contains("cannot create ledger temp file"), "{error}");
+        assert_eq!(std::fs::read(&temp_path).unwrap(), b"do not overwrite");
+        assert!(!path.exists());
+
+        std::fs::remove_file(temp_path).unwrap();
     }
 }
