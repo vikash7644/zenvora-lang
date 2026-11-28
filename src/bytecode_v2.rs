@@ -1,4 +1,4 @@
-//! Experimental Zenvora Bytecode v2 framing, metadata, and control-flow verification.
+//! QORVYNT Bytecode v2 framing, metadata, and control-flow verification.
 //!
 //! The v2 parser/verifier is called by the bytecode loader before instructions are passed
 //! to the existing VM. The compiler can emit v2 text on an opt-in CLI path. V1 remains
