@@ -23,16 +23,25 @@ class FakeElement {
   click() { assert.ok(this.listeners.click, "expected click handler"); return this.listeners.click(); }
 }
 
-const ids = ["code", "output", "status", "run", "reset", "copy"];
+const ids = ["code", "output", "status", "run", "reset", "copy", "problemcount", "resultstate", "cursorpos", "gutter", "emptyproblems", "helpbody", "resultlabel"];
 const elements = Object.fromEntries(ids.map(id => [id, new FakeElement()]));
 const editorMatch = html.match(/<textarea id="code"[^>]*>([\s\S]*?)<\/textarea>/);
 assert.ok(editorMatch, "playground editor exists");
 elements.code.value = editorMatch[1];
 const exampleNames = ["variables", "math", "booleans", "condition", "loops", "functions", "collections", "stdlib", "combined"];
 const examples = exampleNames.map(name => new FakeElement({ example: name }));
+const tabs = ["output", "problems", "help"].map(name => new FakeElement({ tab: name }));
 const document = {
   getElementById(id) { assert.ok(elements[id], "unexpected element id: " + id); return elements[id]; },
-  querySelectorAll(selector) { assert.equal(selector, "[data-example]"); return examples; }
+  querySelectorAll(selector) {
+    if (selector === "[data-example]") return examples;
+    if (selector === "[data-tab]") return tabs;
+    assert.fail("unexpected selector: " + selector);
+  },
+  querySelector(selector) {
+    assert.equal(selector, '[data-tab="output"]');
+    return tabs[0];
+  }
 };
 const context = { document, navigator: { clipboard: { writeText: async () => {} } }, console };
 vm.runInNewContext(scripts[0][1], context);
@@ -44,7 +53,7 @@ function run(source, expected, label) {
   assert.equal(elements.output.textContent, expected, label);
 }
 
-run(elements.code.value, "30\n20", "default arithmetic example");
+run(elements.code.value, "Hello, QORVYNT\n3", "default welcome example");
 run('define count := 2\ncount := count + 3\nshow count', "5", "variable assignment");
 run('define name := "QORVYNT"\nshow "Hello, " + name', "Hello, QORVYNT", "strings and concatenation");
 run('if true {\n  show "yes"\n} otherwise {\n  show "no"\n}', "yes", "if branch");
