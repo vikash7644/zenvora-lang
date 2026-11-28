@@ -1900,7 +1900,6 @@ where
 
 
 const BYTECODE_HEADER: &str = "QORVYNT_BYTECODE 1";
-const LEGACY_BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
@@ -2236,12 +2235,12 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_BYTECODE_BYTES {
         return Err(format!("bytecode file exceeds safety limit ({} bytes)", MAX_BYTECODE_BYTES));
     }
-    if matches!(source.lines().next().map(str::trim), Some("QORVYNT_BYTECODE 2" | "ZENVORA_BYTECODE 2")) {
+    if matches!(source.lines().next().map(str::trim), Some("QORVYNT_BYTECODE 2")) {
         return deserialize_bytecode_v2(source);
     }
     let mut lines = source.lines();
     let header = lines.next();
-    if header != Some(BYTECODE_HEADER) && header != Some(LEGACY_BYTECODE_HEADER) {
+    if header != Some(BYTECODE_HEADER) {
         return Err("invalid bytecode header or unsupported bytecode version".into());
     }
     let mut code = Vec::new();
@@ -2693,7 +2692,7 @@ fn compile_plan_json_to_bytecode_v2(source: &str) -> Result<String, String> {
     }
     let plan: serde_json::Value = serde_json::from_str(source)
         .map_err(|error| format!("bytecode plan: invalid JSON: {error}"))?;
-    if !matches!(plan_required_string(&plan, "format")?, "QORVYNT_BYTECODE_PLAN_1" | "ZENVORA_BYTECODE_PLAN_1") {
+    if !matches!(plan_required_string(&plan, "format")?, "QORVYNT_BYTECODE_PLAN_1") {
         return Err("bytecode plan: unsupported format".into());
     }
     let main = plan.get("main").and_then(serde_json::Value::as_array)
@@ -2806,7 +2805,7 @@ fn run_bytecode(path: &str) -> Result<(), String> {
     let serialized = read_bytecode_source(path)?;
     // Accept both supported bytecode generations through the same CLI entry point.
     // The v2 decoder performs framing, layout, opcode, and control-flow verification.
-    let code = if serialized.starts_with("QORVYNT_BYTECODE 2\n") || serialized.starts_with("ZENVORA_BYTECODE 2\n") {
+    let code = if serialized.starts_with("QORVYNT_BYTECODE 2\n") {
         deserialize_bytecode_v2(&serialized)?
     } else {
         deserialize_bytecode(&serialized)?
