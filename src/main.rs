@@ -3839,9 +3839,7 @@ fn main() {
                     qur_dao::create_proposal(&mut state, &args[3], &args[4], &args[5], &args[6], quorum, gas)?
                 }
                 "--qur-dao-vote" => {
-                    let choice = match args[6].as_str() { "yes" => qur_dao::VoteChoice::Yes, "no" => qur_dao::VoteChoice::No, _ => return Err("vote choice must be yes or no".into()) };
-                    let gas = args[7].parse::<u64>().map_err(|_| "gas limit must be an unsigned integer".to_string())?;
-                    qur_dao::cast_vote(&mut state, &args[3], &args[4], &args[5], choice, gas)?
+                    return Err("unsigned DAO voting is disabled; use --qur-dao-vote-signed with a wallet signature".into());
                 }
                 "--qur-dao-vote-signed" => {
                     let choice = match args[6].as_str() { "yes" => qur_dao::VoteChoice::Yes, "no" => qur_dao::VoteChoice::No, _ => return Err("vote choice must be yes or no".into()) };
