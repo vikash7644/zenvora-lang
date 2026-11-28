@@ -258,6 +258,56 @@ fn find_block_end(tokens, open_pos) {
   return map("pos", pos, "error", "")
 }
 
+# Parse an optional otherwise branch, including arbitrarily chained otherwise-if clauses.
+# Returns the AST statements for the branch and the first token after the chain.
+fn parse_conditional_tail(tokens, pos) {
+  if pos >= len(tokens) or get(at(tokens, pos), "value") != "otherwise" {
+    return map("ast", array(), "pos", pos, "error", "expected otherwise")
+  }
+  define branch_pos := pos + 1
+  if branch_pos < len(tokens) and get(at(tokens, branch_pos), "value") == "if" {
+    define condition := parse_expr(tokens, branch_pos + 1)
+    if get(condition, "error") != "" {
+      return condition
+    }
+    define open_pos := get(condition, "pos")
+    define block_end := find_block_end(tokens, open_pos)
+    if get(block_end, "error") != "" {
+      return block_end
+    }
+    define close_pos := get(block_end, "pos")
+    define body_tokens := collect_tokens(tokens, open_pos + 1, close_pos)
+    define body_result := parse_program(body_tokens)
+    if get(body_result, "error") != "" {
+      return body_result
+    }
+    define nested_else := array()
+    define next_pos := close_pos + 1
+    if next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
+      define nested_tail := parse_conditional_tail(tokens, next_pos)
+      if get(nested_tail, "error") != "" {
+        return nested_tail
+      }
+      nested_else := get(nested_tail, "ast")
+      next_pos := get(nested_tail, "pos")
+    }
+    define nested_if := node("if", "", get(condition, "ast"), map("then", get(body_result, "ast"), "otherwise", nested_else), get(at(tokens, branch_pos), "line"))
+    return map("ast", array(nested_if), "pos", next_pos, "error", "")
+  } otherwise {
+    define block_end := find_block_end(tokens, branch_pos)
+    if get(block_end, "error") != "" {
+      return block_end
+    }
+    define close_pos := get(block_end, "pos")
+    define body_tokens := collect_tokens(tokens, branch_pos + 1, close_pos)
+    define body_result := parse_program(body_tokens)
+    if get(body_result, "error") != "" {
+      return body_result
+    }
+    return map("ast", get(body_result, "ast"), "pos", close_pos + 1, "error", "")
+  }
+}
+
 fn parse_program(tokens) {
   define ast := array()
   define pos := 0
@@ -338,20 +388,12 @@ fn parse_program(tokens) {
               define else_ast := array()
               define next_pos := close_pos + 1
               if kw == "if" and next_pos < len(tokens) and get(at(tokens, next_pos), "value") == "otherwise" {
-                define else_open := next_pos + 1
-                define else_end := find_block_end(tokens, else_open)
-                if get(else_end, "error") != "" {
-                  err := get(else_end, "error")
+                define tail_result := parse_conditional_tail(tokens, next_pos)
+                if get(tail_result, "error") != "" {
+                  err := get(tail_result, "error")
                 } otherwise {
-                  define else_close := get(else_end, "pos")
-                  define else_tokens := collect_tokens(tokens, else_open + 1, else_close)
-                  define else_result := parse_program(else_tokens)
-                  if get(else_result, "error") != "" {
-                    err := get(else_result, "error")
-                  } otherwise {
-                    else_ast := get(else_result, "ast")
-                    next_pos := else_close + 1
-                  }
+                  else_ast := get(tail_result, "ast")
+                  next_pos := get(tail_result, "pos")
                 }
               }
               if err == "" {
@@ -366,9 +408,9 @@ fn parse_program(tokens) {
           }
         }
       } otherwise {
-        if kw == "return" {
-          define expr := parse_expr(tokens, pos + 1)
-          if get(expr, "error") != "" {
+                if kw == "return" {
+            define expr := parse_expr(tokens, pos + 1)
+            if get(expr, "error") != "" {
             err := get(expr, "error")
           } otherwise {
             if get(expr, "pos") == pos + 1 {
@@ -2625,4 +2667,32 @@ if not get(malformed_instruction_result, "ok") and get(malformed_instruction_res
   show malformed_instruction_result
   show string_jump_result
   show function_bad_jump_result
+}
+
+
+# Self-hosted parser regression: one "otherwise if" branch compiles and executes.
+define otherwise_if_program := compile_source("define branch_value := 2\nif branch_value == 1 {\nshow \"one\"\n} otherwise if branch_value == 2 {\nshow \"two\"\n}\n")
+define otherwise_if_run := execute_bytecode_plan(get(otherwise_if_program, "plan"))
+if get(otherwise_if_program, "ok") and get(otherwise_if_run, "ok") and get(get(otherwise_if_run, "output"), 0) == "two" {
+  show "QORVYNT_OTHERWISE_IF_FRONTEND_PASS"
+} otherwise {
+  show "QORVYNT_OTHERWISE_IF_FRONTEND_FAIL"
+  show otherwise_if_program
+  show otherwise_if_run
+}
+
+
+# Chained conditional regressions: multiple otherwise-if branches and a final otherwise.
+define chained_otherwise_program := compile_source("define branch_value := 3\nif branch_value == 1 {\nshow \"one\"\n} otherwise if branch_value == 2 {\nshow \"two\"\n} otherwise if branch_value == 3 {\nshow \"three\"\n} otherwise {\nshow \"fallback\"\n}\n")
+define chained_otherwise_run := execute_bytecode_plan(get(chained_otherwise_program, "plan"))
+define final_otherwise_program := compile_source("define branch_value := 9\nif branch_value == 1 {\nshow \"one\"\n} otherwise {\nshow \"fallback\"\n}\n")
+define final_otherwise_run := execute_bytecode_plan(get(final_otherwise_program, "plan"))
+if get(chained_otherwise_program, "ok") and get(chained_otherwise_run, "ok") and get(get(chained_otherwise_run, "output"), 0) == "three" and get(final_otherwise_program, "ok") and get(final_otherwise_run, "ok") and get(get(final_otherwise_run, "output"), 0) == "fallback" {
+  show "QORVYNT_CHAINED_OTHERWISE_IF_AND_FINAL_OTHERWISE_PASS"
+} otherwise {
+  show "QORVYNT_CHAINED_OTHERWISE_IF_AND_FINAL_OTHERWISE_FAIL"
+  show chained_otherwise_program
+  show chained_otherwise_run
+  show final_otherwise_program
+  show final_otherwise_run
 }
