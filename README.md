@@ -283,3 +283,9 @@ Sponsorship supports ongoing language engineering, compiler/VM testing, document
 ## License
 
 MIT.
+
+
+## GitHub traffic dashboard
+
+- **30-day traffic dashboard:** https://vikash7644.github.io/zenvora-lang/traffic.html
+- Daily snapshots are collected by [GitHub Actions](.github/workflows/traffic-history.yml). To enable collection, add a repository Actions secret named `TRAFFIC_TOKEN` containing a fine-grained personal access token with **Administration: read** permission for this repository. The dashboard begins accumulating history after the first successful run; GitHub's traffic API itself only exposes the latest 14 days.
