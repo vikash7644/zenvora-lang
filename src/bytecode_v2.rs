@@ -311,6 +311,7 @@ enum V2Instruction {
     Ge,
     Index,
     SetIndex,
+    SetIndexPath(usize),
     JumpIfFalse(usize),
     JumpIfFalseKeep(usize),
     JumpIfTrueKeep(usize),
@@ -360,6 +361,7 @@ fn parse_v2_instruction(line: &str) -> Result<V2Instruction, String> {
         ["GE"] => V2Instruction::Ge,
         ["INDEX"] => V2Instruction::Index,
         ["SET_INDEX", name] if valid_identifier(name) => V2Instruction::SetIndex,
+        ["SET_INDEX_PATH", name, count] if valid_identifier(name) => { let count = parse_operand_usize(count, "indexed assignment path length")?; if !(2..=MAX_FUNCTION_PARAMETERS).contains(&count) { return Err(invalid()); } V2Instruction::SetIndexPath(count) },
         ["JUMP", target] => V2Instruction::Jump(parse_operand_usize(target, "jump target")?),
         ["JUMP_IF_FALSE", target] => V2Instruction::JumpIfFalse(parse_operand_usize(target, "jump target")?),
         ["JUMP_IF_FALSE_KEEP", target] => V2Instruction::JumpIfFalseKeep(parse_operand_usize(target, "jump target")?),
@@ -492,6 +494,7 @@ pub fn verify_v2_file(file: &ParsedV2File) -> Result<(), String> {
                 // Unary operators replace the popped value, so stack depth is unchanged.
                 V2Instruction::Neg | V2Instruction::Not => (1, 0),
                 V2Instruction::SetIndex => (2, -2),
+                V2Instruction::SetIndexPath(count) => (count.saturating_add(1), -((count.saturating_add(1)) as isize)),
                 V2Instruction::Index => (2, -1),
                 V2Instruction::Add | V2Instruction::Sub | V2Instruction::Mul | V2Instruction::Div
                 | V2Instruction::And | V2Instruction::Or | V2Instruction::Eq | V2Instruction::Ne

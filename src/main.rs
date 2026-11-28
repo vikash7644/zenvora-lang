@@ -17,7 +17,7 @@ mod chain_p2p;
 mod tx_pool;
 mod bytecode_v2;
 mod qvm;
-use qvm::{Op, Value};
+pub(crate) use qvm::{binding_map_size, binding_size, check_map_capacity, ensure_value_depth, pop_stack_value, push_stack_value, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, set_indexed_value, value_to_string, Op, Value, MAX_COLLECTION_ITEMS, MAX_RUNTIME_STATE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_STACK_VALUE_BYTES, MAX_VALUE_BYTES, MAX_VALUE_DEPTH};
 mod contract_state;
 mod contract_runtime;
 mod contract_gas;
@@ -281,6 +281,7 @@ enum BlockFrame {
 fn split_arguments(input: &str) -> Vec<&str> {
     let mut args = Vec::new();
     let mut depth = 0i32;
+    let mut bracket_depth = 0i32;
     let mut start = 0usize;
     let mut in_string = false;
     let mut escaped = false;
@@ -299,7 +300,9 @@ fn split_arguments(input: &str) -> Vec<&str> {
             '"' => in_string = true,
             '(' => depth += 1,
             ')' => depth -= 1,
-            ',' if depth == 0 => { args.push(input[start..i].trim()); start = i + ch.len_utf8(); }
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
+            ',' if depth == 0 && bracket_depth == 0 => { args.push(input[start..i].trim()); start = i + ch.len_utf8(); }
             _ => {}
         }
     }
@@ -328,7 +331,9 @@ fn append_code(code: &mut Vec<Op>, mut appended: Vec<Op>) -> Result<(), String> 
 
 fn with_source_column(raw_line: &str, trimmed_line: &str, expression: &str, error: String) -> String {
     let indentation = raw_line.chars().take_while(|c| c.is_whitespace()).count();
-    let expression_offset = trimmed_line.find(expression)
+    // Prefer the final occurrence: diagnostics are most often attached to an RHS
+    // that repeats an identifier already present on the LHS.
+    let expression_offset = trimmed_line.rfind(expression)
         .map(|prefix| trimmed_line[..prefix].chars().count())
         .unwrap_or(0);
     if let Some(rest) = error.strip_prefix("column ") {
@@ -341,6 +346,63 @@ fn with_source_column(raw_line: &str, trimmed_line: &str, expression: &str, erro
     error
 }
 
+fn strip_line_comment(line: &str) -> &str {
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if in_string {
+            if escaped { escaped = false; }
+            else if ch == '\\' { escaped = true; }
+            else if ch == '"' { in_string = false; }
+            continue;
+        }
+        if ch == '"' { in_string = true; }
+        else if ch == '#' { return &line[..index]; }
+    }
+    line
+}
+
+fn extract_index_path(left: &str) -> Result<(&str, Vec<&str>), String> {
+    let open = left.find('[').ok_or_else(|| "indexed assignment is missing '['".to_string())?;
+    let name = left[..open].trim();
+    let bytes = left.as_bytes();
+    let mut cursor = open;
+    let mut expressions = Vec::new();
+    while cursor < bytes.len() {
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() { cursor += 1; }
+        if cursor == bytes.len() { break; }
+        if bytes[cursor] != b'[' { return Err("unexpected text after indexed assignment".into()); }
+        cursor += 1;
+        let start = cursor;
+        let mut depth = 1usize;
+        let mut in_string = false;
+        let mut escaped = false;
+        while cursor < bytes.len() {
+            let byte = bytes[cursor];
+            if in_string {
+                if escaped { escaped = false; }
+                else if byte == b'\\' { escaped = true; }
+                else if byte == b'"' { in_string = false; }
+            } else {
+                match byte {
+                    b'"' => in_string = true,
+                    b'[' => depth += 1,
+                    b']' => { depth -= 1; if depth == 0 { break; } }
+                    _ => {}
+                }
+            }
+            cursor += 1;
+        }
+        if depth != 0 { return Err("expected ']' in indexed assignment".into()); }
+        let expression = left.get(start..cursor).ok_or_else(|| "invalid index boundaries".to_string())?.trim();
+        if expression.is_empty() { return Err("empty index expression".into()); }
+        expressions.push(expression);
+        cursor += 1;
+    }
+    if expressions.is_empty() { return Err("indexed assignment requires at least one index".into()); }
+    Ok((name, expressions))
+}
+
 fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     if source.len() > MAX_SOURCE_BYTES {
         return Err(format!("source exceeds safety limit ({MAX_SOURCE_BYTES} bytes)"));
@@ -349,7 +411,7 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
     let mut blocks: Vec<BlockFrame> = Vec::new();
 
     for (line_no, raw) in source.lines().enumerate() {
-        let line = raw.trim().trim_end_matches(';').trim();
+        let line = strip_line_comment(raw).trim().trim_end_matches(';').trim();
         if line.is_empty() || line.starts_with('#') { continue; }
         if code.len() >= MAX_BYTECODE_INSTRUCTIONS {
             return Err(format!("line {}: compiled instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})", line_no + 1));
@@ -488,33 +550,28 @@ fn compile_core(source: &str) -> Result<Vec<Op>, String> {
             continue;
         }
 
-        if !line.starts_with("define ") {
+        if !line.starts_with("define ") && !line.starts_with("show ") && !line.starts_with("print(") {
             if let Some((left, right)) = line.split_once(":=") {
                 let left = left.trim();
                 if left.contains('[') {
-                    let (name, index_part) = left.split_once('[').ok_or_else(|| format!("line {}: invalid indexed assignment", line_no + 1))?;
-                    let index_expr = index_part.strip_suffix(']').ok_or_else(|| format!("line {}: expected ']' in indexed assignment", line_no + 1))?;
-                    if index_expr.contains('[') || index_expr.contains(']') || !valid_identifier(name.trim()) {
-                        return Err(format!("line {}: indexed assignment currently requires a variable and one index, such as items[0] := value", line_no + 1));
+                    let (name, indexes) = extract_index_path(left).map_err(|e| format!("line {}: {e}", line_no + 1))?;
+                    if !valid_identifier(name) { return Err(format!("line {}: indexed assignment requires a variable name before the index", line_no + 1)); }
+                    if indexes.len() > MAX_CALL_ARGUMENTS { return Err(format!("line {}: indexed assignment path exceeds safety limit ({MAX_CALL_ARGUMENTS})", line_no + 1)); }
+                    if right.trim().is_empty() { return Err(format!("line {}: missing value in indexed assignment", line_no + 1)); }
+                    for index_expr in &indexes {
+                        let (tokens, columns) = lex_with_columns(index_expr).map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr, e)))?;
+                        let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
+                        parser.expression().map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr, format!("column {}: {e}", parser.error_column()))))?;
+                        if parser.peek() != &Token::End { return Err(format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr, format!("column {}: unexpected token in index {:?}", parser.current_column(), parser.peek())))); }
+                        append_code(&mut code, parser.code)?;
                     }
-                    if right.trim().is_empty() {
-                        return Err(format!("line {}: missing value in indexed assignment", line_no + 1));
-                    }
-                    let (index_tokens, index_columns) = lex_with_columns(index_expr.trim()).map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), e)))?;
-                    let mut index_parser = Parser { tokens: index_tokens, columns: index_columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
-                    index_parser.expression().map_err(|e| format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), format!("column {}: {e}", index_parser.error_column()))))?;
-                    if index_parser.peek() != &Token::End {
-                        return Err(format!("line {}: invalid index: {}", line_no + 1, with_source_column(raw, line, index_expr.trim(), format!("column {}: unexpected token in index {:?}", index_parser.current_column(), index_parser.peek()))));
-                    }
-                    append_code(&mut code, index_parser.code)?;
-                    let (value_tokens, value_columns) = lex_with_columns(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
-                    let mut value_parser = Parser { tokens: value_tokens, columns: value_columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
-                    value_parser.expression().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: {e}", value_parser.error_column()))))?;
-                    if value_parser.peek() != &Token::End {
-                        return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: unexpected token in indexed assignment {:?}", value_parser.current_column(), value_parser.peek()))));
-                    }
-                    append_code(&mut code, value_parser.code)?;
-                    code.push(Op::SetIndex(name.trim().to_string()));
+                    let (tokens, columns) = lex_with_columns(right.trim()).map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), e)))?;
+                    let mut parser = Parser { tokens, columns, pos: 0, nesting_depth: 0, error_column_override: None, code: Vec::new() };
+                    parser.expression().map_err(|e| format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: {e}", parser.error_column()))))?;
+                    if parser.peek() != &Token::End { return Err(format!("line {}: {}", line_no + 1, with_source_column(raw, line, right.trim(), format!("column {}: unexpected token in indexed assignment {:?}", parser.current_column(), parser.peek())))); }
+                    append_code(&mut code, parser.code)?;
+                    if indexes.len() == 1 { code.push(Op::SetIndex(name.to_string())); }
+                    else { code.push(Op::SetIndexPath(name.to_string(), indexes.len())); }
                     continue;
                 }
             }
@@ -1011,121 +1068,10 @@ fn compile_with_layout(source: &str) -> Result<(Vec<Op>, bytecode_v2::ProgramLay
 
 fn is_builtin(name: &str) -> bool { bytecode_v2::is_supported_builtin(name) }
 
-fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
-    if !items.contains_key(key) && items.len() >= MAX_COLLECTION_ITEMS {
-        return Err(format!("map exceeds safety limit ({MAX_COLLECTION_ITEMS} items)"));
-    }
-    Ok(())
-}
-
-fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Result<(), String> {
-    match (collection, index) {
-        (Value::Array(items), Value::Int(index)) if index >= 0 => {
-            let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
-            *slot = value;
-            Ok(())
-        }
-        (Value::Array(_), Value::Int(index)) => Err(format!("array index {index} out of bounds")),
-        (Value::Array(_), _) => Err("type error: array index must be an integer".into()),
-        (Value::Map(items), Value::Str(key)) => {
-            check_map_capacity(items, &key)?;
-            items.insert(key, value);
-            Ok(())
-        }
-        (Value::Map(_), _) => Err("type error: map index must be a string".into()),
-        _ => Err("type error: indexed assignment expects an array or map".into()),
-    }
-}
-
-fn value_to_string(value: &Value) -> String {
-    match value {
-        Value::Int(n) => n.to_string(),
-        Value::Str(s) => s.clone(),
-        Value::Bool(b) => b.to_string(),
-        Value::Array(items) => format!("[{}]", items.iter().map(value_to_string).collect::<Vec<_>>().join(", ")),
-        Value::Map(items) => format!("{{{}}}", items.iter().map(|(k, v)| format!("\"{}\": {}", k, value_to_string(v))).collect::<Vec<_>>().join(", ")),
-    }
-}
-
 fn builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
     let value = builtin_unchecked(name, args)?;
     ensure_value_depth(&value)?;
     Ok(value)
-}
-
-fn value_depth(value: &Value) -> usize {
-    match value {
-        Value::Int(_) | Value::Str(_) | Value::Bool(_) => 0,
-        Value::Array(items) => 1 + items.iter().map(value_depth).max().unwrap_or(0),
-        Value::Map(items) => 1 + items.values().map(value_depth).max().unwrap_or(0),
-    }
-}
-
-fn value_size(value: &Value) -> usize {
-    match value {
-        Value::Int(_) => std::mem::size_of::<i64>(),
-        Value::Bool(_) => std::mem::size_of::<bool>(),
-        Value::Str(text) => text.len(),
-        Value::Array(items) => items.iter().map(value_size).fold(
-            items.len().saturating_mul(std::mem::size_of::<Value>()),
-            |total, size| total.saturating_add(size),
-        ),
-        Value::Map(items) => items.iter().map(|(key, value)| key.len().saturating_add(value_size(value))).fold(
-            items.len().saturating_mul(64),
-            |total, size| total.saturating_add(size),
-        ),
-    }
-}
-
-fn ensure_value_depth(value: &Value) -> Result<(), String> {
-    let depth = value_depth(value);
-    if depth > MAX_VALUE_DEPTH {
-        return Err(format!("value nesting exceeds safety limit ({MAX_VALUE_DEPTH} levels)"));
-    }
-    let size = value_size(value);
-    if size > MAX_VALUE_BYTES {
-        return Err(format!("value exceeds estimated memory safety budget ({MAX_VALUE_BYTES} bytes)"));
-    }
-    Ok(())
-}
-
-fn push_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, value: Value) -> Result<(), String> {
-    let size = value_size(&value);
-    let next_size = stack_bytes.saturating_add(size);
-    if next_size > MAX_STACK_VALUE_BYTES {
-        return Err(format!("operand stack values exceed safety limit ({MAX_STACK_VALUE_BYTES} bytes)"));
-    }
-    stack.push(value);
-    *stack_bytes = next_size;
-    Ok(())
-}
-
-fn pop_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, underflow: &str) -> Result<Value, String> {
-    let value = stack.pop().ok_or_else(|| underflow.to_string())?;
-    *stack_bytes = stack_bytes.saturating_sub(value_size(&value));
-    Ok(value)
-}
-
-fn binding_size(name: &str, value: &Value) -> usize {
-    name.len().saturating_add(64).saturating_add(value_size(value))
-}
-
-fn binding_map_size(bindings: &HashMap<String, Value>) -> usize {
-    bindings.iter().map(|(name, value)| binding_size(name, value))
-        .fold(0usize, |total, size| total.saturating_add(size))
-}
-
-fn runtime_state_bytes_after_sizes(current: usize, old_size: usize, new_size: usize) -> Result<usize, String> {
-    let next = current.saturating_sub(old_size).saturating_add(new_size);
-    if next > MAX_RUNTIME_STATE_BYTES {
-        return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
-    }
-    Ok(next)
-}
-
-fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
-    let old_size = old.map(|value| binding_size(name, value)).unwrap_or(0);
-    runtime_state_bytes_after_sizes(current, old_size, binding_size(name, new))
 }
 
 fn builtin_unchecked(name: &str, args: Vec<Value>) -> Result<Value, String> {
@@ -1655,247 +1601,12 @@ where
 fn run_with_output_metered<F>(
     code: &[Op],
     output: &mut F,
-    mut gas_meter: Option<&mut contract_gas::GasMeter>,
+    gas_meter: Option<&mut contract_gas::GasMeter>,
 ) -> Result<(), String>
 where
     F: FnMut(String),
 {
-    if let Some(meter) = gas_meter.as_deref_mut() {
-        meter.charge(contract_gas::BASE_EXECUTION_GAS)?;
-    }
-    let mut stack: Vec<Value> = Vec::new();
-    let mut stack_value_bytes = 0usize;
-    let mut runtime_state_bytes = 0usize;
-    let mut vars: HashMap<String, Value> = HashMap::new();
-    let mut globals: HashMap<String, Value> = HashMap::new();
-    let mut pc = 0usize;
-    let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
-    let mut steps = 0usize;
-    const MAX_STEPS: usize = 1_000_000;
-    const MAX_CALL_DEPTH: usize = 1_024;
-    if code.len() > MAX_BYTECODE_INSTRUCTIONS {
-        return Err(format!("program instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
-    }
-    while pc < code.len() {
-        steps += 1;
-        if steps > MAX_STEPS {
-            return Err("execution exceeded safety limit (1,000,000 instructions)".into());
-        }
-        if let Some(meter) = gas_meter.as_deref_mut() {
-            let cost = match code.get(pc) {
-                Some(Op::Load(_)) => contract_gas::LOCAL_READ_GAS,
-                Some(Op::Store(_) | Op::Declare(_) | Op::SetIndex(_)) => contract_gas::LOCAL_WRITE_GAS,
-                Some(Op::JumpIfFalse(_) | Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_)) => contract_gas::CONDITIONAL_BRANCH_GAS,
-                Some(Op::Call(_, _) | Op::CallTarget { .. }) => contract_gas::FUNCTION_CALL_GAS,
-                Some(Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Neg | Op::Not | Op::And | Op::Or
-                    | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge) => contract_gas::INTEGER_OPERATION_GAS,
-                Some(_) => 1,
-                None => return Err("instruction pointer out of range".into()),
-            };
-            meter.charge(cost)?;
-        }
-        match &code[pc] {
-            Op::Push(n) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Int(*n))?,
-            Op::PushString(value) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Str(value.clone()))?,
-            Op::PushBool(value) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Bool(*value))?,
-            Op::Load(name) => { let value = vars.get(name).or_else(|| globals.get(name)).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?; push_stack_value(&mut stack, &mut stack_value_bytes, value)?; },
-            Op::Store(name) => {
-                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                if let Some(old) = vars.get(name) {
-                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old), &value)?;
-                    vars.insert(name.clone(), value);
-                    runtime_state_bytes = next;
-                } else if let Some(old) = globals.get(name) {
-                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old), &value)?;
-                    globals.insert(name.clone(), value);
-                    runtime_state_bytes = next;
-                } else {
-                    return Err(format!("assignment to undefined variable '{name}'; use 'define' first"));
-                }
-            }
-            Op::Declare(name) => {
-                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                if call_stack.is_empty() {
-                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, globals.get(name), &value)?;
-                    globals.insert(name.clone(), value);
-                    runtime_state_bytes = next;
-                } else {
-                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, vars.get(name), &value)?;
-                    vars.insert(name.clone(), value);
-                    runtime_state_bytes = next;
-                }
-            }
-            Op::Print => match pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")? {
-                Value::Int(n) => output(format!("{n}")),
-                Value::Str(value) => output(value),
-                Value::Bool(value) => output(format!("{value}")),
-                value @ (Value::Array(_) | Value::Map(_)) => output(value_to_string(&value)),
-            },
-            Op::SetIndex(name) => {
-                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading indexed value")?;
-                let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
-                let old_binding = vars.get(name).or_else(|| globals.get(name))
-                    .ok_or_else(|| format!("undefined variable '{name}'"))?;
-                let old_binding_size = binding_size(name, old_binding);
-                if vars.contains_key(name) {
-                    let collection = vars.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
-                    set_indexed_value(collection, index, value)?;
-                } else {
-                    let collection = globals.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
-                    set_indexed_value(collection, index, value)?;
-                }
-                let updated = vars.get(name).or_else(|| globals.get(name))
-                    .ok_or_else(|| format!("undefined variable '{name}'"))?;
-                ensure_value_depth(updated)?;
-                let next = runtime_state_bytes_after_sizes(runtime_state_bytes, old_binding_size, binding_size(name, updated))?;
-                runtime_state_bytes = next;
-            }
-            Op::Index => {
-                let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
-                let collection = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection")?;
-                match (collection, index) {
-                    (Value::Array(items), Value::Int(index)) if index >= 0 => push_stack_value(&mut stack, &mut stack_value_bytes, items.get(index as usize).cloned().ok_or_else(|| format!("array index {index} out of bounds"))?)?,
-                    (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
-                    (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
-                    (Value::Map(items), Value::Str(key)) => push_stack_value(&mut stack, &mut stack_value_bytes, items.get(&key).cloned().ok_or_else(|| format!("map key '{key}' not found"))?)?,
-                    (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
-                    _ => return Err("type error: indexing expects an array or map".into()),
-                }
-            }
-            Op::Neg => {
-                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                match value {
-                    Value::Int(n) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Int(n.checked_neg().ok_or("integer overflow")?))?,
-                    Value::Bool(_) | Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: unary '-' expects an integer".into()),
-                }
-            }
-            Op::Not => {
-                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                match value {
-                    Value::Bool(value) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Bool(!value))?,
-                    Value::Int(_) | Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: 'not' expects a boolean".into()),
-                }
-            }
-            Op::JumpIfFalse(target) => {
-                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                let is_false = match value {
-                    Value::Bool(value) => !value,
-                    Value::Int(n) => n == 0,
-                    Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: condition expects a boolean or integer".into()),
-                };
-                if is_false { pc = *target; continue; }
-            }
-            Op::JumpIfFalseKeep(target) => match stack.last() {
-                Some(Value::Bool(false)) => { pc = *target; continue; }
-                Some(Value::Bool(true)) => {},
-                Some(_) => return Err("type error: 'and' expects booleans".into()),
-                None => return Err("VM stack underflow".into()),
-            },
-            Op::JumpIfTrueKeep(target) => match stack.last() {
-                Some(Value::Bool(true)) => { pc = *target; continue; }
-                Some(Value::Bool(false)) => {},
-                Some(_) => return Err("type error: 'or' expects booleans".into()),
-                None => return Err("VM stack underflow".into()),
-            },
-            Op::Jump(target) => { pc = *target; continue; }
-            Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
-            Op::Builtin(name, arg_count) => {
-                if *arg_count > MAX_CALL_ARGUMENTS {
-                    return Err(format!("builtin argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
-                }
-                let mut values = Vec::with_capacity(*arg_count);
-                for _ in 0..*arg_count { values.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading builtin arguments")?); }
-                values.reverse();
-                push_stack_value(&mut stack, &mut stack_value_bytes, builtin(name, values)?)?;
-            }
-            Op::CallTarget { target, params, arg_count } => {
-                if *arg_count > MAX_CALL_ARGUMENTS || params.len() > MAX_CALL_ARGUMENTS {
-                    return Err(format!("function argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
-                }
-                if *arg_count != params.len() {
-                    return Err("invalid function call argument count".into());
-                }
-                if call_stack.len() >= MAX_CALL_DEPTH {
-                    return Err(format!("maximum function call depth exceeded ({MAX_CALL_DEPTH})"));
-                }
-                let mut values = Vec::with_capacity(*arg_count);
-                for _ in 0..*arg_count { values.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading function arguments")?); }
-                values.reverse();
-                let added_bytes = params.iter().zip(values.iter()).map(|(name, value)| binding_size(name, value))
-                    .fold(0usize, |total, size| total.saturating_add(size));
-                let next_state_bytes = runtime_state_bytes.saturating_add(added_bytes);
-                if next_state_bytes > MAX_RUNTIME_STATE_BYTES {
-                    return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
-                }
-                let mut local_vars = HashMap::new();
-                for (name, value) in params.iter().zip(values) { local_vars.insert(name.clone(), value); }
-                let caller_vars = std::mem::replace(&mut vars, local_vars);
-                call_stack.push((pc + 1, caller_vars));
-                runtime_state_bytes = next_state_bytes;
-                pc = *target;
-                continue;
-            }
-            Op::Return => {
-                let local_bytes = binding_map_size(&vars);
-                let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
-                runtime_state_bytes = runtime_state_bytes.saturating_sub(local_bytes);
-                vars = caller_vars;
-                pc = return_pc;
-                continue;
-            }
-            Op::ReturnValue => {
-                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow in return expression")?;
-                let local_bytes = binding_map_size(&vars);
-                let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
-                runtime_state_bytes = runtime_state_bytes.saturating_sub(local_bytes);
-                vars = caller_vars;
-                push_stack_value(&mut stack, &mut stack_value_bytes, value)?;
-                pc = return_pc;
-                continue;
-            }
-            Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge | Op::And | Op::Or => {
-                let b = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                let a = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
-                let value = match (&code[pc], a, b) {
-                    (Op::Add, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_add(b).ok_or("integer overflow")?),
-                    (Op::Add, Value::Str(a), Value::Str(b)) => {
-                        let combined_len = a.len().checked_add(b.len()).ok_or("string length overflow")?;
-                        if combined_len > MAX_BYTECODE_STRING_BYTES {
-                            return Err(format!("string exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
-                        }
-                        Value::Str(format!("{a}{b}"))
-                    },
-                    (Op::Add, Value::Str(_), Value::Int(_)) | (Op::Add, Value::Int(_), Value::Str(_)) => return Err("type error: '+' requires two integers or two strings".into()),
-                    (Op::Sub, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_sub(b).ok_or("integer overflow")?),
-                    (Op::Mul, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_mul(b).ok_or("integer overflow")?),
-                    (Op::Div, Value::Int(_), Value::Int(0)) => return Err("division by zero".into()),
-                    (Op::Div, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_div(b).ok_or("integer overflow")?),
-                    (Op::Eq, a, b) => Value::Bool(a == b),
-                    (Op::Ne, a, b) => Value::Bool(a != b),
-                    (Op::And, Value::Bool(a), Value::Bool(b)) => Value::Bool(a && b),
-                    (Op::Or, Value::Bool(a), Value::Bool(b)) => Value::Bool(a || b),
-                    (Op::And, _, _) => return Err("type error: 'and' expects booleans".into()),
-                    (Op::Or, _, _) => return Err("type error: 'or' expects booleans".into()),
-                    (Op::Lt, Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
-                    (Op::Le, Value::Int(a), Value::Int(b)) => Value::Bool(a <= b),
-                    (Op::Gt, Value::Int(a), Value::Int(b)) => Value::Bool(a > b),
-                    (Op::Ge, Value::Int(a), Value::Int(b)) => Value::Bool(a >= b),
-                    (Op::Add, _, _) => return Err("type error: '+' expects integers".into()),
-                    (Op::Sub, _, _) => return Err("type error: '-' expects integers".into()),
-                    (Op::Mul, _, _) => return Err("type error: '*' expects integers".into()),
-                    (Op::Div, _, _) => return Err("type error: '/' expects integers".into()),
-                    (Op::Lt | Op::Le | Op::Gt | Op::Ge, _, _) => return Err("type error: ordered comparisons expect integers".into()),
-                    _ => unreachable!(),
-                };
-                push_stack_value(&mut stack, &mut stack_value_bytes, value)?;
-            }
-        }
-        if stack.len() > MAX_STACK_VALUES {
-            return Err(format!("operand stack exceeds safety limit ({MAX_STACK_VALUES} values)"));
-        }
-        pc += 1;
-    }
-    Ok(())
+    qvm::run_with_output_metered(code, output, builtin, gas_meter)
 }
 
 
@@ -1904,16 +1615,10 @@ const LEGACY_BYTECODE_HEADER: &str = "ZENVORA_BYTECODE 1";
 const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SOURCE_TOKENS: usize = 1_000_000;
 const MAX_PARSE_NESTING: usize = 256;
-const MAX_VALUE_DEPTH: usize = 256;
-const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
-const MAX_STACK_VALUE_BYTES: usize = 16 * 1024 * 1024;
-const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
-const MAX_COLLECTION_ITEMS: usize = 100_000;
 const MAX_BYTECODE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BYTECODE_INSTRUCTIONS: usize = 1_000_000;
 const MAX_BYTECODE_STRING_BYTES: usize = 1024 * 1024;
 const MAX_CALL_ARGUMENTS: usize = 1024;
-const MAX_STACK_VALUES: usize = 65_536;
 
 fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
     let mut output = String::from(BYTECODE_HEADER);
@@ -1938,6 +1643,7 @@ fn serialize_bytecode(code: &[Op]) -> Result<String, String> {
             Op::Eq => "EQ".into(),
             Op::Index => "INDEX".into(),
             Op::SetIndex(name) => format!("SET_INDEX {name}"),
+            Op::SetIndexPath(name, count) => format!("SET_INDEX_PATH {name} {count}"),
             Op::Ne => "NE".into(),
             Op::Lt => "LT".into(),
             Op::Le => "LE".into(),
@@ -2097,6 +1803,7 @@ fn verify_bytecode(code: &[Op]) -> Result<(), String> {
                 Op::Push(_) | Op::PushString(_) | Op::PushBool(_) | Op::Load(_) => (0, 1),
                 Op::Store(_) | Op::Declare(_) | Op::Print | Op::Neg | Op::Not | Op::ReturnValue | Op::JumpIfFalse(_) => (1, -1),
                 Op::SetIndex(_) => (2, -2),
+                Op::SetIndexPath(_, count) => (count.saturating_add(1), -((count.saturating_add(1)) as isize)),
                 Op::Index => (2, -1),
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::And | Op::Or | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge => (2, -1),
                 Op::JumpIfFalseKeep(_) | Op::JumpIfTrueKeep(_) => (1, 0),
@@ -2200,6 +1907,7 @@ fn deserialize_bytecode_v2(source: &str) -> Result<Vec<Op>, String> {
             ["GE"] => Op::Ge,
             ["INDEX"] => Op::Index,
             ["SET_INDEX", name] if valid_identifier(name) => Op::SetIndex((*name).into()),
+            ["SET_INDEX_PATH", name, count] if valid_identifier(name) => { let count: usize = count.parse().map_err(|_| invalid())?; if !(2..=MAX_CALL_ARGUMENTS).contains(&count) { return Err(invalid()); } Op::SetIndexPath((*name).into(), count) },
             ["JUMP_IF_FALSE", target] => Op::JumpIfFalse(target.parse().map_err(|_| invalid())?),
             ["JUMP_IF_FALSE_KEEP", target] => Op::JumpIfFalseKeep(target.parse().map_err(|_| invalid())?),
             ["JUMP_IF_TRUE_KEEP", target] => Op::JumpIfTrueKeep(target.parse().map_err(|_| invalid())?),
@@ -2278,6 +1986,7 @@ fn deserialize_bytecode(source: &str) -> Result<Vec<Op>, String> {
             "EQ" if parts.len() == 1 => Op::Eq,
             "INDEX" if parts.len() == 1 => Op::Index,
             "SET_INDEX" if parts.len() == 2 && valid_identifier(parts[1]) => Op::SetIndex(parts[1].into()),
+            "SET_INDEX_PATH" if parts.len() == 3 && valid_identifier(parts[1]) => { let count: usize = parts[2].parse().map_err(|_| invalid())?; if !(2..=MAX_CALL_ARGUMENTS).contains(&count) { return Err(invalid()); } Op::SetIndexPath(parts[1].into(), count) },
             "NE" if parts.len() == 1 => Op::Ne,
             "LT" if parts.len() == 1 => Op::Lt,
             "LE" if parts.len() == 1 => Op::Le,
@@ -2421,6 +2130,7 @@ fn serialize_bytecode_v2(code: &[Op], layout: &bytecode_v2::ProgramLayout) -> Re
             Op::Ge => "GE".into(),
             Op::Index => "INDEX".into(),
             Op::SetIndex(name) if valid_identifier(name) => format!("SET_INDEX {name}"),
+            Op::SetIndexPath(name, count) if valid_identifier(name) && (2..=MAX_CALL_ARGUMENTS).contains(count) => format!("SET_INDEX_PATH {name} {count}"),
             Op::JumpIfFalse(target) => format!("JUMP_IF_FALSE {target}"),
             Op::JumpIfFalseKeep(target) => format!("JUMP_IF_FALSE_KEEP {target}"),
             Op::JumpIfTrueKeep(target) => format!("JUMP_IF_TRUE_KEEP {target}"),
@@ -4340,6 +4050,42 @@ mod tests {
         assert!(err.contains("line 1: column 11: unsupported string escape"), "{err}");
         let err = compile_core("show \"नमस्ते\" + @").unwrap_err();
         assert!(err.contains("line 1: column 17: unexpected character"), "{err}");
+    }
+
+    #[test]
+    fn compiler_ignores_trailing_comments_without_stripping_string_contents() {
+        let output = execute(
+            "show \"items[0] := 5\" # assignment-like text is still a string\nif true { # trailing condition comment\nshow 7\n} # trailing block comment\n"
+        ).unwrap();
+        assert_eq!(output, vec!["items[0] := 5", "7"]);
+    }
+
+    #[test]
+    fn function_argument_splitter_tracks_square_bracket_nesting() {
+        assert_eq!(
+            super::split_arguments("arr[1, 2], combine(3, 4), \"a,b\""),
+            vec!["arr[1, 2]", "combine(3, 4)", "\"a,b\""]
+        );
+    }
+
+    #[test]
+    fn indexed_assignment_accepts_nested_index_expressions() {
+        let output = execute(
+            "define idx := array(1)\ndefine items := array(10, 20)\nitems[idx[0]] := 99\nshow items[1]\n"
+        ).unwrap();
+        assert_eq!(output, vec!["99"]);
+    }
+
+    #[test]
+    fn indexed_assignment_updates_multiple_nested_array_levels() {
+        let output = execute("define matrix := array(array(1, 2), array(3, 4))\nmatrix[0][1] := 5\nshow matrix[0][1]\n").unwrap();
+        assert_eq!(output, vec!["5"]);
+    }
+
+    #[test]
+    fn rhs_error_column_uses_the_rhs_occurrence_of_repeated_identifier() {
+        let err = compile_core("x := x + @").unwrap_err();
+        assert!(err.contains("line 1: column 10: unexpected character"), "{err}");
     }
 
     #[test]

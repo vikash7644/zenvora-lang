@@ -1,15 +1,22 @@
 //! QORVYNT Virtual Machine artifact boundary.
 //!
-//! This module owns the QVM-specific compile/load/run entry points. The current
-//! instruction executor is still hosted by the Rust reference CLI; moving this
-//! boundary out first gives the runtime a stable seam for later extraction.
+//! This module owns the QVM-specific compile/load/run entry points and bytecode
+//! executor. CLI callers delegate execution here through a narrow runtime API.
 
 mod bytecode;
+mod gas;
 mod value;
 pub(crate) use bytecode::Op;
-pub(crate) use value::Value;
+pub(crate) use gas::instruction_gas_cost;
+pub(crate) use value::{check_map_capacity, set_indexed_value, set_indexed_path, binding_size, binding_map_size, runtime_state_bytes_after_sizes, runtime_state_bytes_after_update, ensure_value_depth, pop_stack_value, push_stack_value, value_size, value_to_string, Value, MAX_STACK_VALUE_BYTES, MAX_STACK_VALUES, MAX_VM_CALL_DEPTH, MAX_VM_EXECUTION_STEPS, MAX_VALUE_BYTES, MAX_VALUE_DEPTH, MAX_RUNTIME_STATE_BYTES, MAX_COLLECTION_ITEMS};
 
-use super::{deserialize_bytecode_v2, read_bytecode_source, run, write_bytecode_v2};
+use std::collections::HashMap;
+
+use super::{
+    contract_gas, deserialize_bytecode_v2, read_bytecode_source,
+    write_bytecode_v2, MAX_BYTECODE_INSTRUCTIONS, MAX_BYTECODE_STRING_BYTES,
+    MAX_CALL_ARGUMENTS,
+};
 
 /// Compile QORVYNT source into a verified Bytecode v2 QVM artifact.
 pub(super) fn compile(source_path: &str, output_path: &str) -> Result<(), String> {
@@ -28,8 +35,293 @@ pub(super) fn load(path: &str) -> Result<Vec<Op>, String> {
     deserialize_bytecode_v2(&serialized)
 }
 
-/// Execute a previously verified QVM artifact using the current host executor.
+/// Execute a previously verified QVM artifact through the QVM executor.
 pub(super) fn execute(path: &str) -> Result<(), String> {
     let code = load(path)?;
-    run(&code)
+    run_with_output_metered(&code, &mut |line| println!("{line}"), super::builtin, None)
+}
+
+
+/// Execute verified bytecode in the QORVYNT virtual machine.
+pub(super) fn run_with_output_metered<F>(
+    code: &[Op],
+    output: &mut F,
+    builtin_fn: fn(&str, Vec<Value>) -> Result<Value, String>,
+    mut gas_meter: Option<&mut contract_gas::GasMeter>,
+) -> Result<(), String>
+where
+    F: FnMut(String),
+{
+    if let Some(meter) = gas_meter.as_deref_mut() {
+        meter.charge(contract_gas::BASE_EXECUTION_GAS)?;
+    }
+    let mut stack: Vec<Value> = Vec::new();
+    let mut stack_value_bytes = 0usize;
+    let mut runtime_state_bytes = 0usize;
+    let mut vars: HashMap<String, Value> = HashMap::new();
+    let mut globals: HashMap<String, Value> = HashMap::new();
+    let mut pc = 0usize;
+    let mut call_stack: Vec<(usize, HashMap<String, Value>)> = Vec::new();
+    let mut steps = 0usize;
+    if code.len() > MAX_BYTECODE_INSTRUCTIONS {
+        return Err(format!("program instruction count exceeds safety limit ({MAX_BYTECODE_INSTRUCTIONS})"));
+    }
+    while pc < code.len() {
+        steps += 1;
+        if steps > MAX_VM_EXECUTION_STEPS {
+            return Err("execution exceeded safety limit (1,000,000 instructions)".into());
+        }
+        if let Some(meter) = gas_meter.as_deref_mut() {
+            let cost = gas::instruction_gas_cost(code.get(pc))?;
+            meter.charge(cost)?;
+        }
+        match &code[pc] {
+            Op::Push(n) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Int(*n))?,
+            Op::PushString(value) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Str(value.clone()))?,
+            Op::PushBool(value) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Bool(*value))?,
+            Op::Load(name) => { let value = vars.get(name).or_else(|| globals.get(name)).cloned().ok_or_else(|| format!("undefined variable '{name}'"))?; push_stack_value(&mut stack, &mut stack_value_bytes, value)?; },
+            Op::Store(name) => {
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
+                if let Some(old) = vars.get(name) {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old), &value)?;
+                    vars.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                } else if let Some(old) = globals.get(name) {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, Some(old), &value)?;
+                    globals.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                } else {
+                    return Err(format!("assignment to undefined variable '{name}'; use 'define' first"));
+                }
+            }
+            Op::Declare(name) => {
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
+                if call_stack.is_empty() {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, globals.get(name), &value)?;
+                    globals.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                } else {
+                    let next = runtime_state_bytes_after_update(runtime_state_bytes, name, vars.get(name), &value)?;
+                    vars.insert(name.clone(), value);
+                    runtime_state_bytes = next;
+                }
+            }
+            Op::Print => match pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")? {
+                Value::Int(n) => output(format!("{n}")),
+                Value::Str(value) => output(value),
+                Value::Bool(value) => output(format!("{value}")),
+                value @ (Value::Array(_) | Value::Map(_)) => output(value_to_string(&value)),
+            },
+            Op::SetIndex(name) => {
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading indexed value")?;
+                let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
+                let old_binding = vars.get(name).or_else(|| globals.get(name))
+                    .ok_or_else(|| format!("undefined variable '{name}'"))?;
+                let old_binding_size = binding_size(name, old_binding);
+                if vars.contains_key(name) {
+                    let collection = vars.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_value(collection, index, value)?;
+                } else {
+                    let collection = globals.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_value(collection, index, value)?;
+                }
+                let updated = vars.get(name).or_else(|| globals.get(name))
+                    .ok_or_else(|| format!("undefined variable '{name}'"))?;
+                ensure_value_depth(updated)?;
+                let next = runtime_state_bytes_after_sizes(runtime_state_bytes, old_binding_size, binding_size(name, updated))?;
+                runtime_state_bytes = next;
+            }
+            Op::SetIndexPath(name, count) => {
+                if *count < 2 || *count > MAX_CALL_ARGUMENTS { return Err("invalid indexed assignment path length".into()); }
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading indexed value")?;
+                let mut indices = Vec::with_capacity(*count);
+                for _ in 0..*count { indices.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?); }
+                indices.reverse();
+                let old_binding = vars.get(name).or_else(|| globals.get(name)).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                let old_binding_size = binding_size(name, old_binding);
+                if vars.contains_key(name) {
+                    let collection = vars.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_path(collection, &indices, value)?;
+                } else {
+                    let collection = globals.get_mut(name).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                    set_indexed_path(collection, &indices, value)?;
+                }
+                let updated = vars.get(name).or_else(|| globals.get(name)).ok_or_else(|| format!("undefined variable '{name}'"))?;
+                ensure_value_depth(updated)?;
+                runtime_state_bytes = runtime_state_bytes_after_sizes(runtime_state_bytes, old_binding_size, binding_size(name, updated))?;
+            }
+            Op::Index => {
+                let index = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection index")?;
+                let collection = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading collection")?;
+                match (collection, index) {
+                    (Value::Array(items), Value::Int(index)) if index >= 0 => push_stack_value(&mut stack, &mut stack_value_bytes, items.get(index as usize).cloned().ok_or_else(|| format!("array index {index} out of bounds"))?)?,
+                    (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
+                    (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
+                    (Value::Map(items), Value::Str(key)) => push_stack_value(&mut stack, &mut stack_value_bytes, items.get(&key).cloned().ok_or_else(|| format!("map key '{key}' not found"))?)?,
+                    (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
+                    _ => return Err("type error: indexing expects an array or map".into()),
+                }
+            }
+            Op::Neg => {
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
+                match value {
+                    Value::Int(n) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Int(n.checked_neg().ok_or("integer overflow")?))?,
+                    Value::Bool(_) | Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: unary '-' expects an integer".into()),
+                }
+            }
+            Op::Not => {
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
+                match value {
+                    Value::Bool(value) => push_stack_value(&mut stack, &mut stack_value_bytes, Value::Bool(!value))?,
+                    Value::Int(_) | Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: 'not' expects a boolean".into()),
+                }
+            }
+            Op::JumpIfFalse(target) => {
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
+                let is_false = match value {
+                    Value::Bool(value) => !value,
+                    Value::Int(n) => n == 0,
+                    Value::Str(_) | Value::Array(_) | Value::Map(_) => return Err("type error: condition expects a boolean or integer".into()),
+                };
+                if is_false { pc = *target; continue; }
+            }
+            Op::JumpIfFalseKeep(target) => match stack.last() {
+                Some(Value::Bool(false)) => { pc = *target; continue; }
+                Some(Value::Bool(true)) => {},
+                Some(_) => return Err("type error: 'and' expects booleans".into()),
+                None => return Err("VM stack underflow".into()),
+            },
+            Op::JumpIfTrueKeep(target) => match stack.last() {
+                Some(Value::Bool(true)) => { pc = *target; continue; }
+                Some(Value::Bool(false)) => {},
+                Some(_) => return Err("type error: 'or' expects booleans".into()),
+                None => return Err("VM stack underflow".into()),
+            },
+            Op::Jump(target) => { pc = *target; continue; }
+            Op::Call(name, _) => return Err(format!("unresolved function call '{name}'")),
+            Op::Builtin(name, arg_count) => {
+                if *arg_count > MAX_CALL_ARGUMENTS {
+                    return Err(format!("builtin argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
+                }
+                let mut values = Vec::with_capacity(*arg_count);
+                for _ in 0..*arg_count { values.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading builtin arguments")?); }
+                values.reverse();
+                push_stack_value(&mut stack, &mut stack_value_bytes, builtin_fn(name, values)?)?;
+            }
+            Op::CallTarget { target, params, arg_count } => {
+                if *arg_count > MAX_CALL_ARGUMENTS || params.len() > MAX_CALL_ARGUMENTS {
+                    return Err(format!("function argument count exceeds safety limit ({MAX_CALL_ARGUMENTS})"));
+                }
+                if *arg_count != params.len() {
+                    return Err("invalid function call argument count".into());
+                }
+                if call_stack.len() >= MAX_VM_CALL_DEPTH {
+                    return Err(format!("maximum function call depth exceeded ({MAX_VM_CALL_DEPTH})"));
+                }
+                let mut values = Vec::with_capacity(*arg_count);
+                for _ in 0..*arg_count { values.push(pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow while reading function arguments")?); }
+                values.reverse();
+                let added_bytes = params.iter().zip(values.iter()).map(|(name, value)| binding_size(name, value))
+                    .fold(0usize, |total, size| total.saturating_add(size));
+                let next_state_bytes = runtime_state_bytes.saturating_add(added_bytes);
+                if next_state_bytes > MAX_RUNTIME_STATE_BYTES {
+                    return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
+                }
+                let mut local_vars = HashMap::new();
+                for (name, value) in params.iter().zip(values) { local_vars.insert(name.clone(), value); }
+                let caller_vars = std::mem::replace(&mut vars, local_vars);
+                call_stack.push((pc + 1, caller_vars));
+                runtime_state_bytes = next_state_bytes;
+                pc = *target;
+                continue;
+            }
+            Op::Return => {
+                let local_bytes = binding_map_size(&vars);
+                let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
+                runtime_state_bytes = runtime_state_bytes.saturating_sub(local_bytes);
+                vars = caller_vars;
+                pc = return_pc;
+                continue;
+            }
+            Op::ReturnValue => {
+                let value = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow in return expression")?;
+                let local_bytes = binding_map_size(&vars);
+                let (return_pc, caller_vars) = call_stack.pop().ok_or("return used outside a function call")?;
+                runtime_state_bytes = runtime_state_bytes.saturating_sub(local_bytes);
+                vars = caller_vars;
+                push_stack_value(&mut stack, &mut stack_value_bytes, value)?;
+                pc = return_pc;
+                continue;
+            }
+            Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Eq | Op::Ne | Op::Lt | Op::Le | Op::Gt | Op::Ge | Op::And | Op::Or => {
+                let b = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
+                let a = pop_stack_value(&mut stack, &mut stack_value_bytes, "VM stack underflow")?;
+                let value = match (&code[pc], a, b) {
+                    (Op::Add, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_add(b).ok_or("integer overflow")?),
+                    (Op::Add, Value::Str(a), Value::Str(b)) => {
+                        let combined_len = a.len().checked_add(b.len()).ok_or("string length overflow")?;
+                        if combined_len > MAX_BYTECODE_STRING_BYTES {
+                            return Err(format!("string exceeds safety limit ({} bytes)", MAX_BYTECODE_STRING_BYTES));
+                        }
+                        Value::Str(format!("{a}{b}"))
+                    },
+                    (Op::Add, Value::Str(_), Value::Int(_)) | (Op::Add, Value::Int(_), Value::Str(_)) => return Err("type error: '+' requires two integers or two strings".into()),
+                    (Op::Sub, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_sub(b).ok_or("integer overflow")?),
+                    (Op::Mul, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_mul(b).ok_or("integer overflow")?),
+                    (Op::Div, Value::Int(_), Value::Int(0)) => return Err("division by zero".into()),
+                    (Op::Div, Value::Int(a), Value::Int(b)) => Value::Int(a.checked_div(b).ok_or("integer overflow")?),
+                    (Op::Eq, a, b) => Value::Bool(a == b),
+                    (Op::Ne, a, b) => Value::Bool(a != b),
+                    (Op::And, Value::Bool(a), Value::Bool(b)) => Value::Bool(a && b),
+                    (Op::Or, Value::Bool(a), Value::Bool(b)) => Value::Bool(a || b),
+                    (Op::And, _, _) => return Err("type error: 'and' expects booleans".into()),
+                    (Op::Or, _, _) => return Err("type error: 'or' expects booleans".into()),
+                    (Op::Lt, Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
+                    (Op::Le, Value::Int(a), Value::Int(b)) => Value::Bool(a <= b),
+                    (Op::Gt, Value::Int(a), Value::Int(b)) => Value::Bool(a > b),
+                    (Op::Ge, Value::Int(a), Value::Int(b)) => Value::Bool(a >= b),
+                    (Op::Add, _, _) => return Err("type error: '+' expects integers".into()),
+                    (Op::Sub, _, _) => return Err("type error: '-' expects integers".into()),
+                    (Op::Mul, _, _) => return Err("type error: '*' expects integers".into()),
+                    (Op::Div, _, _) => return Err("type error: '/' expects integers".into()),
+                    (Op::Lt | Op::Le | Op::Gt | Op::Ge, _, _) => return Err("type error: ordered comparisons expect integers".into()),
+                    _ => unreachable!(),
+                };
+                push_stack_value(&mut stack, &mut stack_value_bytes, value)?;
+            }
+        }
+        if stack.len() > MAX_STACK_VALUES {
+            return Err(format!("operand stack exceeds safety limit ({MAX_STACK_VALUES} values)"));
+        }
+        pc += 1;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod host_boundary_tests {
+    use super::{run_with_output_metered, Op, Value};
+
+    fn test_builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
+        match (name, args.as_slice()) {
+            ("sum", [Value::Int(left), Value::Int(right)]) => {
+                Ok(Value::Int(left + right))
+            }
+            _ => Err(format!("unsupported test builtin '{name}'")),
+        }
+    }
+
+    #[test]
+    fn executor_uses_injected_builtin_host() {
+        let code = vec![
+            Op::Push(20),
+            Op::Push(22),
+            Op::Builtin("sum".into(), 2),
+            Op::Print,
+        ];
+        let mut output = Vec::new();
+        run_with_output_metered(&code, &mut |line| output.push(line), test_builtin, None)
+            .unwrap();
+        assert_eq!(output, vec!["42"]);
+    }
 }

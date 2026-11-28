@@ -9,3 +9,263 @@ pub(crate) enum Value {
     Array(Vec<Value>),
     Map(std::collections::BTreeMap<String, Value>),
 }
+
+
+/// Render a runtime value using the language's stable human-readable format.
+pub(crate) fn value_to_string(value: &Value) -> String {
+    match value {
+        Value::Int(n) => n.to_string(),
+        Value::Str(s) => s.clone(),
+        Value::Bool(b) => b.to_string(),
+        Value::Array(items) => format!("[{}]", items.iter().map(value_to_string).collect::<Vec<_>>().join(", ")),
+        Value::Map(items) => format!("{{{}}}", items.iter().map(|(k, v)| format!("\"{}\": {}", k, value_to_string(v))).collect::<Vec<_>>().join(", ")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{value_to_string, Value};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn formats_scalar_values() {
+        assert_eq!(value_to_string(&Value::Int(-12)), "-12");
+        assert_eq!(value_to_string(&Value::Str("qorvynt".into())), "qorvynt");
+        assert_eq!(value_to_string(&Value::Bool(true)), "true");
+    }
+
+    #[test]
+    fn formats_nested_collections_deterministically() {
+        let mut map = BTreeMap::new();
+        map.insert("answer".to_string(), Value::Int(42));
+        map.insert("items".to_string(), Value::Array(vec![Value::Bool(false), Value::Str("ok".into())]));
+        let value = Value::Array(vec![Value::Map(map)]);
+        assert_eq!(value_to_string(&value), "[{\"answer\": 42, \"items\": [false, ok]}]");
+    }
+}
+
+
+pub(crate) const MAX_VALUE_DEPTH: usize = 256;
+pub(crate) const MAX_VALUE_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_STACK_VALUE_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_STACK_VALUES: usize = 65_536;
+pub(crate) const MAX_VM_EXECUTION_STEPS: usize = 1_000_000;
+pub(crate) const MAX_VM_CALL_DEPTH: usize = 1_024;
+
+/// Return the maximum collection nesting depth within a runtime value.
+pub(crate) fn value_depth(value: &Value) -> usize {
+    match value {
+        Value::Int(_) | Value::Str(_) | Value::Bool(_) => 0,
+        Value::Array(items) => 1 + items.iter().map(value_depth).max().unwrap_or(0),
+        Value::Map(items) => 1 + items.values().map(value_depth).max().unwrap_or(0),
+    }
+}
+
+/// Estimate the heap payload held by a runtime value.
+pub(crate) fn value_size(value: &Value) -> usize {
+    match value {
+        Value::Int(_) => std::mem::size_of::<i64>(),
+        Value::Bool(_) => std::mem::size_of::<bool>(),
+        Value::Str(text) => text.len(),
+        Value::Array(items) => items.iter().map(value_size).fold(
+            items.len().saturating_mul(std::mem::size_of::<Value>()),
+            |total, size| total.saturating_add(size),
+        ),
+        Value::Map(items) => items.iter().map(|(key, value)| key.len().saturating_add(value_size(value))).fold(
+            items.len().saturating_mul(64),
+            |total, size| total.saturating_add(size),
+        ),
+    }
+}
+
+/// Enforce nesting and estimated-size budgets before a value enters the VM.
+pub(crate) fn ensure_value_depth(value: &Value) -> Result<(), String> {
+    let depth = value_depth(value);
+    if depth > MAX_VALUE_DEPTH {
+        return Err(format!("value nesting exceeds safety limit ({MAX_VALUE_DEPTH} levels)"));
+    }
+    let size = value_size(value);
+    if size > MAX_VALUE_BYTES {
+        return Err(format!("value exceeds estimated memory safety budget ({MAX_VALUE_BYTES} bytes)"));
+    }
+    Ok(())
+}
+
+/// Push a value while accounting for the VM operand-stack memory budget.
+pub(crate) fn push_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, value: Value) -> Result<(), String> {
+    let size = value_size(&value);
+    let next_size = stack_bytes.saturating_add(size);
+    if next_size > MAX_STACK_VALUE_BYTES {
+        return Err(format!("operand stack values exceed safety limit ({MAX_STACK_VALUE_BYTES} bytes)"));
+    }
+    stack.push(value);
+    *stack_bytes = next_size;
+    Ok(())
+}
+
+/// Pop a value and release its accounted operand-stack bytes.
+pub(crate) fn pop_stack_value(stack: &mut Vec<Value>, stack_bytes: &mut usize, underflow: &str) -> Result<Value, String> {
+    let value = stack.pop().ok_or_else(|| underflow.to_string())?;
+    *stack_bytes = stack_bytes.saturating_sub(value_size(&value));
+    Ok(value)
+}
+
+
+use std::collections::HashMap;
+
+pub(crate) const MAX_RUNTIME_STATE_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_COLLECTION_ITEMS: usize = 100_000;
+
+pub(crate) fn check_map_capacity(items: &std::collections::BTreeMap<String, Value>, key: &str) -> Result<(), String> {
+    if !items.contains_key(key) && items.len() >= MAX_COLLECTION_ITEMS {
+        return Err(format!("map exceeds safety limit ({MAX_COLLECTION_ITEMS} items)"));
+    }
+    Ok(())
+}
+
+pub(crate) fn set_indexed_path(collection: &mut Value, indices: &[Value], value: Value) -> Result<(), String> {
+    let (index, remaining) = indices.split_first().ok_or_else(|| "indexed assignment requires at least one index".to_string())?;
+    if remaining.is_empty() { return set_indexed_value(collection, index.clone(), value); }
+    let child = match (collection, index) {
+        (Value::Array(items), Value::Int(index)) if *index >= 0 => items.get_mut(*index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?,
+        (Value::Array(_), Value::Int(index)) => return Err(format!("array index {index} out of bounds")),
+        (Value::Array(_), _) => return Err("type error: array index must be an integer".into()),
+        (Value::Map(items), Value::Str(key)) => items.get_mut(key).ok_or_else(|| format!("map key '{key}' not found"))?,
+        (Value::Map(_), _) => return Err("type error: map index must be a string".into()),
+        _ => return Err("type error: indexed assignment expects an array or map".into()),
+    };
+    set_indexed_path(child, remaining, value)
+}
+
+pub(crate) fn set_indexed_value(collection: &mut Value, index: Value, value: Value) -> Result<(), String> {
+    match (collection, index) {
+        (Value::Array(items), Value::Int(index)) if index >= 0 => {
+            let slot = items.get_mut(index as usize).ok_or_else(|| format!("array index {index} out of bounds"))?;
+            *slot = value;
+            Ok(())
+        }
+        (Value::Array(_), Value::Int(index)) => Err(format!("array index {index} out of bounds")),
+        (Value::Array(_), _) => Err("type error: array index must be an integer".into()),
+        (Value::Map(items), Value::Str(key)) => {
+            check_map_capacity(items, &key)?;
+            items.insert(key, value);
+            Ok(())
+        }
+        (Value::Map(_), _) => Err("type error: map index must be a string".into()),
+        _ => Err("type error: indexed assignment expects an array or map".into()),
+    }
+}
+
+
+pub(crate) fn binding_size(name: &str, value: &Value) -> usize {
+    name.len().saturating_add(64).saturating_add(value_size(value))
+}
+
+pub(crate) fn binding_map_size(bindings: &HashMap<String, Value>) -> usize {
+    bindings.iter().map(|(name, value)| binding_size(name, value))
+        .fold(0usize, |total, size| total.saturating_add(size))
+}
+
+pub(crate) fn runtime_state_bytes_after_sizes(current: usize, old_size: usize, new_size: usize) -> Result<usize, String> {
+    let next = current.saturating_sub(old_size).saturating_add(new_size);
+    if next > MAX_RUNTIME_STATE_BYTES {
+        return Err(format!("live variable/call-frame values exceed safety limit ({MAX_RUNTIME_STATE_BYTES} estimated bytes)"));
+    }
+    Ok(next)
+}
+
+pub(crate) fn runtime_state_bytes_after_update(current: usize, name: &str, old: Option<&Value>, new: &Value) -> Result<usize, String> {
+    let old_size = old.map(|value| binding_size(name, value)).unwrap_or(0);
+    runtime_state_bytes_after_sizes(current, old_size, binding_size(name, new))
+}
+
+
+
+#[cfg(test)]
+mod state_tests {
+    use super::{
+        binding_map_size, binding_size, runtime_state_bytes_after_sizes,
+        runtime_state_bytes_after_update, set_indexed_value, set_indexed_path, Value,
+        MAX_RUNTIME_STATE_BYTES,
+    };
+    use std::collections::{BTreeMap, HashMap};
+
+    #[test]
+    fn indexed_array_and_map_updates_preserve_value_types() {
+        let mut array = Value::Array(vec![Value::Int(1), Value::Int(2)]);
+        set_indexed_value(&mut array, Value::Int(1), Value::Int(9)).unwrap();
+        assert_eq!(array, Value::Array(vec![Value::Int(1), Value::Int(9)]));
+
+        let mut entries = BTreeMap::new();
+        entries.insert("old".to_string(), Value::Bool(false));
+        let mut map = Value::Map(entries);
+        set_indexed_value(&mut map, Value::Str("new".into()), Value::Bool(true)).unwrap();
+        assert_eq!(map, Value::Map(BTreeMap::from([
+            ("old".to_string(), Value::Bool(false)),
+            ("new".to_string(), Value::Bool(true)),
+        ])));
+    }
+
+    #[test]
+    fn indexed_path_updates_nested_array_leaf() {
+        let mut matrix = Value::Array(vec![Value::Array(vec![Value::Int(1), Value::Int(2)]), Value::Array(vec![Value::Int(3), Value::Int(4)])]);
+        set_indexed_path(&mut matrix, &[Value::Int(0), Value::Int(1)], Value::Int(5)).unwrap();
+        assert_eq!(matrix, Value::Array(vec![Value::Array(vec![Value::Int(1), Value::Int(5)]), Value::Array(vec![Value::Int(3), Value::Int(4)])]));
+    }
+
+    #[test]
+    fn state_accounting_replaces_old_binding_size() {
+        let old = Value::Str("x".into());
+        let new = Value::Str("longer".into());
+        let current = binding_size("item", &old);
+        let expected = binding_size("item", &new);
+        assert_eq!(runtime_state_bytes_after_update(current, "item", Some(&old), &new).unwrap(), expected);
+
+        let mut vars = HashMap::new();
+        vars.insert("item".to_string(), new);
+        assert_eq!(binding_map_size(&vars), expected);
+    }
+
+    #[test]
+    fn state_accounting_rejects_budget_overflow() {
+        assert!(runtime_state_bytes_after_sizes(MAX_RUNTIME_STATE_BYTES, 0, 1).is_err());
+    }
+}
+
+
+#[cfg(test)]
+mod safety_tests {
+    use super::{
+        ensure_value_depth, pop_stack_value, push_stack_value, Value,
+        MAX_VALUE_DEPTH,
+    };
+
+    #[test]
+    fn rejects_values_nested_beyond_the_depth_limit() {
+        let mut value = Value::Int(1);
+        for _ in 0..=MAX_VALUE_DEPTH {
+            value = Value::Array(vec![value]);
+        }
+        let error = ensure_value_depth(&value).unwrap_err();
+        assert!(error.contains("value nesting exceeds safety limit"));
+    }
+
+    #[test]
+    fn stack_push_and_pop_keep_memory_accounting_balanced() {
+        let mut stack = Vec::new();
+        let mut bytes = 0;
+        push_stack_value(&mut stack, &mut bytes, Value::Str("qorvynt".into())).unwrap();
+        assert_eq!(bytes, "qorvynt".len());
+        assert_eq!(pop_stack_value(&mut stack, &mut bytes, "underflow").unwrap(), Value::Str("qorvynt".into()));
+        assert_eq!(bytes, 0);
+        assert!(stack.is_empty());
+    }
+
+    #[test]
+    fn stack_pop_reports_underflow_without_corrupting_accounting() {
+        let mut stack = Vec::new();
+        let mut bytes = 7;
+        assert_eq!(pop_stack_value(&mut stack, &mut bytes, "VM stack underflow").unwrap_err(), "VM stack underflow");
+        assert_eq!(bytes, 7);
+    }
+}
